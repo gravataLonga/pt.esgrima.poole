@@ -1,6 +1,6 @@
 # API de Arbitragem — Contrato
 
-**Versão do contrato: `1.1.0`** · Estado: **proposto** (nada implementado do lado do servidor) · 2026-07-25
+**Versão do contrato: `1.2.0`** · Estado: **proposto** (nada implementado do lado do servidor) · 2026-07-25
 
 Fronteira partilhada entre a **plataforma** (`poole.esgrima.pt`, Laravel 12) e a **app de arbitragem**
 (React Native, repositório separado). Este ficheiro é a **única fonte de verdade** do que os dois
@@ -39,8 +39,11 @@ receber. Isto é o que torna um MINOR seguro.
 
 ### O que este contrato não cobre
 
-Autenticação web (*session-based*, coexiste em paralelo), quadro de eliminatórias, classificações,
+Autenticação web (*session-based*, coexiste em paralelo), quadro de eliminatórias,
 gestão de atletas/torneios, cartões e penalizações. Tudo isso é da plataforma web.
+
+A **classificação da poule** passou a estar coberta em `1.2.0` ([§7](#7-endpoints)): é o servidor que
+a calcula, como já calcula a da web. O cliente **não** aplica critérios de desempate.
 
 ---
 
@@ -237,10 +240,13 @@ Base: `{base_url}/api/v1`. Todos exigem `Authorization: Bearer`, exceto `POST /c
   "uuid": "9f3c1b2a-...",
   "name": "Poule 3 — Sabre Masculino",
   "tournament_name": "Torneio de Verão 2026",
+  "weapon": "sabre",
   "touch_cap": 5,
   "duration_seconds": 180,
   "periods": 1,
   "rest_seconds": 60,
+  "priority_seconds": 60,
+  "passivity_seconds": 60,
   "bouts_total": 15,
   "bouts_done": 4,
   "locked": false
@@ -250,11 +256,18 @@ Base: `{base_url}/api/v1`. Todos exigem `Authorization: Bearer`, exceto `POST /c
 | Campo | Notas |
 |---|---|
 | `tournament_name` | `null` se a poule for isolada |
+| `weapon` | **Opcional.** `foil` \| `epee` \| `sabre`. Determina que regras de arbitragem a app oferece — a passividade (FIE t.87) não se aplica ao sabre. Ausente ou `null` → a app não assume arma nenhuma e oferece o conjunto comum. |
 | `touch_cap` | Toques que terminam um assalto. **Os presets vêm sempre da API** — nunca *hardcoded* na app. |
 | `duration_seconds` | Duração **de um período** |
 | `periods` | Nº de períodos. `1` em poule |
 | `rest_seconds` | **Opcional.** Descanso entre períodos, em segundos (FIE: 60). Ausente, `null` ou `0` → sem descanso, e a app passa direto ao período seguinte. Irrelevante quando `periods` é `1`. |
+| `priority_seconds` | **Opcional.** Duração da morte súbita com prioridade sorteada, em segundos (FIE t.41: 60). Ausente ou `null` → 60. |
+| `passivity_seconds` | **Opcional.** Minuto de não combatividade que a app cronometra (FIE t.87: 60). Ausente ou `null` → 60; `0` → a app não conta passividade. |
 | `locked` | `true` → poule fechada porque as eliminatórias foram geradas. Toda a escrita passa a devolver 422. |
+
+> **Os três presets de tempo são só cronometragem.** A app conta-os localmente e **não** comunica ao
+> servidor o que acontece dentro deles: uma vitória por prioridade não é representável neste contrato
+> ([§7](#post-boutsboutscore), `allow_draw`), e a passividade nunca sobe. Ver o mesmo endpoint.
 
 ---
 
@@ -320,6 +333,51 @@ Lista completa dos assaltos, **já ordenada** por `sequence`. Suporta `If-None-M
 
 ---
 
+### `GET /poules/{poule}/standings`
+
+Classificação da poule, **já ordenada por lugar**. Suporta `If-None-Match` → `304`, com o mesmo
+`ETag` que a lista de assaltos invalida.
+
+**O servidor é que ordena.** Os critérios FIE são **V/M → indicador (TD−TR) → TD**, todos
+descendentes, e é a plataforma que os aplica — a mesma lógica que já serve a folha de poule da web.
+O cliente mostra `place` tal como vem e **não reordena**.
+
+A **matriz** de resultados não vem aqui: cada célula é o resultado de um assalto, e esses já estão em
+`GET /poules/{poule}/bouts`. Duplicá-los seria uma segunda fonte para o mesmo dado.
+
+**200 OK**
+
+```json
+{
+  "poule": { "...": "PouleSummary" },
+  "standings": [
+    {
+      "fencer": { "id": 41, "number": 1, "name": "Ana Silva", "club": "CE Lisboa" },
+      "victories": 3,
+      "bouts": 4,
+      "given": 18,
+      "received": 11,
+      "diff": 7,
+      "place": 1
+    }
+  ]
+}
+```
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `fencer` | `Fencer` | |
+| `victories` | int | **V** — vitórias |
+| `bouts` | int | **M** — assaltos já disputados. `0` enquanto o atleta não jogar |
+| `given` | int | **TD/TS** — toques dados |
+| `received` | int | **TR** — toques recebidos |
+| `diff` | int | Indicador, `given - received`. Pode ser negativo |
+| `place` | int ≥ 1 | Lugar. **Empates completos partilham o lugar e saltam o seguinte** (1, 2, 2, 4) |
+
+**Erros:** `401` · `403 poule_scope_mismatch` · `404 not_found`
+
+---
+
 ### `GET /bouts/{bout}`
 
 Detalhe de um assalto, com os presets necessários ao cronómetro.
@@ -335,10 +393,13 @@ Detalhe de um assalto, com os presets necessários ao cronómetro.
   "fencer_b": { "id": 43, "number": 3, "name": "Carla Neves", "club": "CE Porto" },
   "score_a": null,
   "score_b": null,
+  "weapon": "sabre",
   "target": 5,
   "duration_seconds": 180,
   "periods": 1,
   "rest_seconds": 60,
+  "priority_seconds": 60,
+  "passivity_seconds": 60,
   "allow_draw": false,
   "poule_locked": false
 }
@@ -347,7 +408,10 @@ Detalhe de um assalto, com os presets necessários ao cronómetro.
 | Campo | Notas |
 |---|---|
 | `target` | Toques que terminam o assalto. Igual ao `touch_cap` da poule. |
+| `weapon` | **Opcional.** O mesmo campo do `PouleSummary`. |
 | `rest_seconds` | **Opcional.** O mesmo campo do `PouleSummary`. |
+| `priority_seconds` | **Opcional.** O mesmo campo do `PouleSummary`. |
+| `passivity_seconds` | **Opcional.** O mesmo campo do `PouleSummary`. |
 | `allow_draw` | **`false` em poule** — a plataforma rejeita `a == b` com 422. O cliente desativa o botão de submeter enquanto os resultados forem iguais. |
 | `poule_locked` | `true` → só leitura |
 
@@ -393,6 +457,16 @@ Regista o resultado. **Primeiro a submeter ganha.**
 | `a` | inteiro, `0 ≤ a ≤ target`, corresponde a `fencer_a` |
 | `b` | inteiro, `0 ≤ b ≤ target`, corresponde a `fencer_b` |
 | — | `a != b` — **não há empates em poule** |
+
+**O que `a` e `b` incluem, e o que o servidor não fica a saber.** São o resultado final tal como o
+árbitro o dá por bom — incluindo os toques atribuídos por **cartão vermelho**, que em regra FIE são
+toques como os outros. O contrato exclui cartões e penalizações ([§1](#1-âmbito-e-regras-de-alteração)),
+portanto a plataforma recebe o número e **não tem como distinguir** um toque ganho em pista de um
+toque de penalização. Um cartão preto (exclusão) não aparece de todo: sobe apenas o resultado.
+
+Pela mesma razão, uma **vitória por prioridade** (FIE t.41, morte súbita que acaba sem toque) não é
+representável — daria `a == b`, que este endpoint recusa. A app não inventa o toque em falta: pede-o
+ao árbitro. Reabrir isto implica `allow_draw` mais um campo de vencedor, e é alteração **MAJOR**.
 
 **201 Created** — gravado por este pedido
 
@@ -512,6 +586,7 @@ sem recompilar a app:
 
 | Versão | Data | Alterações |
 |---|---|---|
+| `1.2.0` | 2026-07-25 | **MINOR, aditivo.** (1) `GET /poules/{poule}/standings` — a classificação passa a ser calculada pelo servidor, e sai da lista de exclusões do §1. (2) `weapon` opcional em `PouleSummary` e em `GET /bouts/{bout}`. (3) `priority_seconds` e `passivity_seconds` opcionais nos mesmos dois sítios — os tempos de FIE t.41 e t.87 deixam de estar *hardcoded* na app. (4) Redação: `POST /bouts/{bout}/score` diz agora o que `a`/`b` incluem e o que a plataforma não fica a saber. Um servidor em `1.1.0` continua compatível: sem os campos a app usa os valores FIE, e sem o endpoint deriva a classificação dos assaltos. |
 | `1.1.0` | 2026-07-25 | **MINOR, aditivo.** `rest_seconds` opcional em `PouleSummary` e em `GET /bouts/{bout}` — descanso entre períodos, que a app cronometra. Um servidor em `1.0.0` continua compatível: sem o campo, a app não oferece descanso. |
 | `1.0.0` | 2026-07-24 | Versão inicial. Extraída de `docs/app-arbitragem-client-spec.md` §5–§8. Nada implementado ainda. |
 

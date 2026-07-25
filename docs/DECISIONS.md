@@ -200,7 +200,8 @@ ficheiro da spec.
 
 ## ADR-011 — A classificação e a grelha são calculadas no cliente
 
-**Data:** 2026-07-25 · **Estado:** aceite
+**Data:** 2026-07-25 · **Estado:** **aceite, temporário** — substituído em parte pelo
+[ADR-024](#adr-024--contrato-120-arma-tempos-de-regulamento-e-classificação-servida)
 
 `docs/poole-grelha-spec.md` descreve a folha de poule de `poole.esgrima.pt` e é explícita: o cliente
 **não calcula nada**, consome `GET /poole/{uuid}/match`, que devolve `victories`, `diff`, `place` já
@@ -223,6 +224,11 @@ cálculo está coberto por `src/poule/sheet.test.ts`, incluindo os empates parti
 
 **Se o endpoint aparecer:** `buildSheet` passa a ser a montagem da resposta, e os testes de ordenação
 passam a testar o servidor. As duas vistas não mudam.
+
+**Atualização (2026-07-25):** o endpoint passou a existir no contrato — `GET /poules/{poule}/standings`,
+`1.2.0` ([ADR-024](#adr-024--contrato-120-arma-tempos-de-regulamento-e-classificação-servida)).
+O cálculo local **fica** até a plataforma o entregar, senão a folha de poule deixava de funcionar
+hoje. Quando entregar, executa-se o parágrafo acima — que era exatamente para isto.
 
 ---
 
@@ -268,6 +274,12 @@ montado, voltando a fixar ao sair.
 **Porquê:** a alternativa era deixar as quatro orientações abertas e tornar os quatro ecrãs
 tolerantes a landscape. Três deles não ganham nada com isso e passariam a ser mais um layout para
 manter.
+
+**Atualização (2026-07-25):** ao contrário do [ADR-009](#adr-009--o-url-do-servidor-não-aparece-no-ecrã-de-ligar),
+esta divergência **foi corrigida na `CLIENT-SPEC.md`** — §4 *Alvos* passou a descrever o portrait com
+a exceção do ecrã de assalto, e a tabela de stack ganhou o `expo-screen-orientation`. A spec é cópia
+byte a byte do documento da plataforma, por isso **fica a mesma obrigação de espelhar** que o
+[ADR-024](#adr-024--contrato-120-arma-tempos-de-regulamento-e-classificação-servida) tem para o contrato.
 
 **Consequências:** `expo-screen-orientation` entra como dependência nativa (ADR-002 — entra a fase
 que a usa). Falhar o bloqueio não é erro: em iPad com multitasking o sistema recusa, e a app
@@ -545,3 +557,45 @@ render $SVG 900 240 assets/splash-icon.png
   Por verificar em dispositivo — não há aqui como o ver.
 - **O ícone da app continua a ser o placeholder do Expo** (`assets/icon.png`). Precisa de uma marca
   quadrada, que o design system não tem — o wordmark não serve para ícone.
+
+---
+
+## ADR-024 — Contrato 1.2.0: arma, tempos de regulamento e classificação servida
+
+**Data:** 2026-07-25 · **Estado:** proposto — **falta o lado da plataforma**
+
+A app cresceu para dentro do regulamento FIE (cartões, prioridade, passividade, folha de poule) sem
+que o contrato tivesse crescido com ela. O resultado eram três coisas *hardcoded* e uma regra
+duplicada, todas em contradição com o princípio do contrato §7: **os presets vêm sempre da API**.
+
+**Decisão:** `1.2.0`, MINOR aditivo, com três acrescentos e uma clarificação.
+
+| | O que entra | O que substitui |
+|---|---|---|
+| `weapon` | `foil` \| `epee` \| `sabre`, opcional | A app não tinha como saber a arma. A passividade não se aplica ao sabre, e estava a ser contada em todas. |
+| `priority_seconds` · `passivity_seconds` | Opcionais, FIE 60/60 | `PRIORITY_SECONDS` (`rules.ts`) e `PASSIVITY_SECONDS` (`usePassivity.ts`), constantes no código. |
+| `GET /poules/{poule}/standings` | V, M, TD, TR, indicador, lugar — já ordenado | O cálculo de `sheet.ts` ([ADR-011](#adr-011--a-classificação-e-a-grelha-são-calculadas-no-cliente)), que duplicava critérios FIE entre repositórios. |
+| — | Redação do `POST .../score` | Não estava escrito que o toque de cartão vermelho sobe misturado no resultado, nem que a plataforma não o consegue distinguir. |
+
+**A matriz não vem no endpoint novo.** Cada célula é o resultado de um assalto, e esses já estão em
+`GET /poules/{poule}/bouts` — pedi-los outra vez era abrir uma segunda fonte para o mesmo dado, e com
+ela a hipótese de as duas discordarem.
+
+**O que ficou deliberadamente de fora:** a **vitória por prioridade com toques iguais**. É a lacuna
+que o [ADR-012](#adr-012--cartões-e-prioridade-são-locais-ao-assalto) identificou, e a decisão é **não
+a resolver na API** — mexer no `allow_draw` é MAJOR, e o caso é raro o suficiente para não pagar um
+`/api/v2/`. Passou a estar **escrita no contrato** em vez de viver só neste ficheiro: quem ler o
+`score` fica a saber que o resultado que recebe pode não ser o resultado que o regulamento produziu.
+Cartões e passividade também continuam fora — só os seus *tempos* entraram, não os seus *eventos*.
+
+**Consequências:**
+
+- **`API_CONTRACT_VERSION` fica em `'1.0.0'`.** Passa a ser a versão *em vigor*, não a do documento:
+  a `1.1.0` e a `1.2.0` existem só deste lado. Sobe quando a plataforma implementar.
+- **Nada disto está tipado em `src/api/types.ts`.** O contrato altera-se primeiro, implementa-se
+  depois — é a regra do §1, e vale também para os tipos.
+- **`CLIENT-SPEC.md` §5 lista os endpoints e ficou desatualizada** — falta-lhe o `standings`. Não se
+  corrigiu aqui por ser cópia byte a byte do documento da plataforma.
+- **Por fazer, e é o mesmo pendente do [ADR-017](#adr-017--rest_seconds-é-aditivo-no-contrato-110):**
+  copiar o `docs/API-CONTRACT.md` para `docs/app-arbitragem-api-contract.md` na plataforma. São agora
+  **duas** versões por espelhar, `1.1.0` e `1.2.0`.

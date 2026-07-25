@@ -155,6 +155,7 @@ primeiras estão formalizadas no [contrato de API](app-arbitragem-api-contract.m
 | Fila offline | **`react-native-mmkv`** (ou `AsyncStorage`) | Persistência síncrona da fila de submissões. |
 | Câmara / QR | `expo-camera` (`barcodeScannerSettings: ['qr']`) | |
 | Ecrã ligado | `expo-keep-awake` | Durante um assalto o ecrã não pode apagar. |
+| Orientação | `expo-screen-orientation` | Portrait fixo, levantado só no ecrã de assalto (ver *Alvos*). |
 | Áudio/vibração | `expo-haptics` + `expo-av` | Fim de tempo tem de ser percetível sem olhar. |
 | i18n | `i18next` + `react-i18next` | `en` é o idioma inicial; `pt-PT` carregado mas sem troca na interface. |
 | Testes | Jest + React Native Testing Library; **MSW** para a API | |
@@ -164,8 +165,11 @@ primeiras estão formalizadas no [contrato de API](app-arbitragem-api-contract.m
 ### Alvos
 
 - **iOS 15+**, **Android 8+ (API 26)**.
-- Telemóvel, **portrait**. Tablet funciona mas não é otimizado.
-- Sem *tablet split-view*, sem *landscape* forçado na v1.
+- Telemóvel, **portrait** — exceto o **ecrã de assalto**, que aceita também *landscape*. Encostado à
+  pista, o telemóvel deitado é o que dá dígitos maiores e as duas colunas de resultado, uma para cada
+  polegar. O bloqueio é feito em código, não em `app.json`: portrait fixo no arranque, levantado
+  enquanto o ecrã de assalto estiver montado. Tablet funciona mas não é otimizado.
+- Sem *tablet split-view*. Nenhum outro ecrã roda.
 
 ### Convenções
 

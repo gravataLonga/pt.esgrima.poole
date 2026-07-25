@@ -8,7 +8,12 @@
  * receber. As interfaces abaixo descrevem o mínimo garantido, não o máximo possível.
  */
 
-export const API_CONTRACT_VERSION = '1.1.0';
+/**
+ * Versão do contrato **em vigor**, não a versão do documento. As `1.1.0` e `1.2.0` estão propostas
+ * só deste lado e por espelhar na plataforma (ADR-017), portanto o que os dois lados garantem
+ * continua a ser a `1.0.0`. Sobe quando a plataforma implementar.
+ */
+export const API_CONTRACT_VERSION = '1.0.0';
 
 /** Prefixo de versão da API. Um MAJOR do contrato implica um prefixo novo. */
 export const API_PREFIX = '/api/v1';
