@@ -49,6 +49,14 @@ interface SessionState {
   restore: () => Promise<void>;
   /** Botão "terminar sessão". Apaga o token local mesmo que o servidor não responda. */
   disconnect: () => Promise<void>;
+  /**
+   * Botão "concluir": o árbitro dá a competição por arbitrada antes de o servidor a encerrar.
+   *
+   * Muda de fase e mais nada — o retrato do que ficou feito é o que o ecrã de resumo mostra, e o
+   * token só é revogado quando ele sair de lá. Um *poll* atrasado não desfaz isto: o `applySummary`
+   * não tira ninguém de `complete`.
+   */
+  finish: () => void;
   /** Um *summary* fresco vindo de um *poll*: é isto que muda a fase sozinho. */
   applySummary: (summary: { poule?: PouleSummary; tournament?: TournamentSummary }) => void;
   /** O ecrã do quadro montou: a transição automática já cumpriu o seu papel. */
@@ -161,6 +169,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       // O token expira sozinho em 60 min. Falhar a revogação não deixa nada por fechar aqui.
     }
   },
+
+  finish: () => set({ phase: 'complete' }),
 
   applySummary: ({ poule, tournament }) =>
     set((state) => {

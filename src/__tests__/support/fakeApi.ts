@@ -1,5 +1,5 @@
 /**
- * Servidor falso, em memória, com as formas do contrato `1.4.2`.
+ * Servidor falso, em memória, com as formas do contrato `1.5.0`.
  *
  * A spec §10 previa MSW. O que ela quer é que os cenários de erro se testem **sem os provocar no
  * servidor a sério**, e é isso que este módulo dá, com uma dependência a menos: os testes trocam o
@@ -20,6 +20,8 @@ import type {
   ConnectResponse,
   EliminationMatch,
   EliminationMatchDetail,
+  LiveBoutEvent,
+  LiveEventsResponse,
   MatchScoreResponse,
   PouleEliminationResponse,
   PouleSummary,
@@ -44,6 +46,10 @@ export interface FakeState {
   matches: EliminationMatch[];
   /** `submission_id` por assalto/combate já pontuado — é o que faz o 200 do *retry*. */
   submissions: Map<string, string>;
+  /** Eventos ao vivo recebidos, por assalto/combate. A chave `(assalto, seq)` é única. */
+  events: Map<string, LiveBoutEvent[]>;
+  /** Erro a devolver no próximo `POST .../events`. */
+  failNextEvents: 'network' | 'locked' | null;
   /** Versão da lista. Muda a cada escrita, e é o `ETag` (contrato §5). */
   version: number;
   /** Erro a devolver na próxima chamada de escrita, para os cenários da spec §12. */
@@ -60,6 +66,8 @@ const emptyState = (): FakeState => ({
   standings: [],
   matches: [],
   submissions: new Map(),
+  events: new Map(),
+  failNextEvents: null,
   version: 1,
   failNextScore: null,
   offline: false,
@@ -329,6 +337,56 @@ export async function startBout(boutId: string): Promise<StartResponse> {
   state.version += 1;
 
   return { id: boutId, status: 'in_progress' };
+}
+
+/**
+ * A pista ao vivo (contrato §7, `1.5.0`). O servidor a sério guarda `(assalto, seq)` como chave
+ * única e ignora em silêncio um `seq` repetido — é isso que faz de um reenvio um não-evento, e é o
+ * que este imita.
+ */
+export async function postBoutEvents(
+  boutId: string,
+  events: LiveBoutEvent[],
+): Promise<LiveEventsResponse> {
+  guard();
+  failEventsIfAsked();
+
+  return { accepted: keepNewEvents(`bout:${boutId}`, events) };
+}
+
+export async function postMatchEvents(
+  matchId: string,
+  events: LiveBoutEvent[],
+): Promise<LiveEventsResponse> {
+  guard();
+  failEventsIfAsked();
+
+  return { accepted: keepNewEvents(`match:${matchId}`, events) };
+}
+
+/** Guarda os que ainda não lá estavam e devolve quantos foram. */
+function keepNewEvents(key: string, events: LiveBoutEvent[]): number {
+  const kept = state.events.get(key) ?? [];
+  const seen = new Set(kept.map((event) => event.seq));
+  const fresh = events.filter((event) => !seen.has(event.seq));
+
+  state.events.set(key, [...kept, ...fresh]);
+  return fresh.length;
+}
+
+/** Os eventos recebidos de um assalto, por ordem de chegada. */
+export function eventsOf(kind: 'bout' | 'match', id: string): LiveBoutEvent[] {
+  return state.events.get(`${kind}:${id}`) ?? [];
+}
+
+function failEventsIfAsked(): void {
+  const failure = state.failNextEvents;
+  if (!failure) return;
+  state.failNextEvents = null;
+
+  if (failure === 'network') throw new NetworkError();
+
+  throw new ApiError(422, { code: 'poule_locked', message: 'A poule está bloqueada.' });
 }
 
 export async function scoreBout(

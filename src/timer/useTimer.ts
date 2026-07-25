@@ -28,6 +28,14 @@ export interface Timer {
   adjust: (deltaMs: number) => void;
   /** Define exatamente quanto falta. */
   set: (ms: number) => void;
+  /**
+   * O que falta **agora**, derivado do relógio monotónico em vez de lido do último *tick*.
+   *
+   * O `remainingMs` só se atualiza a cada 50 ms, e isso chega para o mostrar. Não chega para
+   * carimbar o instante em que um toque caiu: o `at_ms` de um evento ao vivo (contrato §7) é
+   * medido no toque, não no tick a seguir.
+   */
+  remainingNowMs: () => number;
 }
 
 export interface UseTimerOptions {
@@ -188,5 +196,5 @@ export function useTimer(durationSeconds: number, options: UseTimerOptions = {})
 
   const set = useCallback((ms: number) => applyRemaining(ms), [applyRemaining]);
 
-  return { state, remainingMs, toggle, reset, adjust, set };
+  return { state, remainingMs, toggle, reset, adjust, set, remainingNowMs: currentRemaining };
 }

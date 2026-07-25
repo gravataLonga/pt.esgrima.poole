@@ -13,6 +13,8 @@ import type {
   ConnectRequest,
   ConnectResponse,
   EliminationMatchDetail,
+  LiveBoutEvent,
+  LiveEventsResponse,
   MatchScoreResponse,
   PouleEliminationResponse,
   ScoreRequest,
@@ -82,6 +84,27 @@ export async function startBout(boutId: string): Promise<StartResponse> {
 }
 
 /**
+ * O que está a acontecer na pista, enquanto acontece (contrato §7, `1.5.0`).
+ *
+ * *Fire-and-forget* e **sem retry**: quem repete é o lote seguinte, com os mesmos `seq` — o
+ * servidor ignora em silêncio um `seq` que já lá esteja. Repetir aqui gastava o limite de 60
+ * pedidos/min que este endpoint partilha com o *polling*, para mandar o que o próximo toque já
+ * vai levar.
+ */
+export async function postBoutEvents(
+  boutId: string,
+  events: LiveBoutEvent[],
+): Promise<LiveEventsResponse> {
+  return body(
+    await request<LiveEventsResponse>(`/bouts/${boutId}/events`, {
+      method: 'POST',
+      body: { events },
+      retries: 1,
+    }),
+  );
+}
+
+/**
  * Regista o resultado. O `201` e o `200` têm o mesmo corpo e querem dizer a mesma coisa ao
  * árbitro: ficou registado. Só o `409` se distingue, e esse chega como `ApiError`.
  */
@@ -115,6 +138,20 @@ export async function getMatch(matchId: string): Promise<EliminationMatchDetail>
 
 export async function startMatch(matchId: string): Promise<StartResponse> {
   return body(await request<StartResponse>(`/elimination/${matchId}/start`, { method: 'POST' }));
+}
+
+/** Igual ao dos assaltos — mesmo corpo, mesmo `seq`, mesma resposta (contrato §7). */
+export async function postMatchEvents(
+  matchId: string,
+  events: LiveBoutEvent[],
+): Promise<LiveEventsResponse> {
+  return body(
+    await request<LiveEventsResponse>(`/elimination/${matchId}/events`, {
+      method: 'POST',
+      body: { events },
+      retries: 1,
+    }),
+  );
 }
 
 export async function scoreMatch(

@@ -31,7 +31,12 @@
 import { clientConfig, configureClient, request } from './client';
 import * as api from './endpoints';
 import { ApiError } from './errors';
-import { API_CONTRACT_VERSION, HEADER_SESSION_EXPIRES_AT, type SessionScope } from './types';
+import {
+  API_CONTRACT_VERSION,
+  HEADER_SESSION_EXPIRES_AT,
+  type LiveBoutEvent,
+  type SessionScope,
+} from './types';
 
 const baseUrl = process.env.LIVE_API_BASE_URL;
 const pin = process.env.LIVE_API_PIN;
@@ -308,6 +313,29 @@ live(`contrato ${API_CONTRACT_VERSION} contra ${baseUrl ?? '(saltado)'}`, () => 
 
     const after = (await api.getBouts(uuid)).data!.bouts.find((bout) => bout.id === pending.id);
     expect(after?.status).toBe('in_progress');
+  }, 30_000);
+
+  writes('`POST .../events` conta os novos e ignora em silêncio um `seq` repetido', async () => {
+    const uuid = (await api.getSession()).poule!.uuid;
+    const list = (await api.getBouts(uuid)).data!;
+    const pending = list.bouts.find((bout) => bout.status !== 'done');
+
+    if (!pending) throw new Error('A poule de teste não tem assaltos por pontuar.');
+
+    const events: LiveBoutEvent[] = [
+      { seq: 1, type: 'touch', side: 'a', period: 1, at_ms: 12_400, score_a: 1, score_b: 0 },
+      { seq: 2, type: 'double', period: 1, at_ms: 30_100, score_a: 2, score_b: 1 },
+    ];
+
+    // Quantos foram novos depende de o assalto já ter recebido eventos numa corrida anterior.
+    expect(await api.postBoutEvents(pending.id, events)).toMatchObject({
+      accepted: expect.any(Number),
+    });
+
+    // O mesmo lote outra vez é o mesmo toque outra vez: nada de novo, e **não** é erro. É esta
+    // linha que prova que o `seq` é a idempotência — sem ela, cada retry duplicava a linha
+    // temporal do assalto.
+    expect(await api.postBoutEvents(pending.id, events)).toEqual({ accepted: 0 });
   }, 30_000);
 
   writes('o ETag muda quando um resultado entra — senão o poll ficava cego', async () => {

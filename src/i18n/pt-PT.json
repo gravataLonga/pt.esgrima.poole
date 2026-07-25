@@ -204,7 +204,16 @@
   "session": {
     "offline": "Sem ligação. A app continua a tentar e nada se perde.",
     "expiring": "A sessão termina em {{minutes}} min. Gere um código novo na plataforma para continuar.",
-    "expired": "A sessão terminou."
+    "expired": "A sessão terminou.",
+    "leave": "Sair",
+    "leaveTitle": "Sair desta competição?",
+    "leaveMessage": "A sessão termina aqui. Volta a ligar-te quando quiseres com os mesmos seis dígitos.",
+    "leaveQueued_one": "{{count}} resultado ainda está à espera de rede. Fica guardado neste telemóvel e é enviado da próxima vez que te ligares.",
+    "leaveQueued_other": "{{count}} resultados ainda estão à espera de rede. Ficam guardados neste telemóvel e são enviados da próxima vez que te ligares.",
+    "stay": "Ficar",
+    "finish": "Concluir",
+    "finishTitle": "Concluir aqui?",
+    "finishMessage": "Já não há nada para arbitrar nesta competição. Volta a ligar-te com o mesmo código se precisares de regressar."
   },
   "queue": {
     "pending_one": "{{count}} resultado guardado neste telemóvel, à espera de rede.",

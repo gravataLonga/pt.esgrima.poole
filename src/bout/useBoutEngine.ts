@@ -25,12 +25,14 @@ import {
 import {
   boutRules,
   initialBoutRules,
+  type BoutAction,
   type BoutRulesState,
   type CardKind,
   type Side,
 } from './rules';
 import { usePassivity } from './usePassivity';
 import { usePriorityDraw, type PriorityDraw } from './usePriorityDraw';
+import type { LiveEventDraft } from './useLiveEvents';
 
 export interface UseBoutEngineOptions {
   /** Toques que terminam o assalto. */
@@ -39,6 +41,12 @@ export interface UseBoutEngineOptions {
   /** Resultado de partida. Um assalto retomado abre com o que já lá estava. */
   initialA?: number;
   initialB?: number;
+  /**
+   * Espelha para a plataforma o que acontece na pista, à medida que acontece (contrato §7).
+   * Ausente no modo cronómetro autónomo, que não tem servidor para onde o mandar — e é por isso
+   * que é opcional: não o passar deixa o motor exatamente como estava.
+   */
+  onEvent?: (event: LiveEventDraft) => void;
 }
 
 export interface BoutEngine {
@@ -62,11 +70,29 @@ export interface BoutEngine {
   reset: () => void;
 }
 
+/** Os cartões da app nos `type` do contrato §7. */
+const CARD_EVENT: Record<CardKind, LiveEventDraft['type']> = {
+  yellow: 'card_yellow',
+  red: 'card_red',
+  black: 'card_black',
+};
+
+/** A ação mexeu no assalto? O redutor devolve o estado intacto quando recusa. */
+function changed(before: BoutRulesState, after: BoutRulesState): boolean {
+  return (
+    before.a !== after.a ||
+    before.b !== after.b ||
+    before.cards.length !== after.cards.length ||
+    before.priority !== after.priority
+  );
+}
+
 export function useBoutEngine({
   target,
   timing,
   initialA = 0,
   initialB = 0,
+  onEvent,
 }: UseBoutEngineOptions): BoutEngine {
   const [rules, dispatch] = useReducer(boutRules, undefined, () =>
     initialBoutRules(target, initialA, initialB),
@@ -79,18 +105,52 @@ export function useBoutEngine({
   // Conta os sinais de combate — toque ou cartão. Cada incremento reinicia o minuto de passividade.
   const [combatToken, setCombatToken] = useState(0);
 
-  const onPrioritySettled = useCallback(
-    (side: Side) => dispatch({ type: 'drawPriority', side }),
-    [],
-  );
-  const priorityDraw = usePriorityDraw(onPrioritySettled);
-
   const phase: BoutPhase = rules.priority ? 'priority' : resting ? 'rest' : 'period';
   const durationSeconds = phaseDuration(phase, timing);
 
+  /**
+   * O período do evento, na numeração do contrato §7: a morte súbita é `periods + 1`. O descanso
+   * não tem numeração própria — nada acontece em pista durante ele.
+   */
+  const eventPeriod = phase === 'priority' ? timing.periods + 1 : period;
+
+  /** Milissegundos decorridos **dentro da fase**, carimbados no instante do evento. */
+  const elapsedMs = (): number =>
+    Math.max(0, Math.round(durationSeconds * 1000 - timer.remainingNowMs()));
+
+  const onPrioritySettled = (side: Side) => {
+    dispatch({ type: 'drawPriority', side });
+    // O sorteio abre a morte súbita: é o período a seguir ao último, ao segundo zero dele.
+    onEvent?.({
+      type: 'priority',
+      side,
+      period: timing.periods + 1,
+      at_ms: 0,
+      score_a: rules.a,
+      score_b: rules.b,
+    });
+  };
+
+  const priorityDraw = usePriorityDraw(onPrioritySettled);
+
   // Fim de tempo tem de ser percetível sem olhar (spec §7). `Vibration` é do core do RN; o som
   // fica para a F3, com o `expo-av` (ADR-002).
-  const onExpire = useCallback(() => Vibration.vibrate([0, 400, 180, 400]), []);
+  const onExpire = useCallback(() => {
+    Vibration.vibrate([0, 400, 180, 400]);
+
+    // Só o tempo regulamentar acaba um período. O descanso é intervalo, e a morte súbita esgotada
+    // acaba o assalto — quem o resolve é a prioridade já sorteada.
+    if (phase !== 'period') return;
+
+    onEvent?.({
+      type: 'period_end',
+      period,
+      at_ms: Math.round(durationSeconds * 1000),
+      score_a: rules.a,
+      score_b: rules.b,
+    });
+  }, [durationSeconds, onEvent, period, phase, rules.a, rules.b]);
+
   const timer = useTimer(durationSeconds, { onExpire });
 
   // Não se conta passividade no intervalo: os atletas não estão em pista. O minuto vem da API
@@ -137,14 +197,38 @@ export function useBoutEngine({
     setCombatToken((token) => token + 1);
   };
 
+  /**
+   * Aplica a ação e espelha-a para a plataforma, com o placar **depois** dela.
+   *
+   * O evento só sai se a ação tiver mudado alguma coisa: um `+` no limite de toques e um segundo
+   * cartão preto são recusados pelo redutor, e o que não aconteceu não se conta.
+   */
+  const apply = (action: BoutAction, type: LiveEventDraft['type'], side?: Side) => {
+    const at = elapsedMs();
+    const next = boutRules(rules, action);
+    dispatch(action);
+
+    if (!changed(rules, next)) return;
+    onEvent?.({ type, side, period: eventPeriod, at_ms: at, score_a: next.a, score_b: next.b });
+  };
+
   const setScore = (side: Side) => (value: number) => {
     registerCombat();
-    dispatch({ type: 'touch', side, delta: value > rules[side] ? 1 : -1 });
+
+    if (value <= rules[side]) {
+      // Retirar um toque não tem evento: o conjunto de `type` do contrato §7 é fechado e não o
+      // prevê. O placar corrigido vai no evento seguinte — quem manda é o placar, não a contagem
+      // dos eventos (ADR-029).
+      dispatch({ type: 'touch', side, delta: -1 });
+      return;
+    }
+
+    apply({ type: 'touch', side, delta: 1 }, 'touch', side);
   };
 
   const giveCard = (side: Side) => (kind: CardKind) => {
     registerCombat();
-    dispatch({ type: 'card', side, kind });
+    apply({ type: 'card', side, kind }, CARD_EVENT[kind], side);
   };
 
   const undoCard = () => dispatch({ type: 'undoCard' });

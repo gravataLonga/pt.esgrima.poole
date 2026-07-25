@@ -2,10 +2,11 @@ import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-librar
 import { Dimensions, Vibration } from 'react-native';
 
 import type { PouleSummary } from '@/api/types';
+import { useQueueStore } from '@/queue/store';
 import { useSessionStore } from '@/session/store';
 
 import { connectPoule, resetApp } from './support/app';
-import { state as fakeState } from './support/fakeApi';
+import { eventsOf, state as fakeState } from './support/fakeApi';
 
 /**
  * Ecrã 3, na parte que só se vê renderizando: fases, cartões, acerto de tempo, morte súbita e
@@ -355,6 +356,108 @@ describe('submeter', () => {
     expect(screen.queryByText('Confirm result')).toBeNull();
     // Cancelar não escreve: o assalto continua como estava do lado do servidor.
     expect(fakeState.bouts.find((b) => b.id === 'b_01J8X004')?.status).toBe('in_progress');
+  });
+});
+
+/**
+ * A pista ao vivo (contrato §7, `1.5.0`). O ecrã não muda por causa disto — o que muda é que a
+ * plataforma deixa de saber do assalto só no fim. Por isso o que se verifica é o que sai daqui.
+ */
+describe('a pista ao vivo', () => {
+  const eventsOfBout = () => eventsOf('bout', 'b_01J8X004');
+
+  it('cada toque sobe no instante em que cai, com o contador e o placar', async () => {
+    await open();
+
+    await fireEvent.press(screen.getByLabelText('One more touch for Marta Lopes'));
+    await fireEvent.press(screen.getByLabelText('One more touch for Tiago Rocha'));
+
+    expect(eventsOfBout()).toMatchObject([
+      { seq: 1, type: 'touch', side: 'a', period: 1, score_a: 1, score_b: 0 },
+      { seq: 2, type: 'touch', side: 'b', period: 1, score_a: 1, score_b: 1 },
+    ]);
+  });
+
+  it('o cartão sobe com o toque que ele deu', async () => {
+    await open();
+
+    await fireEvent.press(
+      screen.getByLabelText('Red card for Marta Lopes — awards a touch to the opponent'),
+    );
+
+    expect(eventsOfBout()).toMatchObject([
+      { seq: 1, type: 'card_red', side: 'a', score_a: 0, score_b: 1 },
+    ]);
+  });
+
+  it('retirar um toque não tem evento — o placar corrigido vai no seguinte', async () => {
+    await open();
+
+    await fireEvent.press(screen.getByLabelText('One more touch for Marta Lopes'));
+    await fireEvent.press(screen.getByLabelText('One fewer touch for Marta Lopes'));
+    await fireEvent.press(screen.getByLabelText('One more touch for Tiago Rocha'));
+
+    expect(eventsOfBout()).toMatchObject([
+      { seq: 1, type: 'touch', side: 'a', score_a: 1, score_b: 0 },
+      { seq: 2, type: 'touch', side: 'b', score_a: 0, score_b: 1 },
+    ]);
+  });
+
+  it('o fim do tempo e o sorteio de prioridade também sobem', async () => {
+    jest.useFakeTimers();
+    withPoule({ duration_seconds: 1, periods: 1 });
+    await open();
+
+    await fireEvent.press(screen.getByLabelText('Timer'));
+    await act(async () => {
+      jest.advanceTimersByTime(1500);
+    });
+
+    await fireEvent.press(screen.getByText('Draw priority'));
+    await act(async () => {
+      jest.advanceTimersByTime(4000);
+    });
+
+    // A morte súbita é `periods + 1` (contrato §7), e o sorteio abre-a ao segundo zero.
+    expect(eventsOfBout()).toMatchObject([
+      { seq: 1, type: 'period_end', period: 1, at_ms: 1_000 },
+      { seq: 2, type: 'priority', period: 2, at_ms: 0 },
+    ]);
+
+    jest.useRealTimers();
+  });
+
+  it('o que a rede não levou vai no lote seguinte, e não duplica', async () => {
+    await open();
+
+    fakeState.failNextEvents = 'network';
+    await fireEvent.press(screen.getByLabelText('One more touch for Marta Lopes'));
+    expect(eventsOfBout()).toHaveLength(0);
+
+    await fireEvent.press(screen.getByLabelText('One more touch for Marta Lopes'));
+
+    expect(eventsOfBout().map((event) => event.seq)).toEqual([1, 2]);
+  });
+
+  it('uma falha não estraga o assalto nem enche a fila de resultados', async () => {
+    await open();
+
+    fakeState.failNextEvents = 'network';
+    await fireEvent.press(screen.getByLabelText('One more touch for Marta Lopes'));
+
+    // O placar é da app e não espera por servidor nenhum; a fila é só para resultados (spec §8).
+    expect(screen.getByLabelText('Marta Lopes: 1 touch')).toBeTruthy();
+    expect(useQueueStore.getState().items).toHaveLength(0);
+  });
+
+  it('não espelha nada num assalto de uma poule fechada', async () => {
+    withPoule({ locked: true });
+    await open();
+
+    await fireEvent.press(screen.getByLabelText('One more touch for Marta Lopes'));
+
+    // Escrita travada dos dois lados: o servidor responderia `422 poule_locked` a cada toque.
+    expect(eventsOfBout()).toHaveLength(0);
   });
 });
 

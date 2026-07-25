@@ -7,7 +7,7 @@ import { useBouts, useStandings } from '@/api/queries';
 import type { Bout } from '@/api/types';
 import { Classification, Grid, boutStates, buildSheet, currentBout, onDeckBout } from '@/poule';
 import type { BoutState } from '@/poule';
-import { QueueBanner, SessionBar } from '@/session';
+import { FinishButton, LeaveButton, QueueBanner, SessionBar } from '@/session';
 import { useSessionStore } from '@/session/store';
 import {
   Badge,
@@ -74,10 +74,18 @@ export default function PouleScreen() {
   return (
     <Screen>
       <View style={styles.header}>
-        <Text variant="label" color={colors.textMuted} style={styles.eyebrow}>
-          {poule.tournament_name ?? t('poule.isolated')}
-        </Text>
-        <Text variant="title">{poule.name}</Text>
+        <View style={styles.headerRow}>
+          <View style={styles.headerTitles}>
+            <Text variant="label" color={colors.textMuted} style={styles.eyebrow}>
+              {poule.tournament_name ?? t('poule.isolated')}
+            </Text>
+            <Text variant="title">{poule.name}</Text>
+          </View>
+
+          {/* Sair está sempre a um toque: a sessão pertence à poule, e trocar de poule — ou acabar
+              o dia — não pode depender de o servidor a dar por encerrada. */}
+          <LeaveButton />
+        </View>
 
         <View style={styles.progress}>
           <ProgressBar value={poule.bouts_total ? poule.bouts_done / poule.bouts_total : 0} />
@@ -205,6 +213,10 @@ export default function PouleScreen() {
           />
         </>
       )}
+
+      {/* Só quando não sobra nada por arbitrar. Fora do scroll: quem acabou a poule não deve ter
+          de a percorrer até ao fim para encontrar a saída. */}
+      <FinishButton />
     </Screen>
   );
 }
@@ -343,6 +355,17 @@ const styles = StyleSheet.create({
   header: {
     gap: spacing.xs,
     marginBottom: spacing.md,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  headerTitles: {
+    flex: 1,
+    gap: spacing.xs,
+    // Sem isto, um nome de poule comprido empurra o botão de sair para fora do ecrã.
+    minWidth: 0,
   },
   eyebrow: {
     letterSpacing: 1,

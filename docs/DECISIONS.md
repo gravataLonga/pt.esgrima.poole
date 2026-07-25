@@ -977,3 +977,125 @@ a plataforma como eventos descritivos. O ADR-012 dizia "não são submetidos" a 
 3. `API_CONTRACT_VERSION` sobe para `'1.5.0'`.
 4. Teste que prove o essencial: reenviar o mesmo `seq` não duplica, e uma falha de rede não estraga
    o assalto nem enche a fila de resultados.
+
+> **Feito a 2026-07-25.** O que se decidiu ao implementá-lo — o que a app não emite, o teto do lote,
+> quando se desiste — está no [ADR-030](#adr-030--a-pista-ao-vivo-do-lado-da-app-o-que-se-decidiu-ao-enviá-la).
+
+---
+
+## ADR-030 — A pista ao vivo do lado da app: o que se decidiu ao enviá-la
+
+**Data:** 2026-07-25 · **Estado:** aceite · **Fecha a F7 do [ADR-029](#adr-029--contrato-150-a-pista-passa-a-ver-se-enquanto-está-a-ser-arbitrada)**
+
+O contrato `1.5.0` disse o que enviar. Ao enviá-lo apareceram cinco perguntas que ele não responde,
+porque nenhuma delas é do servidor.
+
+### O que a app **não** emite, e porquê
+
+O conjunto de `type` do contrato é fechado, e a app usa seis dos sete: `touch`, os três cartões,
+`priority` e `period_end`.
+
+- **`double` não.** O ecrã de assalto não tem botão de duplo — tem `+` e `−` por atleta, e um duplo
+  são dois toques em dois botões. Emitir um `double` obrigaria a adivinhar a intenção a partir de
+  dois toques próximos no tempo, e um evento inventado é pior do que dois eventos certos.
+- **Retirar um toque não tem evento**, porque não há `type` para isso. O placar corrigido viaja no
+  evento seguinte, que é exatamente a regra que o ADR-029 já tinha fixado: **quem manda é o placar**,
+  não a contagem dos eventos. Uma linha temporal que não fecha com o resultado é o comportamento
+  esperado, não um defeito.
+- **O `period_end` é só do tempo regulamentar.** O descanso é intervalo — não acontece nada em pista
+  — e a morte súbita a esgotar não acaba um período, acaba o assalto, e quem o resolve é a
+  prioridade já sorteada. O sorteio, esse, sobe como `priority` com `period = periods + 1` e
+  `at_ms: 0`: é ele que abre a morte súbita.
+
+### O lote é o *buffer*, com teto de 50 e a perder os mais velhos
+
+O contrato aceita 1 a 50 eventos por pedido. Em vez de uma fila com política própria, o que ficou por
+enviar **é** o próximo lote: cabe num pedido por construção, e o teto resolve-se deitando fora o mais
+antigo. Um assalto inteiro sem rede perde o princípio da linha temporal e mantém o fim — que é o que
+a web mostra, porque o placar que ela pinta é o do evento mais recente.
+
+Não é a fila da [`CLIENT-SPEC.md`](CLIENT-SPEC.md) §8, e não pode ser: aquela existe para o que não
+se pode perder, tem 50 itens e protege resultados. Um toque perdido é uma linha a menos.
+
+### Desistir de vez num 4xx, insistir num 5xx
+
+Uma falha de rede junta-se ao lote seguinte. Uma recusa que não passa a valer com o tempo — poule
+fechada, sessão morta, id que já não existe — desliga o espelho para o resto do assalto. Sem isto,
+cada toque gastava um pedido do limite de 60/min que este endpoint **partilha com o *polling***, para
+mandar algo que vai ser recusado outra vez. A regra reaproveita o `isRetryable` do cliente HTTP, que
+já é a mesma distinção que o `score` faz.
+
+Pela mesma razão o `postBoutEvents` vai com `retries: 1`: repetir aqui é mandar duas vezes o que o
+toque seguinte já vai levar.
+
+### O `at_ms` é carimbado no toque, não lido do *tick*
+
+O `remainingMs` do cronómetro atualiza-se a cada 50 ms, e isso chega para o **mostrar**. Não chega
+para dizer em que instante um toque caiu. O `useTimer` passou a expor `remainingNowMs()`, derivado do
+relógio monotónico no momento em que é chamado — a mesma fonte da [precisão](CLIENT-SPEC.md#precisão)
+que o ADR-008 fixou, sem um segundo relógio a discordar do primeiro.
+
+### O motor emite, mas não sabe para onde
+
+`useBoutEngine` recebe um `onEvent` **opcional**. O modo cronómetro autónomo (ADR-021) não o passa e
+continua a não conhecer servidor nenhum — a mesma razão por que ele não importa `@/session/store`. As
+duas rotas ligadas passam o endpoint que lhes diz respeito, `/bouts/{id}/events` ou
+`/elimination/{id}/events`, e o `BoutScreen` não sabe qual é. É a fronteira que o ADR-028 já tinha
+traçado entre o ecrã de assalto e a fase em que ele está.
+
+---
+
+## ADR-031 — Sair é da app, concluir é do árbitro
+
+**Data:** 2026-07-25 · **Estado:** aceite
+
+A app tinha **uma** saída de uma competição, e era do servidor: o `401 poule_complete`, que só chega
+quando a competição está encerrada para sempre — assaltos feitos **e** quadro decidido (contrato §6).
+Até lá não havia botão nenhum. Um árbitro que acabasse a poule ficava a olhar para uma lista toda
+pontuada; um árbitro que se ligasse à poule errada ficava lá até o token expirar sozinho, 60 minutos
+depois. O `disconnect()` do *store* existia desde a F1 e **não era chamado por ecrã nenhum** a não ser
+o de competição completa, que é precisamente o que não se alcançava.
+
+**Decisão: duas saídas, com significados diferentes.**
+
+### "Sair", sempre
+
+No canto do cabeçalho da lista e do quadro. Termina a sessão, revoga o token e volta ao ecrã de
+ligar. É a saída de quem se enganou de poule, de quem passa o telemóvel a outra pessoa, e de quem
+acabou o dia.
+
+Não espera pela rede: o `disconnect()` apaga o token localmente primeiro e só depois tenta o
+`DELETE /session`. **A fila fica** (spec §9) e drena na sessão seguinte, com a chave de idempotência
+que já tinha — é o cenário do [ADR-026](#adr-026--contrato-140-as-decisões-que-estavam-em-aberto), e
+a folha de confirmação diz ao árbitro quantos resultados ficam à espera.
+
+### "Concluir", só quando não sobra nada
+
+Aparece por uma condição, e não por uma fase: `nothingLeftToDo` em `src/session/completion.ts` —
+todos os assaltos registados e, havendo quadro, todos os combates decididos; ou a poule fechada, que
+já não aceita resultados nem que tenha assaltos por disputar; ou o quadro do torneio completo.
+`0/0` não conta: é uma lista a carregar, não uma lista acabada.
+
+Um botão que só aparece quando é verdade vale mais do que um botão permanente desativado: o que ele
+comunica é **"acabou"**, e um botão cinzento no fundo do ecrã comunica isso ao contrário.
+
+### Concluir **não** é o `poule_complete` do servidor
+
+A app passa à fase `complete` e mostra o resumo, mas **não** revoga o token — quem o revoga é o
+"Ligar a outra competição" do resumo. São duas coisas diferentes e é deliberado:
+
+- O servidor não sabe que o árbitro acabou. A poule pode continuar a receber um quadro gerado
+  depois, e outra pessoa a arbitrá-lo. Uma app que dissesse "encerrada" ao servidor estaria a decidir
+  por ele.
+- O resumo mostra o retrato do que ficou feito, e esse retrato é o *summary* que está no *store*. O
+  `disconnect()` limpa-o — concluir e desligar no mesmo gesto deixava o ecrã de resumo sem nada para
+  mostrar, e o `/complete` a redirecionar para o `/connect`.
+
+Um *poll* atrasado não desfaz a decisão: o `applySummary` já não tirava ninguém de `complete`.
+
+### O custo de sair é seis dígitos
+
+As duas folhas dizem a mesma coisa, e é o que torna as duas seguras: o PIN é de **utilização
+múltipla** (contrato §9, decisão da spec §3), portanto voltar a entrar é escrever seis dígitos. Se
+sair fosse caro — se o PIN se gastasse — este ADR teria de ser outro, com um passo de confirmação
+muito mais pesado.

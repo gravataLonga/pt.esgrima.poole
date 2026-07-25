@@ -3,9 +3,10 @@ import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { startMatch } from '@/api/endpoints';
+import { postMatchEvents, startMatch } from '@/api/endpoints';
 import { invalidateCompetition, useMatchDetail } from '@/api/queries';
 import { BoutScreen, boutTiming, type BoutAssignment } from '@/bout';
+import type { LiveBoutEvent } from '@/api/types';
 import { competitionUuid, useSessionStore } from '@/session/store';
 
 /**
@@ -50,6 +51,11 @@ export default function MatchRoute() {
     void startMatch(id).catch(() => undefined);
   }, [id]);
 
+  const onEvents = useCallback(
+    (events: LiveBoutEvent[]) => postMatchEvents(id as string, events),
+    [id],
+  );
+
   const onRecorded = useCallback(() => {
     if (uuid) invalidateCompetition(client, uuid);
   }, [client, uuid]);
@@ -62,6 +68,7 @@ export default function MatchRoute() {
       onRetry={() => void detail.refetch()}
       home="/bracket"
       onStart={onStart}
+      onEvents={id ? onEvents : undefined}
       onRecorded={onRecorded}
     />
   );

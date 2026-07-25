@@ -12,6 +12,11 @@ resultado com chave de idempotência, guarda em fila o que não conseguir enviar
 eliminatórias da poule e do torneio. O levantamento de campo está na
 [§12 do contrato](docs/API-CONTRACT.md).
 
+Desde a **F7**, a pista também se vê enquanto está a ser arbitrada: cada toque, cartão, sorteio de
+prioridade e fim de período sobe no instante em que acontece (`POST .../events`, contrato `1.5.0`), e
+o placar da web deixou de esperar pelo fim do assalto. Falhar não trava a arbitragem — nada disto
+entra no resultado.
+
 ## Como correr
 
 ```sh
@@ -103,7 +108,7 @@ app/                    rotas (expo-router)
 src/
   api/                  types (contrato) · client (HTTP) · endpoints · queries (polling+ETag) · polling
   poule/                sheet (matriz) · status (estados) · vistas
-  bout/                 BoutScreen (partilhado) · rules · useBoutEngine · Clock · ScoreColumn
+  bout/                 BoutScreen (partilhado) · rules · useBoutEngine · useLiveEvents · Clock
   session/              store (máquina de estados) · secureStorage · useConnect · banners
   queue/                fila persistente · submit (submission_id) · drain
   timer/                useTimer monotónico · format
@@ -127,6 +132,7 @@ diz que a app arbitra os dois no mesmo ecrã, e a única diferença é para onde
 | F4   | Resiliência: fila offline, 409, expiração, poule bloqueada  | **feito** |
 | F5   | Ligação ao servidor real, quadro de eliminatórias           | **feito** |
 | F6   | Polimento: acessibilidade, som/háptica, legibilidade em sol |           |
+| F7   | Pista ao vivo: os eventos do assalto à medida que acontecem | **feito** |
 
 Falta da F5 o **E2E com Maestro**: os fluxos do [§12 da spec](docs/CLIENT-SPEC.md) estão cobertos por
 testes de integração sobre a árvore de rotas real, mas não num dispositivo a sério.

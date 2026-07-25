@@ -21,11 +21,26 @@ dois divergirem, **este documento manda no cliente** e o outro manda no servidor
 > Fica **uma coisa por corrigir, e é do servidor**: a comparação do `If-None-Match` é forte, e o
 > `304` nunca dispara através do proxy (contrato §5). A app mitiga; a correção é de lá.
 >
-> ⏳ **Aberto deste lado desde a `1.5.0` do contrato: a pista ao vivo.** O servidor passou a aceitar
-> `POST /bouts/{id}/events` e `POST /elimination/{id}/events` — o toque, o duplo, o cartão e a
-> prioridade **no instante em que acontecem** —, e a web já os mostra. **A app ainda não os envia**,
-> e enquanto não enviar a plataforma continua a saber do assalto só no fim. É trabalho da
-> [F7](#14-fases-de-entrega), e é opcional por construção: não enviar nada mantém tudo a funcionar.
+> ✅ **A pista vê-se ao vivo (contrato `1.5.0`).** A F7 está feita: o toque, o cartão, o sorteio de
+> prioridade e o fim de período sobem **no instante em que acontecem**, por
+> `POST /bouts/{id}/events` e `POST /elimination/{id}/events`, com um contador `seq` por assalto. O
+> placar da web deixou de esperar pelo fim do assalto. Nada disto entra no resultado, nada disto
+> entra na fila, e falhar não trava a arbitragem — ver [§7.1](#71-a-pista-ao-vivo).
+
+> 🔴 **Este documento está ultrapassado pela `2.0.0` do contrato, e a app com ele.**
+>
+> O código de árbitro deixou de ser da competição e passou a ser **da pista**: cada combate de
+> eliminatória tem agora o seu PIN, o âmbito de sessão é `poule` \| `match`, o código de torneio
+> deixou de existir e as duas listas de quadro saíram da API. O servidor já serve isto; **a app
+> ainda não** — ligar-se com um código de combate leva-a hoje a pedir `/poules/undefined/bouts`.
+>
+> Tudo o que abaixo se diz sobre **arbitrar o quadro** — o `scope: "tournament"`, o ecrã de quadro, a
+> transição `poule fechada → quadro`, o `TournamentSummary` — descreve a `1.5.0` e **já não bate certo
+> com o servidor**. O resto (poule, ecrã de assalto, cronómetro, fila, QR/PIN) mantém-se.
+>
+> **A lista do que mudar está na §11 C do contrato** (`docs/API-CONTRACT.md`), ponto a ponto e por
+> ordem de dependência. Esta especificação é reescrita quando essa lista estiver feita — antes disso
+> seria adivinhar como a app acaba.
 
 ---
 
@@ -259,7 +274,7 @@ Regras de trabalho:
        │ locked sem quadro         ┌──────────────┐
        ├──────────────────────────►│  READ_ONLY   │
        │                           └──────────────┘
-       │ competição encerrada      ┌──────────────┐
+       │ encerrada, ou "Concluir"  ┌──────────────┐
        └──────────────────────────►│   COMPLETE   │
                                    └──────────────┘
 ```
@@ -267,9 +282,19 @@ Regras de trabalho:
 `POULE` e `BRACKET` são **fases da mesma sessão**, não sessões diferentes: a transição acontece
 sozinha quando um *poll* traz `locked: true` com `elimination` preenchido, e não pede código novo.
 
-`READ_ONLY` e `COMPLETE` continuam a mostrar o que havia; só a escrita está fechada. `COMPLETE` é
-sempre precedido de um `401 poule_complete`, que só chega quando a competição está encerrada para
-sempre — assaltos feitos **e** quadro decidido.
+`READ_ONLY` e `COMPLETE` continuam a mostrar o que havia; só a escrita está fechada.
+
+**Sair é sempre possível, e há duas formas.** O `logout` do diagrama é o botão **"Sair"**, no canto
+do cabeçalho da lista e do quadro: termina a sessão, revoga o token e volta ao ecrã de ligar. A
+segunda é **"Concluir"**, que só aparece quando não sobra nada por arbitrar — todos os assaltos
+registados e, havendo quadro, todos os combates decididos, ou a poule fechada sem quadro. Leva ao
+resumo, e é lá que a sessão acaba.
+
+`COMPLETE` chega, portanto, por duas vias: o `401 poule_complete`, que só o servidor emite e só
+quando a competição está encerrada **para sempre** — assaltos feitos *e* quadro decidido —, e o
+"Concluir" do árbitro. Entre acabar a poule e o servidor a dar por encerrada pode ir o resto da
+prova, e sem a segunda via o árbitro ficava preso numa lista toda pontuada. Voltar custa seis
+dígitos: o PIN é de utilização múltipla.
 
 ### Ecrãs
 
@@ -297,6 +322,9 @@ sempre — assaltos feitos **e** quadro decidido.
   sempre que o plantel muda.
 - *Pull to refresh*. Polling de 10 s.
 - Banner permanente quando `READ_ONLY` ou offline com fila pendente.
+- **"Sair"** no canto superior direito do cabeçalho, sempre. **"Concluir"** por baixo da lista, só
+  quando não há mais nada para arbitrar. As duas confirmam numa folha, e a folha diz quantos
+  resultados ficam à espera de rede — que ficam guardados e drenam na sessão seguinte.
 
 **3. Assalto** (`/bout/[id]`)
 - Nomes e números dos dois atletas, em grande, lado a lado (A à esquerda, B à direita) — mesma ordem
@@ -324,9 +352,11 @@ sempre — assaltos feitos **e** quadro decidido.
   gerado. Com uma poule ligada, a lista de assaltos e o quadro coexistem e alternam-se.
 - Registar um resultado **faz subir o vencedor** — do lado do servidor. A app descobre o quadro novo
   no *poll* seguinte; não o recalcula.
+- **"Sair"** e **"Concluir"** como na lista: o quadro decidido é o fim do trabalho desta sessão.
 
 **6. Competição completa** (`/complete`)
-- *"Competição completa."* Sessão terminada. Botão "Ligar a outra competição".
+- *"Competição completa."* Botão "Ligar a outra competição", que é onde a sessão acaba de facto —
+  chegar aqui pelo "Concluir" deixa o token vivo até esse botão.
 
 ### Navegação
 
@@ -335,7 +365,8 @@ Ligar ──► Lista ──► Assalto ──► (submeter) ──► Lista
                         └─────► Conflito ────► Lista
 Ligar ──► Quadro ─► Combate ─► (submeter) ──► Quadro
 Lista ──(poule fechada, há quadro)──► Quadro
-Lista/Quadro ──► Completa ──► Ligar
+Lista/Quadro ──(nada por arbitrar: "Concluir")──► Completa ──► Ligar
+Lista/Quadro ──("Sair")──► Ligar
 qualquer ──401──► Ligar
 ```
 
@@ -406,6 +437,12 @@ do assalto só no fim. Sem isto, uma poule a meio parece, na web, uma poule que 
 - **O cronómetro é a fonte do `at_ms`**, medido dentro do período e pelo relógio monotónico da
   [precisão](#precisão) — não é hora de parede. A morte súbita é `period = periods + 1`, como já era.
 - **Não entram na fila offline** — [§8](#8-offline-e-fila-de-submissões) diz porquê.
+
+O que a app emite, do conjunto fechado do contrato: `touch`, `card_yellow`, `card_red`, `card_black`,
+`priority` e `period_end`. **`double` não** — o ecrã de assalto não tem botão de duplo, e dois toques
+seguidos são dois eventos. **Retirar um toque também não**: não há `type` para isso, e o placar
+corrigido viaja no evento seguinte, que é a regra do placar mandar (ADR-029). Um assalto de poule
+fechada não espelha nada: a escrita está travada dos dois lados.
 
 ---
 
@@ -507,6 +544,7 @@ O estado é manipulável a partir do teste, que é o que torna os cenários alca
 | O próximo `score` dá 409 | `state.failNextScore = 'conflict'` |
 | O próximo `score` não chega ao servidor | `state.failNextScore = 'network'` |
 | Rede em baixo, tudo | `state.offline = true` |
+| O próximo lote de eventos ao vivo não chega | `state.failNextEvents = 'network'` |
 | PIN inválido · travado · competição terminada | PIN `000000` · `999999` · `888888` |
 
 ### `src/api/live.test.ts` — o contrato contra a plataforma
@@ -603,6 +641,8 @@ servidor local, como gerar *build* de teste, e onde está o contrato.
 - Combate com `ready: false` → não abre; depois de o anterior ser registado, abre.
 - Último combate do quadro → 201 → `401 poule_complete` no pedido seguinte → ecrã de completa.
 - ETag → 304 não altera a lista nem pisca a UI.
+- Toque a toque → `POST .../events` com `seq` a partir de 1 e o placar depois do evento; falha de
+  rede → o lote seguinte leva os mesmos `seq`, e a fila de resultados fica vazia.
 
 ### E2E (Maestro)
 
@@ -654,7 +694,7 @@ plataforma passou a servir; o levantamento vivo está em **§11 do contrato**.
 | 16 | `scope` no `connect` e no `session`, mais `PouleSummary` / `TournamentSummary` | ✅ |
 | 17 | Endpoints de eliminatória com as URLs e as formas do contrato | ✅ — **só o quadro principal**; consolação arbitra-se na web |
 | 18 | PIN deixa de se gastar na ligação | ✅ |
-| 19 | `POST .../events` nos dois quadros, para a pista se ver enquanto é arbitrada | ✅ — contrato `1.5.0`, servido e fixado por teste. **Falta o lado da app** ([§7.1](#71-a-pista-ao-vivo)) |
+| 19 | `POST .../events` nos dois quadros, para a pista se ver enquanto é arbitrada | ✅ — contrato `1.5.0`, servido e fixado por teste. **Consumido pela app** ([§7.1](#71-a-pista-ao-vivo)) |
 
 ### O que faltava deste lado — feito a 2026-07-25
 
@@ -668,6 +708,7 @@ plataforma passou a servir; o levantamento vivo está em **§11 do contrato**.
 | 6 | Ecrã do quadro e transição de fase | `app/bracket.tsx` · `app/match/[id].tsx` · `phaseFor()` |
 | 7 | Classificação servida | `GET /standings` alimenta a `Classification` e as colunas da `Grid` |
 | 8 | Morte súbita e passividade vindas da API | `BoutTiming` em `src/bout/phase.ts` |
+| 9 | A pista ao vivo (contrato `1.5.0`) | `src/bout/useLiveEvents.ts` — contador, lote e desistência; o `useBoutEngine` emite, as rotas escolhem o endpoint |
 
 ### Notas de compatibilidade que o servidor não pode partir
 
@@ -692,7 +733,7 @@ plataforma passou a servir; o levantamento vivo está em **§11 do contrato**.
 | **F4 — Resiliência** | Fila offline [§8](#8-offline-e-fila-de-submissões), 409, expiração, poule bloqueada, poule completa | F3 |
 | **F5 — Real** ✅ | Ligar ao servidor real, resolver divergências de contrato, E2E, *builds* internas | F4 + servidor §13.7 |
 | **F6 — Polimento** | Acessibilidade, som/háptica, legibilidade em sol, ecrãs de erro, *store* | F5 |
-| **F7 — Pista ao vivo** | Enviar os eventos do assalto à medida que acontecem ([§7.1](#71-a-pista-ao-vivo)): contador `seq` por assalto, lote na falha, `API_CONTRACT_VERSION` a `'1.5.0'` | F5 + servidor §13.19 |
+| **F7 — Pista ao vivo** ✅ | Enviar os eventos do assalto à medida que acontecem ([§7.1](#71-a-pista-ao-vivo)): contador `seq` por assalto, lote na falha, `API_CONTRACT_VERSION` a `'1.5.0'` | F5 + servidor §13.19 |
 
 F0–F4 correm **inteiramente contra os mocks** e não dependem do trabalho do servidor.
 

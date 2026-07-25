@@ -27,6 +27,7 @@ import { useAllowLandscape, useIsLandscape } from './orientation';
 import type { BoutTiming } from './phase';
 import { canSubmit, cardCount, needsDecidingTouch, winner, type CardKind, type Side } from './rules';
 import { useBoutEngine } from './useBoutEngine';
+import { useLiveEvents, type LiveEventSender } from './useLiveEvents';
 
 /**
  * O que este ecrã precisa de saber para conduzir um assalto, seja ele de poule ou de quadro.
@@ -61,6 +62,11 @@ export interface BoutScreenProps {
   home: Href;
   /** `POST .../start`, *fire-and-forget*: falhar não bloqueia a arbitragem (contrato §7). */
   onStart: () => void;
+  /**
+   * `POST .../events`: a pista ao vivo (contrato §7, `1.5.0`). Opcional por construção — sem ela o
+   * ecrã comporta-se exatamente como antes, e a plataforma volta a saber do assalto só no fim.
+   */
+  onEvents?: LiveEventSender;
   /** Chamado depois de o servidor confirmar, para as listas se atualizarem. */
   onRecorded: () => void;
 }
@@ -111,8 +117,12 @@ interface RefereeingProps extends Omit<BoutScreenProps, 'assignment'> {
   assignment: BoutAssignment;
 }
 
-function Refereeing({ assignment, home, onStart, onRecorded }: RefereeingProps) {
+function Refereeing({ assignment, home, onStart, onEvents, onRecorded }: RefereeingProps) {
   const { t } = useTranslation();
+
+  // Num assalto fechado não há nada a espelhar: a escrita está travada dos dois lados, e o
+  // servidor responderia `422 poule_locked` a cada toque de consulta.
+  const live = useLiveEvents(assignment.locked ? null : (onEvents ?? null));
 
   const engine = useBoutEngine({
     target: assignment.target,
@@ -120,6 +130,7 @@ function Refereeing({ assignment, home, onStart, onRecorded }: RefereeingProps) 
     // Um assalto retomado abre com o que já lá estava — e um já registado mostra o resultado.
     initialA: assignment.scoreA ?? 0,
     initialB: assignment.scoreB ?? 0,
+    onEvent: live.record,
   });
   const { rules, timer } = engine;
 
@@ -192,6 +203,11 @@ function Refereeing({ assignment, home, onStart, onRecorded }: RefereeingProps) 
   };
 
   const handle = (result: SubmitResult) => {
+    // O assalto acabou: o que ficou por espelhar deixa de interessar, e é o resultado que conta.
+    // Guardá-lo à espera de rede era pôr uma linha temporal a competir com resultados por enviar
+    // (spec §8) — só o `rejected` deixa o árbitro no assalto, a corrigir e a submeter outra vez.
+    if (result.kind !== 'rejected') live.discard();
+
     switch (result.kind) {
       case 'recorded':
         setSheet('none');

@@ -4,7 +4,7 @@ import { useQueueStore } from '@/queue/store';
 import { useSessionStore } from '@/session/store';
 
 import { connectPoule, connectTournament, resetApp } from './support/app';
-import { seedBracket, state as fakeState } from './support/fakeApi';
+import { eventsOf, seedBracket, state as fakeState } from './support/fakeApi';
 
 /**
  * Percorre a app de ponta a ponta sobre a árvore de rotas real, contra o servidor falso:
@@ -229,6 +229,95 @@ describe('mudança de fase', () => {
   });
 });
 
+/**
+ * Sair de uma competição — spec §6.
+ *
+ * Até haver estes dois botões, a única saída era o `401 poule_complete` do servidor: uma poule toda
+ * pontuada, ou uma poule errada, deixava o árbitro preso no ecrã da lista.
+ */
+describe('sair e concluir', () => {
+  beforeEach(() => resetApp());
+
+  /** Deixa a poule como o servidor a devolve com tudo pontuado. */
+  const scoreEveryBout = () => {
+    fakeState.bouts = fakeState.bouts.map((bout) => ({
+      ...bout,
+      status: 'done',
+      score_a: 5,
+      score_b: 3,
+      scored_at: '2026-07-25T17:00:00Z',
+    }));
+  };
+
+  it('sair termina a sessão e volta ao ecrã de ligar', async () => {
+    connectPoule();
+
+    const router = renderRouter('./app', { initialUrl: '/poule' });
+    await router;
+    await screen.findByText('Poule 3 — Sabre Masculino');
+
+    await fireEvent.press(screen.getByText('Leave'));
+    await screen.findByText('Leave this competition?');
+    // O segundo "Leave" é o da folha — o do cabeçalho continua montado por baixo.
+    await fireEvent.press(screen.getAllByText('Leave').at(-1)!);
+
+    await waitFor(() => expect(router.getPathname()).toBe('/connect'));
+    expect(useSessionStore.getState().phase).toBe('disconnected');
+    expect(useSessionStore.getState().endReason).toBe('signed_out');
+  });
+
+  it('desistir da folha deixa a sessão como estava', async () => {
+    connectPoule();
+
+    const router = renderRouter('./app', { initialUrl: '/poule' });
+    await router;
+    await screen.findByText('Poule 3 — Sabre Masculino');
+
+    await fireEvent.press(screen.getByText('Leave'));
+    await fireEvent.press(await screen.findByText('Stay'));
+
+    expect(router.getPathname()).toBe('/poule');
+    expect(useSessionStore.getState().phase).toBe('poule');
+  });
+
+  it('concluir só aparece quando não há mais nada para arbitrar', async () => {
+    connectPoule();
+    await renderRouter('./app', { initialUrl: '/poule' });
+    await screen.findByText('Poule 3 — Sabre Masculino');
+
+    // 3 de 15 assaltos: há muito que fazer, e sair a meio é o botão do cabeçalho.
+    expect(screen.queryByText('Finish')).toBeNull();
+  });
+
+  it('com a poule toda pontuada, concluir leva ao resumo', async () => {
+    connectPoule();
+    scoreEveryBout();
+
+    const router = renderRouter('./app', { initialUrl: '/poule' });
+    await router;
+
+    await fireEvent.press(await screen.findByText('Finish'));
+    await screen.findByText('Finish here?');
+    await fireEvent.press(screen.getAllByText('Finish').at(-1)!);
+
+    await waitFor(() => expect(router.getPathname()).toBe('/complete'));
+    await screen.findByText('Poule complete');
+    // Concluir é uma decisão do árbitro: o resumo mostra o que ficou feito, e a sessão só acaba no
+    // botão de ligar a outra.
+    expect(useSessionStore.getState().phase).toBe('complete');
+  });
+
+  it('a poule fechada sem quadro também tem por onde sair', async () => {
+    connectPoule({ locked: true, elimination: null });
+
+    await renderRouter('./app', { initialUrl: '/poule' });
+    await screen.findByText('Resume');
+
+    // Só leitura: não há nada para arbitrar, mesmo com assaltos por disputar (contrato §7).
+    expect(screen.getByText('Finish')).toBeTruthy();
+  });
+});
+
 describe('quadro de eliminatórias', () => {
   beforeEach(() => resetApp());
 
@@ -261,5 +350,25 @@ describe('quadro de eliminatórias', () => {
     expect(router.getPathname()).toBe('/match/m_1');
     // 15 toques, e não os 5 da poule: o alvo vem da API (contrato §7).
     expect(screen.getByText('To 15 touches')).toBeTruthy();
+  });
+
+  it('espelha o combate ao vivo para o quadro, e não para os assaltos de poule', async () => {
+    seedBracket();
+    connectTournament();
+
+    const router = renderRouter('./app', { initialUrl: '/bracket' });
+    await router;
+
+    await fireEvent.press(await screen.findByText('Ana Silva'));
+    await screen.findByText('Round 1 · 1');
+
+    await fireEvent.press(screen.getByLabelText('One more touch for Ana Silva'));
+
+    // `POST /elimination/{id}/events`: um combate a decorrer mostra o placar a subir tal como um
+    // assalto de poule (contrato §7).
+    expect(eventsOf('match', 'm_1')).toMatchObject([
+      { seq: 1, type: 'touch', side: 'a', score_a: 1, score_b: 0 },
+    ]);
+    expect(eventsOf('bout', 'm_1')).toHaveLength(0);
   });
 });

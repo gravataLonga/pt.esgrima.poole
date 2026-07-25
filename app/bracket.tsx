@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useBracket } from '@/api/queries';
 import type { EliminationMatch } from '@/api/types';
-import { QueueBanner, SessionBar } from '@/session';
+import { FinishButton, LeaveButton, QueueBanner, SessionBar } from '@/session';
 import { competitionUuid, useSessionStore } from '@/session/store';
 import {
   Badge,
@@ -64,10 +64,16 @@ export default function BracketScreen() {
   return (
     <Screen>
       <View style={styles.header}>
-        <Text variant="label" color={colors.textMuted} style={styles.eyebrow}>
-          {t('bracket.eyebrow')}
-        </Text>
-        <Text variant="title">{name}</Text>
+        <View style={styles.headerRow}>
+          <View style={styles.headerTitles}>
+            <Text variant="label" color={colors.textMuted} style={styles.eyebrow}>
+              {t('bracket.eyebrow')}
+            </Text>
+            <Text variant="title">{name}</Text>
+          </View>
+
+          <LeaveButton />
+        </View>
 
         <View style={styles.progress}>
           <ProgressBar value={total ? done / total : 0} />
@@ -136,6 +142,8 @@ export default function BracketScreen() {
           renderItem={({ item }) => <MatchRow match={item} disabled={locked} />}
         />
       )}
+
+      <FinishButton />
     </Screen>
   );
 }
@@ -257,6 +265,16 @@ const styles = StyleSheet.create({
   header: {
     gap: spacing.xs,
     marginBottom: spacing.md,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  headerTitles: {
+    flex: 1,
+    gap: spacing.xs,
+    minWidth: 0,
   },
   eyebrow: {
     letterSpacing: 1,

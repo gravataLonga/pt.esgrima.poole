@@ -204,7 +204,16 @@
   "session": {
     "offline": "No connection. The app keeps trying and nothing is lost.",
     "expiring": "The session ends in {{minutes}} min. Generate a new code on the platform to carry on.",
-    "expired": "The session has ended."
+    "expired": "The session has ended.",
+    "leave": "Leave",
+    "leaveTitle": "Leave this competition?",
+    "leaveMessage": "The session ends here. Connect again any time with the same six-digit code.",
+    "leaveQueued_one": "{{count}} result is still waiting for the network. It stays on this phone and is sent the next time you connect.",
+    "leaveQueued_other": "{{count}} results are still waiting for the network. They stay on this phone and are sent the next time you connect.",
+    "stay": "Stay",
+    "finish": "Finish",
+    "finishTitle": "Finish here?",
+    "finishMessage": "Nothing is left to referee in this competition. Connect again with the same code if you need to come back."
   },
   "queue": {
     "pending_one": "{{count}} result saved on this phone, waiting for the network.",

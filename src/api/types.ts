@@ -1,7 +1,7 @@
 /**
  * Tipos do contrato de API — fonte de verdade única.
  *
- * Tipados a partir de `docs/API-CONTRACT.md` v1.4.2 (§7 Endpoints, §8 Catálogo de erros,
+ * Tipados a partir de `docs/API-CONTRACT.md` v1.5.0 (§7 Endpoints, §8 Catálogo de erros,
  * §9 Emparelhamento QR/PIN). Este ficheiro não contém mais nada: sem lógica, sem helpers.
  *
  * Regra de tolerância (contrato §1): a app ignora campos que não conhece e nunca falha por os
@@ -12,7 +12,7 @@
  * Versão do contrato **em vigor nos dois lados**. A plataforma passou a servi-lo por inteiro
  * (contrato §11) e a app passou a falar com ela — deixou de ser a versão só do documento.
  */
-export const API_CONTRACT_VERSION = '1.4.2';
+export const API_CONTRACT_VERSION = '1.5.0';
 
 /** Prefixo de versão da API. Um MAJOR do contrato implica um prefixo novo. */
 export const API_PREFIX = '/api/v1';
@@ -276,6 +276,34 @@ export interface BoutEvent {
 
 /** Máximo de eventos por assalto (contrato §7). Acima disso, `422 validation_failed`. */
 export const MAX_BOUT_EVENTS = 200;
+
+// ─── POST .../events — a pista ao vivo (contrato 1.5.0, §7) ─────────────────
+
+/**
+ * O mesmo evento, enviado **enquanto o assalto decorre** em vez de em lote no fim.
+ *
+ * Duas diferenças em relação ao `BoutEvent` do `score`: o contador, que é a idempotência toda, e o
+ * placar depois do evento — que vem contado pela app e **não** é recalculado pelo servidor.
+ */
+export interface LiveBoutEvent extends BoutEvent {
+  /** Contador do próprio assalto, a partir de `1`. O assalto seguinte volta a numerar de `1`. */
+  seq: number;
+  /** Placar **depois** do evento. É o que a web mostra enquanto o assalto decorre. */
+  score_a?: number;
+  score_b?: number;
+}
+
+/** Eventos por pedido (contrato §7): 1 a 50. Acima disso, `422 validation_failed`. */
+export const MAX_EVENTS_PER_REQUEST = 50;
+
+export interface LiveEventsRequest {
+  events: LiveBoutEvent[];
+}
+
+/** `accepted` é quantos eram novos. `0` quer dizer que já lá estavam todos — o pedido correu bem. */
+export interface LiveEventsResponse {
+  accepted: number;
+}
 
 export interface ScoreRequest {
   /**

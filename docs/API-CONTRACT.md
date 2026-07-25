@@ -1,17 +1,21 @@
 # API de Arbitragem — Contrato
 
-**Versão do contrato: `1.5.0`** · Estado: **servido pela plataforma, consumido pela app** · 2026-07-25
+**Versão do contrato: `2.0.0`** · Estado: **servido pela plataforma; a app tem de migrar** · 2026-07-25
 
 Fronteira partilhada entre a **plataforma** (`poole.esgrima.pt`, Laravel 12) e a **app de arbitragem**
 (React Native, repositório separado). Este ficheiro é a **única fonte de verdade** do que os dois
 lados trocam entre si.
 
-> ✅ **Os dois lados falam este contrato.** A plataforma serve os endpoints da [§7](#7-endpoints), o
-> envelope de erro da [§3](#3-envelope-de-erro), o catálogo da [§8](#8-catálogo-de-erros), o
-> `submission_id` da [§4](#4-idempotência-e-retry) e os `ETag` da [§5](#5-polling-e-etag); a app
-> consome-os todos, sem *fixtures* pelo meio. O levantamento feito a ligar os dois — incluindo o que
-> só aparece com o servidor a sério do outro lado — está em
-> [§12 — Levantamento de campo](#12-levantamento-de-campo--a-app-ligada-ao-servidor-a-sério).
+> 🔴 **`2.0.0` é *breaking*, e a plataforma já a serve.** O código deixou de ser da competição e
+> passou a ser **da pista**: uma poule continua a ter o seu, e **cada combate de eliminatória passa
+> a ter um só dele**. O código de torneio deixou de existir, as duas listas de quadro saíram da API,
+> e o `scope` da sessão passou a ser `poule` \| `match`.
+>
+> **A app de hoje não funciona contra esta versão** — um código de combate chega-lhe com um `scope`
+> que ela não conhece, e o ecrã do quadro pede uma lista que já não existe. O que falta fazer do
+> lado dela está em [§11 C](#c-o-lado-da-app--por-fazer). Excecionalmente **não há `/api/v2`**: não
+> há nenhuma app instalada e o `/api/v1` nunca serviu produção, portanto não há nada a coexistir com
+> — a regra do [§1](#versionamento) mantém-se para o dia em que houver.
 >
 > ⚠️ **Duas coisas por corrigir, ambas do lado do servidor**, e nenhuma delas trava a app:
 > (1) a comparação do `If-None-Match` é forte, e o `304` do [§5](#5-polling-e-etag) nunca acontece
@@ -57,10 +61,14 @@ penalizações. Tudo isso é da plataforma web.
 A **classificação da poule** passou a estar coberta em `1.2.0` ([§7](#get-poulespoulestandings)): é o
 servidor que a calcula, como já calcula a da web. O cliente **não** aplica critérios de desempate.
 
-O **quadro de eliminatórias** passou a estar coberto em `1.4.0` ([§7](#eliminatórias)): a app arbitra
-o quadro da poule e o quadro do torneio, com a mesma sessão e o mesmo ecrã de assalto. O que continua
-fora é **gerar** o quadro, semear atletas e decidir emparelhamentos — isso é da plataforma web; a app
-lê o quadro que ela produziu e regista resultados nele.
+O **combate de eliminatória** está coberto desde `1.4.0` e passou a ser arbitrado **um a um** em
+`2.0.0` ([§7](#eliminatórias)): a app abre o combate cujo código lhe deram, no mesmo ecrã de assalto
+que usa na poule. O que continua fora é **gerar** o quadro, semear atletas e decidir emparelhamentos
+— isso é da plataforma web; a app regista resultados no que ela produziu.
+
+O **quadro como desenho** saiu da API em `2.0.0`. Uma sessão alcança um combate e não os outros, por
+isso não há lista de quadro para lhe dar: quem quiser ver o quadro inteiro vê-o na web, que é onde
+ele é desenhado, semeado e corrigido.
 
 ---
 
@@ -216,9 +224,12 @@ If-None-Match: "a1b2c3d4"
 O `ETag` **tem de mudar** quando: qualquer assalto muda de `status` ou de resultado, **ou** um atleta
 é removido da poule (a lista encolhe), **ou** a poule é bloqueada.
 
-O mesmo vale, com o mesmo formato, para `GET /poules/{poule}/standings` (que partilha o `ETag` da
-lista de assaltos) e para as duas listas de eliminatórias, onde o `ETag` muda também quando **um
-vencedor sobe de ronda** — o combate seguinte ganha atleta e passa a `ready`.
+O mesmo vale, com o mesmo formato, para `GET /poules/{poule}/standings`, que partilha o `ETag` da
+lista de assaltos.
+
+**Não há `ETag` do lado da eliminatória**, porque não há lista: uma sessão de combate tem um objeto
+só, e relê-lo é um pedido pequeno. A cadência ali é a do ecrã de assalto — pausada com o cronómetro a
+correr, 30 s com ele parado.
 
 Em `429`, o cliente respeita `Retry-After` e duplica o intervalo até ao máximo de 60 s.
 
@@ -259,20 +270,24 @@ Em `429`, o cliente respeita `Retry-After` e duplica o intervalo até ao máximo
 ## 6. Sessão e expiração
 
 - O token dura **60 minutos deslizantes**: cada pedido autenticado bem-sucedido renova a janela.
-- O token tem **âmbito de uma competição**, e a competição é de um de dois tipos:
-  - `scope: "poule"` — os assaltos da poule **e o quadro de eliminatórias dessa poule**.
-  - `scope: "tournament"` — o quadro de eliminatórias do torneio. Não dá acesso às poules dele; cada
-    poule tem o seu código.
-- **Uma sessão por competição.** Um `POST /connect` bem-sucedido invalida o token anterior dessa
-  competição; o dispositivo anterior recebe `401 token_revoked` no pedido seguinte.
-- O servidor **invalida o token quando a competição está encerrada para sempre** — todos os assaltos
-  `done` **e** o quadro de eliminatórias já decidido. A resposta do último `score` chega na mesma
-  (201); é o pedido **seguinte** que recebe `401 poule_complete`.
+- O token tem **âmbito de uma pista**, e a pista é de um de dois tipos:
+  - `scope: "poule"` — os assaltos dessa poule e a classificação dela. Mais nada.
+  - `scope: "match"` — **um** combate de eliminatória, seja ele do quadro de uma poule ou do quadro
+    de um torneio. Não alcança o combate da pista ao lado, nem a poule de onde os atletas vieram.
+- **Uma sessão por pista.** Um `POST /connect` bem-sucedido invalida o token anterior *dessa* poule
+  ou *desse* combate; o dispositivo anterior recebe `401 token_revoked` no pedido seguinte. Dois
+  árbitros em dois combates do mesmo quadro **não** se pisam — é para isso que o código desceu ao
+  combate.
+- O servidor **invalida o token quando não há mais nada a fazer naquela pista**. A resposta do último
+  `score` chega na mesma (201); é o pedido **seguinte** que recebe `401 poule_complete`.
+  - Num combate: assim que o resultado é registado. A ronda seguinte é outro combate, com código
+    próprio.
+  - Numa poule: quando o cartão está todo disputado **e** fechado por um quadro.
 
-  > **Não basta a poule estar completa.** Registar o último assalto acontece *antes* de o quadro
-  > existir, e é a mesma sessão que vai arbitrar a eliminatória a seguir ([§7](#eliminatórias)).
-  > Revogar aí expulsa o árbitro no pior momento possível. A regra é `isFinishedForGood()` —
-  > competição fenced **e** quadro decidido —, e está fixada por teste no servidor.
+  > **Não basta a poule estar completa.** Nos minutos a seguir ao último assalto o árbitro está
+  > normalmente a ler a classificação do cartão que acabou de arbitrar, no telemóvel com que o
+  > arbitrou. Cortá-lo aí não ganha nada — a poule completa já só se lê. É o quadro que a encerra,
+  > porque é para o quadro que a competição vai, e o quadro corre em códigos que este não alcança.
 
 - **Não há refresh de token.** Renovar = gerar um QR/PIN novo na plataforma web.
 
@@ -286,7 +301,6 @@ o token, volta ao ecrã de ligação com a razão explicada e **preserva** as su
 Base: `{base_url}/api/v1`. Todos exigem `Authorization: Bearer`, exceto `POST /connect`.
 
 - `{poule}` — **UUID** da poule (a plataforma expõe poules por UUID, não por id numérico).
-- `{tournament}` — **UUID** do torneio.
 - `{bout}` — **id opaco** do assalto de poule.
 - `{match}` — **id opaco** do combate de eliminatória.
 
@@ -295,9 +309,7 @@ Base: `{base_url}/api/v1`. Todos exigem `Authorization: Bearer`, exceto `POST /c
 | `POST /connect` | público |
 | `GET /poules/{poule}/bouts` · `/standings` | `poule` |
 | `GET /bouts/{bout}` · `POST .../start` · `.../events` · `.../score` | `poule` |
-| `GET /poules/{poule}/elimination` | `poule` |
-| `GET /tournaments/{tournament}/elimination` | `tournament` |
-| `GET /elimination/{match}` · `POST .../start` · `.../events` · `.../score` | o do quadro a que o combate pertence |
+| `GET /elimination/{match}` · `POST .../start` · `.../events` · `.../score` | `match`, e só o combate do próprio código |
 | `GET` · `DELETE /session` | qualquer |
 
 ### Objetos partilhados
@@ -374,12 +386,18 @@ Base: `{base_url}/api/v1`. Todos exigem `Authorization: Bearer`, exceto `POST /c
 | `sudden_death_seconds` | **Opcional.** Duração da morte súbita com prioridade sorteada, em segundos (FIE t.41). Ausente ou `null` → `60`. Em poule passa-se do último período **diretamente** à morte súbita, sem descanso pelo meio. |
 | `passivity_seconds` | **Opcional.** Minuto de não combatividade que a app cronometra (FIE t.87). Ausente ou `null` → `60`; `0` → a app não conta passividade. |
 | `locked` | `true` → poule fechada porque as eliminatórias foram geradas. Toda a escrita **sobre assaltos de poule** passa a devolver 422. |
-| `elimination` | `null` enquanto o quadro não existir. Presente → há quadro desta poule para arbitrar, com o progresso dele. É o que diz à app que pode oferecer o ecrã do quadro. |
+| `elimination` | `null` enquanto não houver quadro. Presente → o progresso do quadro **para onde estes atletas foram**: o da própria poule quando ela corre sozinha, o do torneio quando ela é uma pool de várias. **Informativo, não navegável** — esta sessão não o alcança. |
 
-> **`locked: true` não quer dizer sessão em modo leitura.** Quer dizer que os *assaltos da poule*
-> deixaram de aceitar escrita, porque o quadro foi gerado a partir deles. É exatamente o momento em
-> que o quadro passa a aceitar — a mesma sessão muda de fase, não de estado. Ver
-> [Eliminatórias](#eliminatórias).
+> **`locked: true` quer dizer que a competição passou para o quadro**, e o quadro corre em códigos
+> que este token não alcança: um por combate ([Eliminatórias](#eliminatórias)). A app mostra a poule
+> em leitura e diz onde a competição foi — com o `elimination` ao lado, tem o número para o dizer.
+>
+> **Este campo é a correção de um buraco concreto.** Uma pool de torneio fecha no instante em que o
+> quadro do torneio é desenhado, e nunca alcançou esse quadro. Enquanto `elimination` só olhava para
+> o quadro *da própria poule*, a app recebia `locked: true` com `elimination: null` — cartão fechado,
+> nada do outro lado, nenhuma razão dada — e ficava num ecrã que se lia como "isto acabou", sem
+> deixar prosseguir nem registar. É o mesmo buraco, do lado do servidor, que o `410` do
+> [`POST /connect`](#post-connect) fecha com uma frase em vez de com um silêncio.
 
 > **Os presets de tempo são só cronometragem.** A app conta-os localmente e **não** comunica ao
 > servidor o que acontece dentro deles: uma vitória por prioridade não é representável neste contrato
@@ -409,37 +427,24 @@ que acontecer ao plantel. Identidade é o `id`; `sequence` é ordem de apresenta
 
 Se um atleta for removido, os assaltos dele deixam de aparecer na lista e o `bouts_total` encolhe.
 
-**`TournamentSummary`**
+**`MatchDetail`**
 
-O equivalente para uma sessão de âmbito `tournament`, que arbitra o quadro do torneio e mais nada.
+O que uma sessão de âmbito `match` vê, que é o combate inteiro e mais nada. É a mesma forma que
+[`GET /elimination/{match}`](#get-eliminationmatch) devolve, e vem já no `POST /connect` — o árbitro
+escreve seis dígitos e o combate abre, sem um segundo pedido pelo meio.
 
-```json
-{
-  "uuid": "3b7e9a04-...",
-  "name": "Torneio de Verão 2026",
-  "weapon": "sabre",
-  "matches_total": 15,
-  "matches_done": 4,
-  "locked": false
-}
-```
-
-| Campo | Notas |
-|---|---|
-| `weapon` | **Opcional.** O mesmo campo do `PouleSummary`. |
-| `matches_total` / `matches_done` | Progresso do quadro. `0`/`0` enquanto o quadro não for gerado. |
-| `locked` | `true` → o quadro já não aceita escrita. |
-
-Os presets de tempo **não vêm aqui**: um quadro corre a 15 toques e 3 períodos, mas quem manda é o
-combate, e é `GET /elimination/{match}` que os traz. Vale para os dois âmbitos.
+Não há sumário de torneio por cima disto. Um torneio não é arbitrado como um todo: as suas poules
+têm código próprio e cada combate do quadro tem o seu, portanto não sobra nada para um objeto de
+torneio descrever. O nome do evento vem no `competition_name` do próprio combate, que é a única
+coisa que o árbitro precisa de ler para saber onde está.
 
 ---
 
 ### `POST /connect`
 
-Troca um PIN por um token com âmbito de uma competição — uma poule ou um torneio, consoante o código
-que foi gerado. **Público**, com *rate limit* (5/min por IP, o mesmo limite que a auth web da
-plataforma já usa).
+Troca um PIN por um token com âmbito de uma pista — uma poule ou um combate de eliminatória,
+consoante o código que foi gerado. **Público**, com *rate limit* (5/min por IP, o mesmo limite que a
+auth web da plataforma já usa).
 
 **Request**
 
@@ -460,18 +465,18 @@ plataforma já usa).
   "expires_at": "2026-07-24T18:42:11Z",
   "scope": "poule",
   "poule": { "...": "PouleSummary" },
-  "tournament": null
+  "match": null
 }
 ```
 
 | Campo | Notas |
 |---|---|
-| `scope` | `poule` \| `tournament`. **Determina o resto da resposta e o que a sessão alcança.** |
-| `poule` | `PouleSummary` com `scope: "poule"`; `null` com `scope: "tournament"` |
-| `tournament` | `TournamentSummary` com `scope: "tournament"`; `null` com `scope: "poule"` |
+| `scope` | `poule` \| `match`. **Determina o resto da resposta e o que a sessão alcança.** |
+| `poule` | `PouleSummary` com `scope: "poule"`; `null` com `scope: "match"` |
+| `match` | `MatchDetail` com `scope: "match"`; `null` com `scope: "poule"` |
 
 O árbitro escreve seis dígitos e não sabe — nem tem de saber — que tipo de código lhe deram. É o
-`scope` que diz à app se abre a lista de assaltos ou vai direta ao quadro.
+`scope` que diz à app se abre a lista de assaltos ou vai direta ao combate que lhe calhou.
 
 O `token` é guardado no armazenamento seguro do dispositivo. **Nunca** aparece em log, nem em
 *crash report*.
@@ -481,6 +486,19 @@ O `token` é guardado no armazenamento seguro do dispositivo. **Nunca** aparece 
 > Um PIN rodado na web devolve `422 pin_invalid`, igual a um PIN errado. O servidor não guarda o PIN
 > anterior, por isso não consegue distinguir os dois casos — e guardá-lo custaria uma coluna para uma
 > mensagem de erro ligeiramente melhor.
+
+> **O `message` do `410` diz para onde ir**, e é a única `message` deste contrato que muda com o
+> caso. Um árbitro a quem dizem "esta competição já terminou" no meio de um evento que claramente não
+> terminou fica parado à espera do organizador. Por isso:
+>
+> | O código era de | O que a app mostra |
+> |---|---|
+> | uma poule fechada por um quadro | *"A poule terminou. Cada combate das eliminatórias tem o seu próprio código — peça o da sua pista."* |
+> | uma poule toda disputada, ainda sem quadro | *"Esta poule já foi toda disputada."* |
+> | um combate já arbitrado | *"Este combate já foi arbitrado."* |
+>
+> O `code` é sempre `competition_finished` e é sobre ele que a app decide ([§3](#3-envelope-de-erro)).
+> O texto é para ler, e o cliente mostra-o tal como vem — não o reconstrói.
 
 ---
 
@@ -801,22 +819,39 @@ trabalho da plataforma web.
 
 ### Eliminatórias
 
-O quadro a eliminar, arbitrado pela **mesma sessão e no mesmo ecrã de assalto**. É a fase seguinte da
-competição, não outra competição:
+**Um combate de cada vez, com um código de cada vez.** É a diferença que a `2.0.0` traz, e vem do
+pavilhão: um quadro de 16 corre em oito pistas ao mesmo tempo, com oito árbitros e oito telemóveis.
+Um código só para o quadro inteiro dava a cada um deles todos os combates — e, como um código segura
+um dispositivo de cada vez, o segundo árbitro a lê-lo tirava a sessão ao primeiro.
 
-- Um token de **poule** alcança os assaltos da poule **e** o quadro dessa poule. Quando o quadro é
-  gerado, a poule fecha (`locked: true`) e o quadro abre — a app muda de fase sem voltar a ligar.
-- Um token de **torneio** alcança o quadro do torneio e mais nada.
+Por isso o código desceu ao combate:
 
-**O que a app faz aqui é o que já faz na poule:** lê a lista, abre um combate, cronometra, regista o
+- Um token de **combate** (`scope: "match"`) alcança **esse** combate. Não alcança o da pista ao
+  lado, nem a poule de onde os atletas vieram.
+- Um token de **poule** alcança o cartão da poule e **não** alcança quadro nenhum — nem sequer o
+  quadro desenhado a partir dela. Quando o quadro nasce, a poule fecha (`locked: true`), e o que a
+  app faz é dizê-lo: a competição continua, noutros códigos.
+- **Não há token de torneio.** Um torneio nunca foi arbitrado como um todo, e agora não tem por onde
+  o ser: as poules têm o seu código, os combates têm o deles.
+
+**O que a app faz aqui é o que já faz num assalto de poule:** abre o combate, cronometra, regista o
 resultado. Gerar o quadro, semear e decidir quem sobe é da plataforma web — a app **nunca** o faz, e
 o vencedor sobe de ronda do lado do servidor, na transação do resultado.
 
+**O quadro como desenho não vem por aqui.** Uma sessão vê um combate; desenhar o resto seria
+desenhá-lo a partir de dados que ela não tem direito a ver. Quem quer o quadro inteiro abre a página
+do organizador, que é onde ele é desenhado e onde os códigos são distribuídos, um por cartão.
+
 **`EliminationMatch`**
+
+Também chamado `MatchDetail`, que é o nome por que o [`POST /connect`](#post-connect) e o
+[`GET /session`](#get-session-opcional-recomendado) o devolvem. Uma forma só, porque uma sessão de
+combate só tem esta.
 
 ```json
 {
   "id": "m_01J9A...",
+  "competition_name": "Torneio de Verão 2026",
   "bracket": 8,
   "round": 2,
   "position": 1,
@@ -827,74 +862,7 @@ o vencedor sobe de ronda do lado do servidor, na transação do resultado.
   "score_a": null,
   "score_b": null,
   "scored_at": null,
-  "scored_by_me": false
-}
-```
-
-| Campo | Tipo | Notas |
-|---|---|---|
-| `id` | string | **Opaco**, como o do assalto. Nunca interpretado pelo cliente |
-| `bracket` | int | Tamanho do quadro — `8` num quadro de 8. Constante em todas as rondas. **`0` num quadro sem ronda 1**, de onde o tamanho é derivado: o cliente não desenha nada a partir deste campo sem o verificar |
-| `round` | int ≥ 1 | Ronda, a contar do início do quadro. A app **não deduz o nome da ronda a partir daqui** — ver abaixo |
-| `position` | int ≥ 1 | Posição dentro da ronda. É a ordem por que as pistas são chamadas |
-| `status` | `pending` \| `in_progress` \| `done` | O mesmo conjunto do assalto de poule |
-| `ready` | bool | `false` → um dos lados ainda espera o vencedor da ronda anterior. A app mostra o combate mas **não deixa abri-lo** |
-| `fencer_a` / `fencer_b` | `Fencer` \| null | `null` enquanto o lugar não estiver preenchido. `number` é sempre `null` aqui |
-| `score_a` / `score_b` · `scored_at` · `scored_by_me` | | Iguais aos do `Bout` |
-
-**A app não nomeia rondas.** "Quartos-de-final" depende do tamanho do quadro, de haver repescagem e
-do regulamento da prova — é decisão da plataforma, não aritmética do cliente. Se a nomeação for
-precisa no ecrã, entra como campo novo (`round_name`) numa versão MINOR, vinda do servidor.
-
----
-
-### `GET /poules/{poule}/elimination` · `GET /tournaments/{tournament}/elimination`
-
-O quadro, **já ordenado** por `round` e depois por `position`. Suporta `If-None-Match` → `304`.
-
-**200 OK**
-
-```json
-{
-  "poule": { "...": "PouleSummary" },
-  "matches": [ { "...": "EliminationMatch" } ]
-}
-```
-
-A versão de torneio devolve `tournament` (`TournamentSummary`) no lugar de `poule`. A lista vem
-**completa**, incluindo os combates com `ready: false` — é assim que a app desenha o quadro inteiro em
-vez de só a ronda a jogar.
-
-Quadro por gerar → `matches: []`. Não é erro.
-
-> **Só o quadro principal.** A plataforma tem também quadros de **consolação**, e o
-> `EliminationMatch` deste contrato não tem forma de os distinguir do principal: viriam com
-> `round`/`position` repetidos e a app desenharia um quadro impossível. Ficam de fora da API e
-> arbitram-se na web. Trazê-los implica um campo novo (`bracket_type`) e uma versão MINOR.
-
-**Erros:** `401` · `403 poule_scope_mismatch` · `404 not_found`
-
----
-
-### `GET /elimination/{match}`
-
-Detalhe de um combate, com os presets do cronómetro. **Leitura pura** — não muda estado, tal como o
-detalhe do assalto.
-
-**200 OK**
-
-```json
-{
-  "id": "m_01J9A...",
-  "bracket": 8,
-  "round": 2,
-  "position": 1,
-  "status": "pending",
-  "ready": true,
-  "fencer_a": { "id": 41, "number": null, "name": "Ana Silva", "club": "CE Lisboa" },
-  "fencer_b": { "id": 44, "number": null, "name": "Rui Costa", "club": null },
-  "score_a": null,
-  "score_b": null,
+  "scored_by_me": false,
   "weapon": "sabre",
   "target": 15,
   "duration_seconds": 180,
@@ -907,13 +875,41 @@ detalhe do assalto.
 }
 ```
 
-| Campo | Notas |
-|---|---|
-| `target` | Toques do quadro — `15` por omissão, contra os `5` da poule. **Vem sempre da API** |
-| `periods` | `3` por omissão num quadro, e é aqui que o `rest_seconds` deixa de ser decorativo: há descanso de um minuto entre períodos |
-| `weapon` · `rest_seconds` · `sudden_death_seconds` · `passivity_seconds` | **Opcionais**, com o mesmo significado da poule |
-| `allow_draw` | **`false`** — um combate de quadro tem de ter vencedor, senão ninguém sobe |
-| `locked` | `true` → quadro fechado, só leitura |
+| Campo | Tipo | Notas |
+|---|---|---|
+| `id` | string | **Opaco**, como o do assalto. Nunca interpretado pelo cliente |
+| `competition_name` | string | O nome da prova a que o combate pertence — a poule quando o quadro é de uma poule, o torneio quando é de um torneio. É a única coisa que diz ao árbitro onde está: chegou com seis dígitos e mais nada |
+| `bracket` | int | Tamanho do quadro — `8` num quadro de 8. Constante em todas as rondas. **`0` num quadro sem ronda 1**, de onde o tamanho é derivado: o cliente não desenha nada a partir deste campo sem o verificar |
+| `round` | int ≥ 1 | Ronda, a contar do início do quadro. A app **não deduz o nome da ronda a partir daqui** — ver abaixo |
+| `position` | int ≥ 1 | Posição dentro da ronda. É a ordem por que as pistas são chamadas |
+| `status` | `pending` \| `in_progress` \| `done` | O mesmo conjunto do assalto de poule |
+| `ready` | bool | `false` → um dos lados ainda espera o vencedor da ronda anterior. O combate abre-se à mesma — o código pode ser entregue antes de se saber quem sobe — mas **não pode ser começado nem pontuado** |
+| `fencer_a` / `fencer_b` | `Fencer` \| null | `null` enquanto o lugar não estiver preenchido. `number` é sempre `null` aqui |
+| `score_a` / `score_b` · `scored_at` · `scored_by_me` | | Iguais aos do `Bout` |
+| `target` | int | Toques do quadro — `15` por omissão, contra os `5` da poule. **Vem sempre da API** |
+| `periods` | int | `3` por omissão num quadro, e é aqui que o `rest_seconds` deixa de ser decorativo: há descanso de um minuto entre períodos |
+| `weapon` · `rest_seconds` · `sudden_death_seconds` · `passivity_seconds` | | **Opcionais**, com o mesmo significado da poule |
+| `allow_draw` | bool | **`false`** — um combate de quadro tem de ter vencedor, senão ninguém sobe |
+| `locked` | bool | `true` → **este** combate já foi arbitrado. Só leitura |
+
+**A app não nomeia rondas.** "Quartos-de-final" depende do tamanho do quadro, de haver repescagem e
+do regulamento da prova — é decisão da plataforma, não aritmética do cliente. Se a nomeação for
+precisa no ecrã, entra como campo novo (`round_name`) numa versão MINOR, vinda do servidor.
+
+> **Os quadros de consolação deixaram de estar excluídos por construção.** Ficavam de fora porque
+> não eram distinguíveis do principal numa *lista* — viriam com `round`/`position` repetidos e a app
+> desenharia um quadro impossível. Sem lista, o problema não existe: um combate de consolação com
+> código é um combate como os outros. A plataforma ainda não os gera, mas nada neste contrato os
+> impede.
+
+---
+
+### `GET /elimination/{match}`
+
+O combate, com os presets do cronómetro — a mesma forma acima. **Leitura pura**: não muda estado, tal
+como o detalhe do assalto de poule.
+
+Só o combate do próprio código. Qualquer outro id responde `404` ([§8](#8-catálogo-de-erros)).
 
 **Erros:** `401` · `403 poule_scope_mismatch` · `404 not_found`
 
@@ -925,7 +921,7 @@ Igual ao `start` do assalto: marca `in_progress`, idempotente, *fire-and-forget*
 
 **200 OK** — `{ "id": "m_01J9A...", "status": "in_progress" }`
 
-**Erros:** `401` · `403` · `404` · `409 match_not_ready` · `409 match_already_scored` · `422 poule_locked`
+**Erros:** `401` · `403` · `404` · `409 match_not_ready` · `409 match_already_scored`
 
 ---
 
@@ -934,7 +930,8 @@ Igual ao `start` do assalto: marca `in_progress`, idempotente, *fire-and-forget*
 Igual ao [`POST /bouts/{bout}/events`](#post-boutsboutevents) — mesmo corpo, mesmo `seq`, mesma
 resposta `202`. Um combate a decorrer tem de mostrar o placar a subir tal como um assalto de poule.
 
-Não devolve `422 poule_locked`: o quadro **é** a fase aberta da competição.
+Não devolve `422 poule_locked`: um combate não é uma poule, e o bloqueio da poule não lhe diz
+respeito.
 
 **Erros:** `401` · `403 poule_scope_mismatch` · `404` · `422 validation_failed` · `429 rate_limited`
 
@@ -963,20 +960,26 @@ obrigatório, a resposta `200` num *retry* da mesma submissão e o `current` no 
 }
 ```
 
-Duas diferenças em relação à poule:
+`matches_done` / `matches_total` contam o **quadro inteiro**, não o que esta sessão alcança. São o
+progresso da prova, para o ecrã dizer "5 de 15" — não uma lista, e não uma forma de descobrir os
+outros combates.
+
+Três diferenças em relação à poule:
 
 - **O vencedor sobe na mesma transação.** O combate da ronda seguinte ganha atleta e pode passar a
-  `ready: true`. A app descobre isso no *poll* seguinte — a resposta do `score` não descreve o resto
-  do quadro.
+  `ready: true`. Esta sessão não o vê e não precisa: quem o arbitra tem o código dele.
 - **`409 match_not_ready`** existe aqui: um combate cujo lugar ainda espera o vencedor da ronda
   anterior não aceita resultado, mesmo que a app o tenha em cache como abrível.
+- **É o fim da sessão.** Registado o resultado, não há mais nada nesta pista: o token é invalidado e
+  o pedido seguinte recebe `401 poule_complete` ([§6](#6-sessão-e-expiração)). A resposta do `score`
+  chega na mesma.
 
 **Erros:** `401` · `403 poule_scope_mismatch` · `404` · `409 match_already_scored` ·
 `409 match_not_ready` · `422 validation_failed` · `429 rate_limited`
 
 > **Sem `422 poule_locked` aqui**, ao contrário do `score` de poule. Um combate já pontuado é
-> travado pela escrita condicional (`409`), e um quadro decidido revoga o token — o pedido seguinte
-> apanha `401 poule_complete` antes de chegar a este controlador. Ver [§12](#12-levantamento-de-campo--a-app-ligada-ao-servidor-a-sério).
+> travado pela escrita condicional (`409`), e um combate arbitrado revoga o token — o pedido seguinte
+> apanha `401 poule_complete` antes de chegar a este controlador.
 
 ---
 
@@ -991,12 +994,12 @@ Valida no arranque da app um token guardado, sem escrever nada. Evita abrir uma 
   "expires_at": "2026-07-24T18:42:11Z",
   "scope": "poule",
   "poule": { "...": "PouleSummary" },
-  "tournament": null
+  "match": null
 }
 ```
 
 Mesma forma do `POST /connect`, sem o `token` — que a app já tem. É por aqui que uma app relançada
-descobre que a poule entretanto fechou e que o que há para arbitrar agora é o quadro.
+descobre que a poule entretanto fechou, ou que o combate que tinha na mão já foi arbitrado pela web.
 
 **Erros:** `401`
 
@@ -1017,27 +1020,27 @@ afinar a redação sem que isso seja uma alteração de contrato.
 | HTTP | `code` | Significado | Reação esperada do cliente |
 |---|---|---|---|
 | 422 | `pin_invalid` | PIN errado, inexistente, ou já rodado na web | Erro no campo, mantém o ecrã |
-| 410 | `competition_finished` | O PIN existe mas a competição já terminou | "Esta competição já terminou" — não é erro de digitação |
+| 410 | `competition_finished` | O PIN existe mas não há nada a arbitrar nessa pista | Mostra o `message` do servidor, que diz **qual** dos casos é e para onde ir — não é erro de digitação |
 | 429 | `pin_throttled` | Demasiadas tentativas | Bloqueia o campo até `Retry-After` |
 | 401 | `token_expired` | 60 min sem atividade | Volta ao ecrã de ligar |
-| 401 | `token_revoked` | Outro dispositivo ligou-se a esta poule | "Outro dispositivo assumiu esta poule" |
-| 401 | `poule_complete` | Competição encerrada — assaltos `done` **e** quadro decidido | Ecrã de competição completa — **não é erro** |
-| 403 | `poule_scope_mismatch` | Token de outra competição, ou de âmbito errado (código de poule a pedir o quadro do torneio) | Volta a ligar; sinaliza *bug* |
-| 404 | `not_found` | Assalto/poule inexistente (ex.: atleta removido) | *Refetch* da lista |
+| 401 | `token_revoked` | Outro dispositivo ligou-se a esta pista | "Outro dispositivo assumiu esta pista" |
+| 401 | `poule_complete` | Nada mais a fazer aqui — combate arbitrado, ou poule disputada **e** fechada por um quadro | Ecrã de competição completa — **não é erro** |
+| 403 | `poule_scope_mismatch` | Token de outra pista, ou de âmbito errado (código de poule a pedir um combate) | Volta a ligar; sinaliza *bug* |
+| 404 | `not_found` | Assalto/poule/combate inexistente, ou de outra pista (ex.: atleta removido) | *Refetch* do que se tem |
 | 409 | `bout_already_scored` | Assalto de poule já registado | Mostra `current`, não repete |
 | 409 | `match_already_scored` | Combate de quadro já registado | Mostra `current`, não repete |
-| 409 | `match_not_ready` | O combate ainda espera o vencedor da ronda anterior | *Refetch* do quadro; o combate não devia estar abrível |
-| 422 | `poule_locked` | Assaltos de poule fechados porque o quadro foi gerado | **Não é fim de sessão:** a app passa ao quadro. Só é modo leitura se também não houver quadro |
+| 409 | `match_not_ready` | O combate ainda espera o vencedor da ronda anterior | Relê o combate; espera pela ronda anterior |
+| 422 | `poule_locked` | Assaltos de poule fechados porque um quadro foi gerado | **Não é fim de sessão:** a poule passa a leitura, e o que se segue corre nos códigos dos combates |
 | 422 | `validation_failed` | Corpo inválido | Mostra `errors`; sinaliza *bug do cliente* |
 | 429 | `rate_limited` | Excesso de pedidos | *Backoff*, respeita `Retry-After` |
 | 5xx | `server_error` | Falha do servidor | *Retry* com *backoff*; submissões vão para a fila |
 | — | *(sem resposta)* | Rede indisponível | Modo offline |
 
 > **`403 poule_scope_mismatch` pode chegar como `404 not_found`.** O servidor responde "não existe"
-> em vez de "não é seu" a um id de outra competição, para que um árbitro com uma poule na mão não
-> possa descobrir que ids existem no resto da prova. O cliente **tem de tolerar as duas**: o `403`
-> continua reservado e nunca é reutilizado para outra coisa, mas o comportamento a programar é o do
-> `404` — *refetch* da lista, e só depois voltar a ligar se ela também vier vazia.
+> em vez de "não é seu" a um id de outra pista, para que um árbitro com um combate na mão não possa
+> descobrir que ids existem no resto da prova. O cliente **tem de tolerar as duas**: o `403` continua
+> reservado e nunca é reutilizado para outra coisa, mas o comportamento a programar é o do `404` —
+> reler o que se tem, e só depois voltar a ligar se isso também falhar.
 
 ---
 
@@ -1045,18 +1048,27 @@ afinar a redação sem que isso seja uma alteração de contrato.
 
 ### PIN
 
-- **6 dígitos** (`000000`–`999999`), gerado por **competição** — poule ou torneio — na plataforma web.
+- **6 dígitos** (`000000`–`999999`), gerado por **pista** na plataforma web: um por poule, e um por
+  **cada combate** de eliminatória.
 - **Único entre os PINs ativos**, e único **nas duas tabelas**: o `/connect` recebe só os seis dígitos
   e tem de saber para onde mandar o árbitro.
-- Rodável a qualquer momento (botão "gerar novo QR"). Rodar **invalida o PIN anterior** **e** os
-  tokens já emitidos — é assim que o organizador retoma uma competição de um dispositivo perdido.
-- **Não é de uso único.** Vale até ser rodado ou até a competição ficar encerrada.
+- Rodável a qualquer momento (botão "novo código"). Rodar **invalida o PIN anterior** **e** os
+  tokens já emitidos — é assim que o organizador retoma uma pista de um dispositivo perdido.
+- **Não é de uso único.** Vale até ser rodado ou até não haver mais nada a arbitrar naquela pista.
+- **Redesenhar um quadro deita fora os códigos dele.** Os combates são apagados e refeitos, e um
+  código que abre um combate que já não existe não tem como ser explicado a quem o tem na mão.
 
   > **Decidido assim, sabendo o custo.** Um PIN que se gasta na ligação protege contra quem fotografa
   > o QR projetado, mas cobra o preço no caso comum: telemóvel sem bateria, app reinstalada, sessão
-  > perdida a meio de uma poule — e o árbitro fica parado à espera do organizador. O árbitro em
+  > perdida a meio de um assalto — e o árbitro fica parado à espera do organizador. O árbitro em
   > pavilhão precisa de poder voltar a ligar-se sozinho. Quem quiser cortar o acesso roda o PIN, que
   > é um clique e mata também os tokens.
+
+> **Onde o organizador os encontra.** O da poule está no painel de arbitragem das páginas da poule.
+> Os dos combates estão **no próprio quadro**, um por cartão: o cartão mostra os seis dígitos e um
+> ponto verde quando há um telemóvel agarrado a ele, e abre o QR num clique. É o mesmo sítio onde o
+> organizador olha para saber que pista chamar, o que é meio caminho para não entregar o código
+> errado.
 
 ### Payload do QR
 
@@ -1104,6 +1116,7 @@ passar a emitir o formato 2 em vez do 1.
 
 | Versão | Data | Alterações |
 |---|---|---|
+| `2.0.0` | 2026-07-25 | **MAJOR — o código deixou de ser da competição e passou a ser da pista.** Um quadro corre em várias pistas ao mesmo tempo; um código só para o quadro inteiro dava a cada árbitro todos os combates e, porque um código segura um dispositivo de cada vez, o segundo a ligar-se tirava a sessão ao primeiro. **(1) Cada combate de eliminatória tem o seu PIN**, e o `scope` da sessão passa a `poule` \| `match`. **(2) `scope: "tournament"` e o `TournamentSummary` desaparecem** — um torneio nunca foi arbitrável como um todo e agora não tem por onde. **(3) `GET /poules/{poule}/elimination` e `GET /tournaments/{tournament}/elimination` saem da API**: uma sessão vê um combate, não um quadro; o quadro desenha-se na web. **(4) O `connect` e o `session` devolvem `match`** (o `MatchDetail`, que é o detalhe do combate) no lugar de `tournament`, com `competition_name` novo a dizer em que prova o árbitro está. **(5) Um token de poule deixa de alcançar o quadro dessa poule.** **(6) `PouleSummary.elimination` passa a apontar o quadro *para onde os atletas foram*** — o da poule quando ela corre sozinha, o do torneio quando é uma pool — e é informativo, não navegável: era aqui que uma pool de torneio ficava `locked` com `elimination: null` e a app encalhava num ecrã sem saída. **(7) O `message` do `410 competition_finished` passa a dizer qual dos casos é e para onde ir.** **(8) `422 poule_locked` sai do `POST /elimination/{match}/start`.** **Sem `/api/v2`:** não há app instalada e o `/api/v1` nunca serviu produção, portanto não há versão antiga para coexistir; a regra da §1 vale para a próxima. |
 | `1.5.0` | 2026-07-25 | **MINOR, aditivo — a pista passa a ver-se enquanto está a ser arbitrada.** `POST /bouts/{bout}/events` e `POST /elimination/{match}/events`: a app envia o toque, o duplo, o cartão e a prioridade **no momento em que acontecem**, com um contador `seq` por assalto que é a idempotência toda. Até aqui a plataforma só sabia do assalto no fim, e uma poule a meio parecia uma poule que ninguém tinha começado; agora o placar sobe toque a toque no painel do organizador, na gaveta do assalto e na página pública do evento. **Nada disto é obrigatório e nada disto entra no resultado** — quem não enviar continua a funcionar exatamente como antes. Consequência: uma app que envie em direto tem o `events` do `score` **ignorado**, porque são os mesmos toques contados duas vezes. |
 | `1.4.2` | 2026-07-25 | **PATCH, redação — a app ligou-se ao servidor a sério pela primeira vez.** Nada mudou no que os dois lados trocam; mudou o que este documento diz sobre isso. (1) [§12](#12-levantamento-de-campo--a-app-ligada-ao-servidor-a-sério) nova, com o levantamento de campo e a lista de arestas. (2) A caixa da [§5](#5-polling-e-etag) sobre o `If-None-Match`: a comparação tem de ser **fraca**, senão o `304` nunca dispara através de um proxy que comprima — é o único ponto que fica por corrigir, e é do servidor. (3) `Bout.scored_at` pode vir `null` com `status: "done"`, em resultados anteriores às colunas de metadados. (4) `EliminationMatch.bracket` pode vir `0` num quadro sem ronda 1. (5) `422 poule_locked` sai da lista de erros do `POST /elimination/{match}/score`, que nunca o devolve. (6) A [§2](#2-transporte-e-cabeçalhos) diz agora que o `POST /connect` não traz `X-Session-Expires-At` — a expiração vem no corpo. |
 | `1.4.1` | 2026-07-25 | **PATCH, redação.** A plataforma passou a servir este contrato por inteiro ([§11](#11-estado-da-implementação) reescrita). Duas clarificações, sem impacto no que estava especificado: (1) os endpoints de eliminatória devolvem **só o quadro principal** — os quadros de consolação não são representáveis no `EliminationMatch` e arbitram-se na web; (2) a distinção entre `token_expired`, `token_revoked` e `poule_complete` fica descrita do lado do servidor: um token substituído ou rodado é **apagado**, um token de competição encerrada é **expirado no lugar**, e é isso que permite responder `poule_complete` em vez de "expirou". |
@@ -1118,22 +1131,20 @@ passar a emitir o formato 2 em vez do 1.
 
 ## 11. Estado da implementação
 
-**Levantado a 2026-07-25 contra o código da plataforma** (branch `test`), depois de o servidor se ter
-alinhado pelo contrato. A lista de trabalho que esta secção continha — os pontos A1 a A13, e os D1 a
-D13 do `app-arbitragem-todo.md` — está **feita**.
+**Levantado a 2026-07-25 contra o código da plataforma** (branch `test`). O servidor serve a `2.0.0`
+por inteiro; **a app ainda serve a `1.5.0`** e tem de migrar — a lista está em
+[C](#c-o-lado-da-app--por-fazer).
 
 ### A. O que a plataforma serve
 
 ```
-POST   /api/v1/connect
+POST   /api/v1/connect                       ← scope: poule | match
 GET    /api/v1/session · DELETE /api/v1/session
 GET    /api/v1/poules/{poule}/bouts          ← ETag
 GET    /api/v1/poules/{poule}/standings      ← ETag (o mesmo da lista)
 GET    /api/v1/bouts/{bout}                  ← leitura pura
 POST   /api/v1/bouts/{bout}/start · /events · /score
-GET    /api/v1/poules/{poule}/elimination        ← ETag
-GET    /api/v1/tournaments/{tournament}/elimination ← ETag
-GET    /api/v1/elimination/{match}           ← leitura pura
+GET    /api/v1/elimination/{match}           ← leitura pura, só o combate do próprio código
 POST   /api/v1/elimination/{match}/start · /events · /score
 ```
 
@@ -1155,6 +1166,8 @@ Ponto a ponto, contra a lista de trabalho anterior:
 | A12 | **Presets completos:** `weapon`, `rest_seconds`, `sudden_death_seconds` e `passivity_seconds`, na poule e na eliminatória, em colunas novas com os valores FIE por omissão, editáveis no formulário de criação e herdados do torneio para as suas poules |
 | A13 | **`GET /poules/{poule}/standings`**, `GET` e `DELETE /session`, `ordered`, `events` e `device_name` — todos implementados |
 | A14 | **`POST .../events` nos dois quadros** (contrato `1.5.0`), com o contador `seq` por assalto como chave única e o `insertOrIgnore` que faz do reenvio um não-evento. O `events` do `score` desliga-se quando o assalto já recebeu eventos em direto. Do lado da web, o placar ao vivo entrou no painel do organizador, na gaveta do assalto — que passou a fazer *poll* — e na página pública do evento, por um `GET /event/{poole}/live` que **não** é do `/api/v1` e nunca serve o PIN |
+| A15 | **O código desceu ao combate** (contrato `2.0.0`). `elimination_matches.referee_pin` nova, `tournaments.referee_pin` largada com os tokens que dela vieram; `EliminationMatch` passou a ser *tokenable*, com a habilidade `match:{id}`; o `/connect` procura nas duas tabelas e o `scope` diz qual foi; o middleware prende um token de combate a esse combate e mais nenhum; as duas listas de quadro e o `TournamentSummary` foram **removidos**. Redesenhar um quadro apaga os códigos dele e larga os dispositivos agarrados. Do lado da web, os códigos passaram a viver **no cartão de cada combate** do quadro — seis dígitos, ponto verde quando há telemóvel agarrado, QR num clique —, e o painel de arbitragem do torneio desapareceu por não ter mais nada para mostrar |
+| A16 | **A poule deixou de encalhar.** `Poole::isFinishedForGood()` passou a ser "cartão disputado **e** fechado por um quadro", em vez de "cartão disputado e quadro decidido": o árbitro que acaba a poule fica com a sessão viva para ler a classificação, e é o quadro que a encerra. `PouleSummary.elimination` passou a olhar para o quadro do torneio quando a poule é uma pool dele — era aqui que uma pool fechada aparecia com `elimination: null` e a app ficava sem saída. E o `410` do `/connect` passou a dizer para onde ir |
 
 ### B. Como o `401` sabe qual dos três é
 
@@ -1165,37 +1178,38 @@ um token apagado não consegue dizer qual dos três foi. A regra do servidor:
 |---|---|---|
 | Outro dispositivo ligou-se, ou o PIN foi rodado | a linha é **apagada** | `401 token_revoked` |
 | A hora deslizante esgotou-se | a linha fica, com `expires_at` no passado | `401 token_expired` |
-| A competição ficou encerrada | a linha é **expirada no lugar**, não apagada | `401 poule_complete` |
+| A pista ficou sem nada a fazer | a linha é **expirada no lugar**, não apagada | `401 poule_complete` |
 
 Sem a terceira linha o fim de uma competição chegava à app como "a sessão expirou", que é a única das
 três que se corrige a voltar a ligar — e não havia nada a que voltar.
 
-### C. O lado da app — feito a 2026-07-25
+### C. O lado da app — por fazer
 
-O que esta secção listava como em falta está entregue. Fica o registo:
+A app está tipada e escrita para a `1.5.0`, e **não funciona contra a `2.0.0`** sem estas mudanças.
+Estão por ordem de dependência; nenhuma delas é grande, e a última é a que muda o produto.
 
-| O que faltava | O que passou a haver |
-|---|---|
-| `src/api/types.ts` tipado para a `1.0.0`/`1.2.0` | Tipado a partir deste documento: `EliminationMatch`, `TournamentSummary`, `scope`, `submission_id`, os presets todos e o `number` *nullable* |
-| O cliente HTTP e os endpoints eram esqueletos | `src/api/client.ts` (cabeçalhos, envelope, *retry* com *backoff*, `ETag`, `X-Session-Expires-At`, *timeout*) e `src/api/endpoints.ts`, uma função por endpoint |
-| A fila não guardava o `submission_id` | `src/queue/` — UUID v4 gerado **na confirmação**, persistido com a submissão e repetido em cada tentativa, incluindo depois de uma reconexão |
-| Não havia ecrã do quadro | `app/bracket.tsx` e `app/match/[id].tsx`, com o mesmo ecrã de assalto que a poule usa |
-| A máquina de estados não conhecia a transição | `phaseFor()` em `src/session/store.ts`: `locked` **com** quadro → quadro; `locked` **sem** quadro → só leitura. Acontece num *poll*, sem pedir código novo |
-| A classificação era calculada no cliente | Vem de `GET /poules/{poule}/standings`. O cliente deixou de aplicar critérios de desempate — a §7 é explícita a dizer que não os deve aplicar |
-| A morte súbita e a passividade eram constantes no código | `sudden_death_seconds` e `passivity_seconds`, vindos da API como todos os outros tempos |
-| `API_CONTRACT_VERSION` em `'1.0.0'` | `'1.4.2'` |
+| # | O quê | Onde |
+|---|---|---|
+| **C1** | `SessionScope` passa a `'poule' \| 'match'`. Tirar `TournamentSummary`, acrescentar `MatchDetail` (o detalhe do combate, agora com `competition_name`, `scored_at` e `scored_by_me`) | `src/api/types.ts` |
+| **C2** | Tirar `getPouleElimination` e `getTournamentElimination` — os endpoints já não existem | `src/api/endpoints.ts` |
+| **C3** | `connect()` e `getSession()` passam a ler `match` no lugar de `tournament`. Guardar o combate no *store* | `src/session/store.ts` |
+| **C4** | `phaseFor()`: `scope === 'match'` → ecrã do combate, direto. Um `scope` desconhecido nunca deve cair no ramo da poule, que é o que hoje faria com que a app pedisse `/poules/undefined/bouts` | `src/session/store.ts` |
+| **C5** | `app/bracket.tsx` deixa de fazer sentido: não há quadro para desenhar. O ecrã de combate (`app/match/[id].tsx`) passa a ser aberto **pela ligação**, não pela lista | `app/` |
+| **C6** | Poule fechada (`locked: true`) deixa de levar ao quadro. Passa a ler-se, com o `elimination` ao lado a dizer o progresso do quadro para onde os atletas foram, e uma frase a explicar que cada combate tem código próprio | `src/session/store.ts`, `app/poule.tsx` |
+| **C7** | No `410 competition_finished`, mostrar o `message` do servidor em vez da constante `connect.error.finished` — é ele que agora diz para onde ir | `app/connect.tsx`, `src/i18n/` |
+| **C8** | `API_CONTRACT_VERSION` → `'2.0.0'` | `src/config/` |
 
-**O que voltou a ficar em aberto deste lado, com a `1.5.0`:** enviar os eventos do assalto em
-direto ([`POST /bouts/{bout}/events`](#post-boutsboutevents)). O servidor serve-os e a web mostra-os;
-enquanto a app não os enviar, a plataforma continua a saber do assalto só no fim e as páginas
-mostram o que sempre mostraram. É a **F7** da `app-arbitragem-client-spec.md` §14, e é aditiva:
-não enviar nada deixa a app a funcionar exatamente como está.
+**E o que já estava em aberto desde a `1.5.0`:** enviar os eventos do assalto em direto
+([`POST /bouts/{bout}/events`](#post-boutsboutevents)). O servidor serve-os e a web mostra-os;
+enquanto a app não os enviar, a plataforma continua a saber do assalto só no fim. É a **F7** da
+`app-arbitragem-client-spec.md` §14, e é aditiva.
 
 ### D. O que ficou deliberadamente de fora
 
 | O quê | Porquê |
 |---|---|
-| Quadros de **consolação** | Não são representáveis no `EliminationMatch` ([§7](#get-poulespouleelimination--get-tournamentstournamentelimination)). Arbitram-se na web |
+| O **quadro como desenho** | Uma sessão alcança um combate, e desenhar o resto seria desenhá-lo a partir de dados a que ela não tem direito. O quadro vê-se na web, que é onde é feito |
+| Quadros de **consolação** | Deixaram de estar excluídos por construção com a `2.0.0` ([§7](#eliminatórias)) — era a lista que os tornava indistinguíveis. A plataforma ainda não os gera |
 | `base_url` no QR | Formato reservado do [§9](#9-emparelhamento-qr--pin); o QR continua a levar só os seis dígitos |
 | `round_name` | A app não nomeia rondas e o servidor ainda não as nomeia por ela. Entra como MINOR quando fizer falta no ecrã |
 | Vitória por prioridade | Não é representável (`a == b` é recusado). Reabrir implica `allow_draw` mais um campo de vencedor, e é **MAJOR** |
@@ -1205,9 +1219,12 @@ não enviar nada deixa a app a funcionar exatamente como está.
 ## 12. Levantamento de campo — a app ligada ao servidor a sério
 
 **2026-07-25.** A app deixou de falar com *fixtures* e passou a falar com a plataforma
-(`poule.esgrima.pt.test`, dados reais). Todos os treze endpoints da [§7](#7-endpoints) existem,
-respondem, e as formas batem certo com o que este documento diz — o levantamento está fixado em
-`src/api/live.test.ts`, que corre contra o servidor e não contra mocks (`npm run test:live`).
+(`poule.esgrima.pt.test`, dados reais). O levantamento está fixado em `src/api/live.test.ts`, que
+corre contra o servidor e não contra mocks (`npm run test:live`).
+
+> ⚠️ **Levantado contra a `1.5.0`.** As arestas 1, 2, 4, 5, 6 e 7 continuam a valer tal e qual; a 3
+> ficou resolvida por outro caminho. O `live.test.ts` tem de ser refeito com a [C](#c-o-lado-da-app--por-fazer),
+> porque duas das chamadas que ele faz já não existem.
 
 **Não falta nenhum endpoint.** Não houve nenhuma área da app à espera de um endpoint que não
 exista. O que se segue são as arestas que só aparecem com o servidor a sério do outro lado.
@@ -1216,7 +1233,7 @@ exista. O que se segue são as arestas que só aparecem com o servidor a sério 
 |---|---|---|---|
 | 1 | **`If-None-Match` comparado por igualdade de string.** Com `Accept-Encoding: gzip` — ou seja, sempre — o proxy enfraquece o `ETag` para `W/"..."` e o `304` deixa de acontecer. Ver a caixa da [§5](#5-polling-e-etag) | **servidor** | Por corrigir. A app mitiga (`strongEtag`), mas a correção é do lado de lá |
 | 2 | **`scored_at` pode vir `null` num assalto `done`.** As colunas de metadados do resultado são recentes; resultados registados antes delas continuam sem hora | ambos | **Documentado aqui.** O tipo já era `string \| null`; o que faltava era dizer que o `null` também acontece com `status: "done"`. O cliente não pode assumir que um assalto pontuado traz hora — o ecrã de conflito omite-a quando falta |
-| 3 | **`422 poule_locked` está listado no `POST /elimination/{match}/score` e o servidor nunca o devolve.** O controlador não verifica bloqueio: um combate já pontuado é travado pela escrita condicional (`409`), e um quadro decidido revoga o token (`401 poule_complete`) antes de chegar aqui | documento | **Corrigido abaixo:** o erro sai da lista desse endpoint. Não é regressão — o caso está coberto pelos outros dois códigos |
+| 3 | **`422 poule_locked` está listado no `POST /elimination/{match}/score` e o servidor nunca o devolve.** O controlador não verifica bloqueio: um combate já pontuado é travado pela escrita condicional (`409`), e um combate arbitrado revoga o token (`401 poule_complete`) antes de chegar aqui | documento | **Resolvido.** O erro saiu dessa lista na `1.4.2` e, na `2.0.0`, saiu também do `start`: um combate não é uma poule e o bloqueio da poule não lhe diz respeito |
 | 4 | **`bracket` vem `0` num quadro sem ronda 1.** O tamanho do quadro é derivado do número de combates da primeira ronda; sem eles a conta dá zero | documento | **Documentado:** o cliente não deve desenhar nada a partir de `bracket` sem o verificar. A app não o usa para nada além de exibição |
 | 5 | **`POST /connect` não traz `X-Session-Expires-At`.** É o único endpoint fora do middleware que o acrescenta — e não precisa dele, porque a expiração vem no corpo (`expires_at`) | documento | **Clarificado na [§2](#2-transporte-e-cabeçalhos):** o cabeçalho vale para os endpoints autenticados; no `connect` a fonte é o corpo |
 | 6 | **Um pedido sem `Accept: application/json` e sem token devolve `500`, não `401`.** O `Authenticate` do Laravel só evita calcular o destino do *redirect* quando `expectsJson()` é verdadeiro; sem esse cabeçalho chama `route('login')`, que não existe nesta aplicação, e o `RouteNotFoundException` cai no `server_error` do renderer. Reproduzido com `curl` sem `Accept`, com `Accept: */*` e com `Accept: text/html`; com `Accept: application/json` responde `401` como deve | **servidor** | Por corrigir. **A app não é afetada** — o cliente HTTP manda sempre `Accept: application/json` ([§2](#2-transporte-e-cabeçalhos)) —, mas qualquer outro cliente apanha um `500` onde o [§8](#8-catálogo-de-erros) promete um `401`, e o log do servidor enche-se de erros que não são erros |
@@ -1231,7 +1248,10 @@ exista. O que se segue são as arestas que só aparecem com o servidor a sério 
 - O `ETag` a mudar quando um resultado entra — sem isso o *poll* ficava cego.
 - `422 validation_failed` num empate, com o `errors` por campo.
 - `401` sem `X-Session-Expires-At`, e com um dos três `code` do catálogo.
-- Um id de outra competição a responder `404`, como a [§8](#8-catálogo-de-erros) prevê.
+- Um id de outra pista a responder `404`, como a [§8](#8-catálogo-de-erros) prevê.
+- **Da `2.0.0`, fixado por teste no servidor:** dois combates do mesmo quadro arbitrados ao mesmo
+  tempo por dois códigos, sem que nenhum tire a sessão ao outro; um código de poule a não alcançar
+  combate nenhum; o `410` a dizer para onde ir quando a poule fechou.
 
 ---
 ## Referências

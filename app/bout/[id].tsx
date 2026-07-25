@@ -3,9 +3,10 @@ import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { startBout } from '@/api/endpoints';
+import { postBoutEvents, startBout } from '@/api/endpoints';
 import { invalidateCompetition, useBoutDetail } from '@/api/queries';
 import { BoutScreen, boutTiming, type BoutAssignment } from '@/bout';
+import type { LiveBoutEvent } from '@/api/types';
 import { useSessionStore } from '@/session/store';
 
 /**
@@ -47,6 +48,11 @@ export default function BoutRoute() {
     void startBout(id).catch(() => undefined);
   }, [id]);
 
+  const onEvents = useCallback(
+    (events: LiveBoutEvent[]) => postBoutEvents(id as string, events),
+    [id],
+  );
+
   const onRecorded = useCallback(() => {
     if (pouleUuid) invalidateCompetition(client, pouleUuid);
   }, [client, pouleUuid]);
@@ -59,6 +65,7 @@ export default function BoutRoute() {
       onRetry={() => void detail.refetch()}
       home="/poule"
       onStart={onStart}
+      onEvents={id ? onEvents : undefined}
       onRecorded={onRecorded}
     />
   );
