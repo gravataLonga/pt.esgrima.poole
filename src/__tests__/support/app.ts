@@ -8,12 +8,12 @@
 
 import { QueryClient } from '@tanstack/react-query';
 
-import type { PouleSummary, TournamentSummary } from '@/api/types';
+import type { MatchDetail, PouleSummary } from '@/api/types';
 import { defaultBaseUrl } from '@/config/env';
 import { useQueueStore } from '@/queue/store';
 import { phaseFor, useSessionStore } from '@/session/store';
 
-import { resetFakeApi, seedPoule, seedTournament, type FakeState } from './fakeApi';
+import { resetFakeApi, seedMatch, seedPoule, type FakeState } from './fakeApi';
 
 /**
  * O `QueryClient` da app vive em `app/_layout.tsx` e não é exportado — nem passa a ser só para os
@@ -27,6 +27,17 @@ QueryClient.prototype.mount = function rememberAndMount(this: QueryClient) {
   mounted.add(this);
   return mount.call(this);
 };
+
+/**
+ * O que um *poll* faz: voltar a pedir o que está no ecrã.
+ *
+ * Existe para não obrigar um teste a esperar os 10 s ou 30 s de relógio real da cadência do
+ * contrato §5. O que se verifica com isto é o que a app faz **com** a resposta nova, que é a parte
+ * que pode partir; que o intervalo é o certo é configuração, e essa lê-se no `usePollInterval`.
+ */
+export async function poll(): Promise<void> {
+  for (const client of mounted) await client.refetchQueries();
+}
 
 /** Repõe servidor falso, sessão, fila e cache. Chamar no `beforeEach` de qualquer teste de ecrã. */
 export function resetApp(overrides: Partial<FakeState> = {}): void {
@@ -42,12 +53,9 @@ export function resetApp(overrides: Partial<FakeState> = {}): void {
     baseUrl: defaultBaseUrl,
     scope: null,
     poule: null,
-    tournament: null,
+    match: null,
     expiresAt: null,
     endReason: null,
-    // Sem isto, um teste que tenha ido ao quadro deixava a transição automática já dada como
-    // feita, e o teste seguinte não era levado lá.
-    bracketAnnounced: false,
   });
 
   useQueueStore.setState({ items: [], notices: [], hydrated: true });
@@ -65,29 +73,27 @@ export function connectPoule(overrides: Partial<PouleSummary> = {}): PouleSummar
     restoring: false,
     scope: 'poule',
     poule,
-    tournament: null,
+    match: null,
     expiresAt: null,
     endReason: null,
-    bracketAnnounced: false,
   });
 
   return poule;
 }
 
-/** O mesmo, para uma sessão de âmbito `tournament` — que só arbitra o quadro. */
-export function connectTournament(overrides: Partial<TournamentSummary> = {}): TournamentSummary {
-  const tournament = seedTournament(overrides);
+/** O mesmo, para uma sessão de âmbito `match` — que arbitra **um** combate e mais nada. */
+export function connectMatch(overrides: Partial<MatchDetail> = {}): MatchDetail {
+  const match = seedMatch(overrides);
 
   useSessionStore.setState({
-    phase: 'bracket',
+    phase: phaseFor('match', null, match),
     restoring: false,
-    scope: 'tournament',
+    scope: 'match',
     poule: null,
-    tournament,
+    match,
     expiresAt: null,
     endReason: null,
-    bracketAnnounced: false,
   });
 
-  return tournament;
+  return match;
 }

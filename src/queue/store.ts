@@ -36,7 +36,11 @@ export interface QueuedScore {
   a: number;
   b: number;
   events?: BoutEvent[];
-  /** UUID da competição a que a fila pertence — a fila é por competição (spec §8). */
+  /**
+   * A **pista** a que este resultado pertence: o UUID da poule, ou o id opaco do combate. A fila é
+   * por pista (spec §8), e desde o contrato `2.0.0` uma pista pode ser um combate — o nome do campo
+   * ficou de quando só havia poules, e mantém-se para não migrar uma fila com resultados por enviar.
+   */
   competition_uuid: string;
   /** ISO-8601 UTC. */
   queued_at: string;

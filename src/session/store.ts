@@ -2,20 +2,23 @@ import { create } from 'zustand';
 
 import { clientConfig, configureClient, onSessionSignal, sessionEpoch } from '@/api/client';
 import * as api from '@/api/endpoints';
-import type { PouleSummary, SessionScope, TournamentSummary } from '@/api/types';
+import type { MatchDetail, PouleSummary, SessionScope } from '@/api/types';
 import { clientHeader, defaultBaseUrl, deviceName } from '@/config/env';
 
 import { clearSession, readSession, saveSession } from './secureStorage';
 
 /**
- * Estados da sessão — spec §6.
+ * Estados da sessão — spec §6, reescrita pelo contrato `2.0.0`.
  *
- * `poule` e `bracket` são **fases da mesma sessão**, não sessões diferentes: a transição acontece
- * sozinha quando um *poll* traz `locked: true` com `elimination` preenchido, e não pede código
- * novo. `read_only` é a poule fechada **sem** quadro; `complete` chega sempre de um
- * `401 poule_complete`, e não é erro.
+ * Deixou de haver **fases** de uma sessão e passou a haver **dois tipos** de sessão, que não
+ * comunicam: `poule` arbitra o cartão de uma poule, `match` arbitra um combate de eliminatória e
+ * mais nada. Não há transição de uma para a outra — uma poule que fecha não dá acesso ao quadro
+ * dela, porque o quadro corre em códigos que este token não alcança.
+ *
+ * `read_only` é a poule fechada, com quadro ou sem ele; `complete` chega de um `401 poule_complete`
+ * ou do "Concluir" do árbitro, e não é erro.
  */
-export type SessionPhase = 'disconnected' | 'poule' | 'bracket' | 'read_only' | 'complete';
+export type SessionPhase = 'disconnected' | 'poule' | 'match' | 'read_only' | 'complete';
 
 /** Porque é que a sessão acabou. É o que o ecrã de ligar escreve ao árbitro. */
 export type EndReason = 'token_expired' | 'token_revoked' | 'poule_complete' | 'signed_out';
@@ -30,18 +33,11 @@ interface SessionState {
   baseUrl: string;
   scope: SessionScope | null;
   poule: PouleSummary | null;
-  tournament: TournamentSummary | null;
+  /** O combate desta sessão, com `scope: 'match'`. Vem já no `connect` (contrato §7). */
+  match: MatchDetail | null;
   /** ISO-8601 UTC, da resposta ou do `X-Session-Expires-At`. */
   expiresAt: string | null;
   endReason: EndReason | null;
-  /**
-   * A app já levou o árbitro ao quadro nesta sessão.
-   *
-   * A transição `poule fechada → quadro` acontece **uma vez** (spec §6). Sem esta memória, o
-   * ecrã da lista reencaminhava para o quadro a cada render, e o botão "voltar aos assaltos" do
-   * quadro não fazia nada — a lista fechada continua a ser consultável, só a escrita é que fecha.
-   */
-  bracketAnnounced: boolean;
 
   /** Troca o PIN por um token. Lança `ApiError`/`NetworkError` — o ecrã é que os apresenta. */
   connect: (pin: string, baseUrl?: string) => Promise<void>;
@@ -57,10 +53,8 @@ interface SessionState {
    * não tira ninguém de `complete`.
    */
   finish: () => void;
-  /** Um *summary* fresco vindo de um *poll*: é isto que muda a fase sozinho. */
-  applySummary: (summary: { poule?: PouleSummary; tournament?: TournamentSummary }) => void;
-  /** O ecrã do quadro montou: a transição automática já cumpriu o seu papel. */
-  markBracketAnnounced: () => void;
+  /** Um *summary* fresco vindo de um *poll*: a poule, ou o combate desta sessão. */
+  applySummary: (summary: { poule?: PouleSummary; match?: MatchDetail }) => void;
 }
 
 const disconnected = {
@@ -68,27 +62,43 @@ const disconnected = {
   restoring: false,
   scope: null,
   poule: null,
-  tournament: null,
+  match: null,
   expiresAt: null,
-  bracketAnnounced: false,
 };
 
 /**
- * A fase que um *summary* implica. Uma poule fechada **com** quadro abre o quadro; fechada sem
- * quadro é só leitura. Nenhuma das duas acaba a sessão (contrato §7).
+ * A fase que um *summary* implica.
+ *
+ * Uma poule fechada é **sempre** só leitura — com quadro ou sem ele. Até à `1.5.0` ela abria o
+ * quadro; na `2.0.0` o quadro corre em códigos que este token não alcança, e o que a app faz é
+ * dizê-lo (contrato §7). Nenhum destes casos acaba a sessão.
+ *
+ * Um `scope` que a app não conheça **nunca** cai no ramo da poule: era assim que uma sessão de
+ * combate acabava a pedir `/poules/undefined/bouts`. Desconhecido é desligado.
  */
-export function phaseFor(scope: SessionScope, poule: PouleSummary | null): SessionPhase {
-  if (scope === 'tournament') return 'bracket';
-  if (!poule || !poule.locked) return 'poule';
-  return poule.elimination ? 'bracket' : 'read_only';
+export function phaseFor(
+  scope: SessionScope,
+  poule: PouleSummary | null,
+  match: MatchDetail | null = null,
+): SessionPhase {
+  if (scope === 'match') return match ? 'match' : 'disconnected';
+  if (scope !== 'poule') return 'disconnected';
+  if (!poule) return 'disconnected';
+  return poule.locked ? 'read_only' : 'poule';
 }
 
-/** UUID da competição a que a sessão está ligada — a fila de submissões é por competição. */
-export function competitionUuid(state: {
+/**
+ * A chave da competição a que a sessão está ligada — a fila de submissões é por competição
+ * (spec §8), e com um código por pista "competição" passou a querer dizer **pista**.
+ *
+ * Uma poule tem UUID; um combate tem o seu `id` opaco, e é esse que serve. Nada interpreta este
+ * valor: é uma chave de agrupamento, não um identificador com significado.
+ */
+export function competitionKey(state: {
   poule: PouleSummary | null;
-  tournament: TournamentSummary | null;
+  match: MatchDetail | null;
 }): string | null {
-  return state.poule?.uuid ?? state.tournament?.uuid ?? null;
+  return state.poule?.uuid ?? state.match?.id ?? null;
 }
 
 export const useSessionStore = create<SessionState>((set, get) => ({
@@ -106,15 +116,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     await saveSession({ token: response.token, baseUrl, scope: response.scope });
 
     set({
-      phase: phaseFor(response.scope, response.poule),
+      phase: phaseFor(response.scope, response.poule, response.match),
       restoring: false,
       baseUrl,
       scope: response.scope,
       poule: response.poule,
-      tournament: response.tournament,
+      match: response.match,
       expiresAt: response.expires_at,
       endReason: null,
-      bracketAnnounced: false,
     });
   },
 
@@ -132,15 +141,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const session = await api.getSession();
 
       set({
-        phase: phaseFor(session.scope, session.poule),
+        phase: phaseFor(session.scope, session.poule, session.match),
         restoring: false,
         baseUrl: stored.baseUrl,
         scope: session.scope,
         poule: session.poule,
-        tournament: session.tournament,
+        match: session.match,
         expiresAt: session.expires_at,
         endReason: null,
-        bracketAnnounced: false,
       });
     } catch {
       // Um `401` já foi tratado pelo ouvinte lá em baixo, que limpa tudo e escreve a razão. Uma
@@ -172,29 +180,22 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   finish: () => set({ phase: 'complete' }),
 
-  applySummary: ({ poule, tournament }) =>
+  applySummary: ({ poule, match }) =>
     set((state) => {
       const scope = state.scope;
       if (!scope) return state;
 
       const nextPoule = poule ?? state.poule;
-      const nextTournament = tournament ?? state.tournament;
-
-      const phase = state.phase === 'complete' ? state.phase : phaseFor(scope, nextPoule);
+      const nextMatch = match ?? state.match;
 
       return {
         poule: nextPoule,
-        tournament: nextTournament,
-        // `complete` só chega de um 401 (contrato §6): a competição pode estar toda pontuada e a
-        // sessão continuar viva para arbitrar o quadro que ainda vai ser gerado.
-        phase,
-        // Sair do quadro rearma a transição — se a poule voltar a fechar, o árbitro é levado lá
-        // outra vez em vez de ficar a olhar para uma lista que já não aceita resultados.
-        bracketAnnounced: phase === 'bracket' ? state.bracketAnnounced : false,
+        match: nextMatch,
+        // `complete` não se desfaz com um *poll* atrasado: chega de um `401` ou do "Concluir" do
+        // árbitro, e as duas coisas são decisões, não leituras.
+        phase: state.phase === 'complete' ? state.phase : phaseFor(scope, nextPoule, nextMatch),
       };
     }),
-
-  markBracketAnnounced: () => set({ bracketAnnounced: true }),
 }));
 
 /**

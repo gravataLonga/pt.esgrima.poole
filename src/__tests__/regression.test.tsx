@@ -1,15 +1,13 @@
 import { fireEvent, renderRouter, screen } from 'expo-router/testing-library';
 
-import { connectPoule, connectTournament, resetApp } from './support/app';
-import { seedBracket } from './support/fakeApi';
+import { connectMatch, connectPoule, resetApp } from './support/app';
 
 it('um combate de quadro conta até aos 15 toques que a API mandou', async () => {
   resetApp();
-  seedBracket();
-  connectTournament();
+  connectMatch();
 
   await renderRouter('./app', { initialUrl: '/match/m_1' });
-  await screen.findByText('Round 1 · 1');
+  await screen.findByText('Round 2 · 1');
 
   const add = await screen.findByLabelText('One more touch for Ana Silva');
   for (let i = 0; i < 9; i++) await fireEvent.press(add);

@@ -1,5 +1,5 @@
 export { BoutScreen } from './BoutScreen';
-export type { BoutAssignment } from './BoutScreen';
+export type { BoutAssignment, RecordedScore } from './BoutScreen';
 export { Clock, NUDGE_MS } from './Clock';
 export { ScoreColumn } from './ScoreColumn';
 export { TimeSheet } from './TimeSheet';

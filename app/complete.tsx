@@ -6,23 +6,35 @@ import { useSessionStore } from '@/session/store';
 import { Button, Screen, Text, colors, fonts, radius, spacing, type } from '@/ui';
 
 /**
- * Ecrã 6 — Competição completa (spec §6). Sessão terminada, **não é um erro**.
+ * Ecrã 6 — Pista terminada (spec §6). Sessão terminada, **não é um erro**.
  *
- * Chega-se aqui de um `401 poule_complete`, que o servidor só devolve quando a competição está
- * encerrada para sempre — assaltos feitos **e** quadro decidido (contrato §6). O token já foi
- * limpo pelo ouvinte da sessão; o que sobra no store é o retrato do que ficou feito.
+ * Chega-se aqui de um `401 poule_complete`, que o servidor devolve quando não há mais nada a fazer
+ * naquela pista, ou do "Concluir" do árbitro. O token já foi limpo pelo ouvinte da sessão; o que
+ * sobra no store é o retrato do que ficou feito.
+ *
+ * **Duas leituras, porque há dois tipos de pista.** Uma poule conta assaltos registados; um combate
+ * teve um só, e o que interessa dele é o resultado — `4/15` não diria nada sobre um combate.
  */
 export default function CompleteScreen() {
   const { t } = useTranslation();
   const poule = useSessionStore((s) => s.poule);
-  const tournament = useSessionStore((s) => s.tournament);
+  const match = useSessionStore((s) => s.match);
   const disconnect = useSessionStore((s) => s.disconnect);
 
-  if (!poule && !tournament) return <Redirect href="/connect" />;
+  if (!poule && !match) return <Redirect href="/connect" />;
 
-  const name = poule?.name ?? tournament?.name ?? '';
-  const done = poule ? poule.bouts_done : (tournament?.matches_done ?? 0);
-  const total = poule ? poule.bouts_total : (tournament?.matches_total ?? 0);
+  const isMatch = match !== null;
+  const name = poule?.name ?? match?.competition_name ?? '';
+
+  const scored = match?.score_a !== null && match?.score_b !== null;
+
+  const title = isMatch ? t('complete.matchTitle') : t('complete.title');
+  const tally = isMatch
+    ? scored
+      ? `${match.score_a}–${match.score_b}`
+      : '—'
+    : `${poule?.bouts_done ?? 0}/${poule?.bouts_total ?? 0}`;
+  const tallyLabel = isMatch ? t('complete.matchTallyLabel') : t('complete.tallyLabel');
 
   const onRestart = () => {
     void disconnect();
@@ -38,7 +50,7 @@ export default function CompleteScreen() {
           </View>
 
           <Text variant="display" style={styles.title}>
-            {t('complete.title')}
+            {title}
           </Text>
 
           <Text color={colors.grayDark} style={styles.message}>
@@ -47,11 +59,9 @@ export default function CompleteScreen() {
 
           <View style={styles.tally}>
             {/* Padrão numérico, como o `5–3` da lista: não passa por `t()`. */}
-            <Text style={styles.tallyNumber}>
-              {done}/{total}
-            </Text>
+            <Text style={styles.tallyNumber}>{tally}</Text>
             <Text variant="label" color={colors.dark}>
-              {t('complete.tallyLabel')}
+              {tallyLabel}
             </Text>
             <Text variant="caption" color={colors.grayDark} style={styles.tallyName}>
               {name}

@@ -1,5 +1,5 @@
 /**
- * Servidor falso, em memória, com as formas do contrato `1.5.0`.
+ * Servidor falso, em memória, com as formas do contrato `2.0.0`.
  *
  * A spec §10 previa MSW. O que ela quer é que os cenários de erro se testem **sem os provocar no
  * servidor a sério**, e é isso que este módulo dá, com uma dependência a menos: os testes trocam o
@@ -18,20 +18,16 @@ import type {
   BoutsResponse,
   ConnectRequest,
   ConnectResponse,
-  EliminationMatch,
-  EliminationMatchDetail,
   LiveBoutEvent,
   LiveEventsResponse,
+  MatchDetail,
   MatchScoreResponse,
-  PouleEliminationResponse,
   PouleSummary,
   ScoreRequest,
   SessionResponse,
   Standing,
   StandingsResponse,
   StartResponse,
-  TournamentEliminationResponse,
-  TournamentSummary,
 } from '@/api/types';
 import { bouts as fixtureBouts, poule as fixturePoule } from '@/fixtures/poule';
 
@@ -40,10 +36,10 @@ import type { ApiResponse } from '@/api/client';
 export interface FakeState {
   connected: boolean;
   poule: PouleSummary | null;
-  tournament: TournamentSummary | null;
+  /** O combate desta sessão. Uma sessão de combate vê **um** e mais nenhum (contrato §7). */
+  match: MatchDetail | null;
   bouts: Bout[];
   standings: Standing[];
-  matches: EliminationMatch[];
   /** `submission_id` por assalto/combate já pontuado — é o que faz o 200 do *retry*. */
   submissions: Map<string, string>;
   /** Eventos ao vivo recebidos, por assalto/combate. A chave `(assalto, seq)` é única. */
@@ -56,21 +52,26 @@ export interface FakeState {
   failNextScore: 'conflict' | 'network' | 'gone' | 'unauthorized' | 'throttled' | null;
   /** Todas as chamadas falham — o cenário "sem rede" inteiro. */
   offline: boolean;
+  /**
+   * Porque é que o token morreu. `poule_complete` é o que o servidor devolve quando não há mais
+   * nada a fazer naquela pista — num combate, assim que o resultado é registado (contrato §6).
+   */
+  endCode: 'token_expired' | 'token_revoked' | 'poule_complete';
 }
 
 const emptyState = (): FakeState => ({
   connected: false,
   poule: null,
-  tournament: null,
+  match: null,
   bouts: [],
   standings: [],
-  matches: [],
   submissions: new Map(),
   events: new Map(),
   failNextEvents: null,
   version: 1,
   failNextScore: null,
   offline: false,
+  endCode: 'token_expired',
 });
 
 export const state: FakeState = emptyState();
@@ -84,81 +85,63 @@ export function resetFakeApi(overrides: Partial<FakeState> = {}): void {
 export function seedPoule(overrides: Partial<PouleSummary> = {}): PouleSummary {
   state.connected = true;
   state.poule = { ...fixturePoule, ...overrides };
-  state.tournament = null;
+  state.match = null;
   state.bouts = fixtureBouts.map((bout) => ({ ...bout }));
   state.standings = standingsFrom(state.bouts);
   return state.poule;
 }
 
-export function seedTournament(overrides: Partial<TournamentSummary> = {}): TournamentSummary {
+const fencer = (id: number, name: string, club: string | null = null) => ({
+  id,
+  number: null,
+  name,
+  club,
+});
+
+/**
+ * Um combate de eliminatória, com os presets do quadro: 15 toques, 3 períodos e descanso pelo meio
+ * (contrato §7). É **um só** — uma sessão de combate não alcança o da pista ao lado.
+ */
+export function seedMatch(overrides: Partial<MatchDetail> = {}): MatchDetail {
   state.connected = true;
   state.poule = null;
-  state.tournament = {
-    uuid: '3b7e9a04-0000-4000-8000-000000000001',
-    name: 'Torneio de Verão 2026',
+  state.match = {
+    id: 'm_1',
+    competition_name: 'Torneio de Verão 2026',
+    bracket: 4,
+    round: 2,
+    position: 1,
+    status: 'pending',
+    ready: true,
+    fencer_a: fencer(41, 'Ana Silva', 'CE Lisboa'),
+    fencer_b: fencer(44, 'Rui Costa'),
+    score_a: null,
+    score_b: null,
+    scored_at: null,
+    scored_by_me: false,
+    target: 15,
+    duration_seconds: 180,
+    periods: 3,
+    rest_seconds: 60,
+    sudden_death_seconds: 60,
+    passivity_seconds: 60,
     weapon: 'sabre',
-    matches_total: state.matches.length,
-    matches_done: 0,
+    allow_draw: false,
     locked: false,
     ...overrides,
   };
-  return state.tournament;
+
+  return state.match;
 }
 
-/** Quadro de 4: duas meias-finais prontas e uma final à espera dos vencedores. */
-export function seedBracket(): EliminationMatch[] {
-  const fencer = (id: number, name: string) => ({ id, number: null, name, club: null });
-
-  state.matches = [
-    {
-      id: 'm_1',
-      bracket: 4,
-      round: 1,
-      position: 1,
-      status: 'pending',
-      ready: true,
-      fencer_a: fencer(41, 'Ana Silva'),
-      fencer_b: fencer(44, 'Rui Costa'),
-      score_a: null,
-      score_b: null,
-      scored_at: null,
-      scored_by_me: false,
-    },
-    {
-      id: 'm_2',
-      bracket: 4,
-      round: 1,
-      position: 2,
-      status: 'pending',
-      ready: true,
-      fencer_a: fencer(42, 'Bruno Dias'),
-      fencer_b: fencer(43, 'Carla Neves'),
-      score_a: null,
-      score_b: null,
-      scored_at: null,
-      scored_by_me: false,
-    },
-    {
-      id: 'm_3',
-      bracket: 4,
-      round: 2,
-      position: 1,
-      status: 'pending',
-      ready: false,
-      fencer_a: null,
-      fencer_b: null,
-      score_a: null,
-      score_b: null,
-      scored_at: null,
-      scored_by_me: false,
-    },
-  ];
-
-  if (state.tournament) {
-    state.tournament = { ...state.tournament, matches_total: 3, matches_done: 0 };
-  }
-
-  return state.matches;
+/**
+ * O combate destranca-se: a ronda anterior acabou e o vencedor subiu, do lado do servidor. É o que
+ * um *poll* do `useMatchDetail` encontra — a app não faz nada para o provocar.
+ */
+export function readyMatch(a = fencer(41, 'Ana Silva'), b = fencer(44, 'Rui Costa')): void {
+  if (!state.match) return;
+  state.match = { ...state.match, ready: true, fencer_a: a, fencer_b: b };
+  state.version += 1;
 }
 
 // ─── Cálculos que o servidor a sério faz e o falso tem de imitar ────────────
@@ -201,7 +184,10 @@ function standingsFrom(bouts: Bout[]): Standing[] {
     .map((row) => ({ ...row, diff: row.given - row.received }))
     .sort(
       (x, y) =>
-        ratio(y) - ratio(x) || y.diff - x.diff || y.given - x.given || (x.fencer.number ?? 0) - (y.fencer.number ?? 0),
+        ratio(y) - ratio(x) ||
+        y.diff - x.diff ||
+        y.given - x.given ||
+        (x.fencer.number ?? 0) - (y.fencer.number ?? 0),
     );
 
   return ordered.map((row, index) => ({ ...row, place: index + 1 }));
@@ -213,7 +199,7 @@ const etag = (): string => `"fake-${state.version}"`;
 
 function guard(): void {
   if (state.offline) throw new NetworkError();
-  if (!state.connected) throw unauthorized('token_expired');
+  if (!state.connected) throw unauthorized(state.endCode);
 }
 
 function unauthorized(code: string): ApiError {
@@ -251,35 +237,32 @@ export async function connect(payload: ConnectRequest): Promise<ConnectResponse>
     });
   }
 
-  // Um PIN de torneio abre o quadro; qualquer outro abre a poule (contrato §7, `scope`).
+  // Um PIN de combate abre o combate; qualquer outro abre a poule (contrato §7, `scope`). O
+  // combate vem já na resposta — sem um segundo pedido pelo meio.
   if (payload.pin === '777777') {
-    seedBracket();
-    const tournament = seedTournament();
-    return {
-      token: 'fake-token',
-      expires_at: inAnHour(),
-      scope: 'tournament',
-      poule: null,
-      tournament,
-    };
+    const match = state.match ?? seedMatch();
+    state.connected = true;
+
+    return { token: 'fake-token', expires_at: inAnHour(), scope: 'match', poule: null, match };
   }
 
   const poule = state.poule ? state.poule : seedPoule();
   state.connected = true;
 
-  return { token: 'fake-token', expires_at: inAnHour(), scope: 'poule', poule, tournament: null };
+  return { token: 'fake-token', expires_at: inAnHour(), scope: 'poule', poule, match: null };
 }
 
-const inAnHour = (): string => new Date(Date.now() + 60 * 60 * 1000).toISOString().replace(/\.\d+Z$/, 'Z');
+const inAnHour = (): string =>
+  new Date(Date.now() + 60 * 60 * 1000).toISOString().replace(/\.\d+Z$/, 'Z');
 
 export async function getSession(): Promise<SessionResponse> {
   guard();
 
   return {
     expires_at: inAnHour(),
-    scope: state.tournament ? 'tournament' : 'poule',
+    scope: state.match ? 'match' : 'poule',
     poule: state.poule ? pouleSummary() : null,
-    tournament: state.tournament,
+    match: state.match,
   };
 }
 
@@ -287,7 +270,10 @@ export async function deleteSession(): Promise<void> {
   state.connected = false;
 }
 
-export async function getBouts(_uuid: string, ifNoneMatch?: string): Promise<ApiResponse<BoutsResponse>> {
+export async function getBouts(
+  _uuid: string,
+  ifNoneMatch?: string,
+): Promise<ApiResponse<BoutsResponse>> {
   guard();
   return conditional({ poule: pouleSummary(), bouts: state.bouts }, ifNoneMatch);
 }
@@ -389,10 +375,7 @@ function failEventsIfAsked(): void {
   throw new ApiError(422, { code: 'poule_locked', message: 'A poule está bloqueada.' });
 }
 
-export async function scoreBout(
-  boutId: string,
-  payload: ScoreRequest,
-): Promise<BoutScoreResponse> {
+export async function scoreBout(boutId: string, payload: ScoreRequest): Promise<BoutScoreResponse> {
   guard();
   failIfAsked();
 
@@ -447,7 +430,8 @@ function failIfAsked(): void {
 
   if (failure === 'network') throw new NetworkError();
   if (failure === 'unauthorized') throw unauthorized('token_expired');
-  if (failure === 'gone') throw new ApiError(404, { code: 'not_found', message: 'Não encontrado.' });
+  if (failure === 'gone')
+    throw new ApiError(404, { code: 'not_found', message: 'Não encontrado.' });
 
   if (failure === 'throttled') {
     throw new ApiError(429, { code: 'rate_limited', message: 'Demasiados pedidos.' }, 30);
@@ -460,53 +444,33 @@ function failIfAsked(): void {
   });
 }
 
-export async function getPouleElimination(
-  _uuid: string,
-  ifNoneMatch?: string,
-): Promise<ApiResponse<PouleEliminationResponse>> {
-  guard();
-  return conditional({ poule: pouleSummary(), matches: state.matches }, ifNoneMatch);
+/** Só o combate do próprio código: qualquer outro id responde `404` (contrato §7). */
+function ownMatch(matchId: string): MatchDetail {
+  if (!state.match || state.match.id !== matchId) {
+    throw new ApiError(404, { code: 'not_found', message: 'Não encontrado.' });
+  }
+
+  return state.match;
 }
 
-export async function getTournamentElimination(
-  _uuid: string,
-  ifNoneMatch?: string,
-): Promise<ApiResponse<TournamentEliminationResponse>> {
+export async function getMatch(matchId: string): Promise<MatchDetail> {
   guard();
-  return conditional({ tournament: state.tournament!, matches: state.matches }, ifNoneMatch);
-}
-
-export async function getMatch(matchId: string): Promise<EliminationMatchDetail> {
-  guard();
-
-  const match = state.matches.find((candidate) => candidate.id === matchId);
-  if (!match) throw new ApiError(404, { code: 'not_found', message: 'Não encontrado.' });
-
-  return {
-    id: match.id,
-    bracket: match.bracket,
-    round: match.round,
-    position: match.position,
-    status: match.status,
-    ready: match.ready,
-    fencer_a: match.fencer_a,
-    fencer_b: match.fencer_b,
-    score_a: match.score_a,
-    score_b: match.score_b,
-    // Os presets do quadro: 15 toques e 3 períodos, com descanso pelo meio (contrato §7).
-    target: 15,
-    duration_seconds: 180,
-    periods: 3,
-    rest_seconds: 60,
-    sudden_death_seconds: 60,
-    passivity_seconds: 60,
-    allow_draw: false,
-    locked: state.tournament?.locked ?? false,
-  };
+  return ownMatch(matchId);
 }
 
 export async function startMatch(matchId: string): Promise<StartResponse> {
   guard();
+
+  const match = ownMatch(matchId);
+
+  if (!match.ready) {
+    throw new ApiError(409, {
+      code: 'match_not_ready',
+      message: 'Este combate ainda espera o vencedor da ronda anterior.',
+    });
+  }
+
+  state.match = { ...match, status: 'in_progress' };
   return { id: matchId, status: 'in_progress' };
 }
 
@@ -517,8 +481,7 @@ export async function scoreMatch(
   guard();
   failIfAsked();
 
-  const match = state.matches.find((candidate) => candidate.id === matchId);
-  if (!match) throw new ApiError(404, { code: 'not_found', message: 'Não encontrado.' });
+  const match = ownMatch(matchId);
 
   if (!match.ready) {
     throw new ApiError(409, {
@@ -527,7 +490,19 @@ export async function scoreMatch(
     });
   }
 
-  const scored: EliminationMatch = {
+  const existing = state.submissions.get(matchId);
+
+  if (match.status === 'done') {
+    if (existing === payload.submission_id) return matchRecorded(match);
+
+    throw new ApiError(409, {
+      code: 'match_already_scored',
+      message: 'Já registado por outra pessoa.',
+      current: { score_a: match.score_a, score_b: match.score_b, scored_at: match.scored_at },
+    });
+  }
+
+  state.match = {
     ...match,
     status: 'done',
     score_a: payload.a,
@@ -536,39 +511,29 @@ export async function scoreMatch(
     scored_by_me: true,
   };
 
-  state.matches = state.matches.map((candidate) =>
-    candidate.id === matchId ? scored : candidate,
-  );
-
-  // O vencedor sobe de ronda **do lado do servidor**, na transação do resultado (contrato §7).
-  promoteWinner(scored);
+  state.submissions.set(matchId, payload.submission_id);
   state.version += 1;
 
-  const done = state.matches.filter((candidate) => candidate.status === 'done').length;
-  if (state.tournament) state.tournament = { ...state.tournament, matches_done: done };
+  /*
+   * **É o fim da sessão** (contrato §7): registado o resultado, não há mais nada nesta pista, o
+   * token é invalidado e o pedido **seguinte** recebe `401 poule_complete`. A resposta deste
+   * chega na mesma. O vencedor sobe de ronda do lado do servidor, para um combate que esta
+   * sessão não alcança e que tem código próprio.
+   */
+  state.connected = false;
+  state.endCode = 'poule_complete';
 
-  return {
-    id: scored.id,
-    status: 'done',
-    score_a: payload.a,
-    score_b: payload.b,
-    matches_done: done,
-    matches_total: state.matches.length,
-  };
+  return matchRecorded(state.match);
 }
 
-function promoteWinner(match: EliminationMatch): void {
-  const winner = (match.score_a ?? 0) > (match.score_b ?? 0) ? match.fencer_a : match.fencer_b;
-  if (!winner) return;
-
-  const next = state.matches.find((candidate) => candidate.round === match.round + 1);
-  if (!next) return;
-
-  const slot = match.position % 2 === 1 ? 'fencer_a' : 'fencer_b';
-  const promoted: EliminationMatch = { ...next, [slot]: winner };
-  promoted.ready = promoted.fencer_a !== null && promoted.fencer_b !== null;
-
-  state.matches = state.matches.map((candidate) =>
-    candidate.id === next.id ? promoted : candidate,
-  );
+function matchRecorded(match: MatchDetail): MatchScoreResponse {
+  return {
+    id: match.id,
+    status: 'done',
+    score_a: match.score_a!,
+    score_b: match.score_b!,
+    // Contam o quadro inteiro, não o que esta sessão alcança (contrato §7).
+    matches_done: 5,
+    matches_total: 15,
+  };
 }

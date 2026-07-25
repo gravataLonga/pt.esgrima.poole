@@ -1,5 +1,4 @@
-import { router, type Href } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
@@ -25,7 +24,14 @@ import { ScoreColumn } from './ScoreColumn';
 import { TimeSheet } from './TimeSheet';
 import { useAllowLandscape, useIsLandscape } from './orientation';
 import type { BoutTiming } from './phase';
-import { canSubmit, cardCount, needsDecidingTouch, winner, type CardKind, type Side } from './rules';
+import {
+  canSubmit,
+  cardCount,
+  needsDecidingTouch,
+  winner,
+  type CardKind,
+  type Side,
+} from './rules';
 import { useBoutEngine } from './useBoutEngine';
 import { useLiveEvents, type LiveEventSender } from './useLiveEvents';
 
@@ -53,13 +59,34 @@ export interface BoutAssignment {
   competitionUuid: string;
 }
 
+/** O resultado tal como o árbitro o deu por bom — tenha ele chegado ao servidor ou à fila. */
+export interface RecordedScore {
+  a: number;
+  b: number;
+  /** `true` → ficou em fila à espera de rede. O resultado é o mesmo; o que falta é caminho. */
+  queued: boolean;
+}
+
 export interface BoutScreenProps {
   assignment: BoutAssignment | undefined;
   loading: boolean;
   error: unknown;
   onRetry: () => void;
-  /** Para onde se volta: a lista de assaltos ou o quadro. */
-  home: Href;
+  /**
+   * Para onde se volta — a lista de assaltos da poule.
+   *
+   * **Ausente numa sessão de combate**, e é deliberado: não há lista por baixo. O combate *é* a
+   * sessão (contrato §7), e as saídas dele são o "Sair" do cabeçalho e registar o resultado. Sem
+   * isto, o galho de "voltar" apontava a um ecrã que já não existe.
+   */
+  back?: () => void;
+  /** Linha por cima do título — a prova a que o combate pertence. */
+  eyebrow?: string;
+  /**
+   * Barra de sessão, fila e "Sair": o que a lista carrega numa poule e ninguém carrega num combate.
+   * Só em *portrait* — deitado, o ecrã é do cronómetro e das duas colunas.
+   */
+  chrome?: ReactNode;
   /** `POST .../start`, *fire-and-forget*: falhar não bloqueia a arbitragem (contrato §7). */
   onStart: () => void;
   /**
@@ -67,8 +94,14 @@ export interface BoutScreenProps {
    * ecrã comporta-se exatamente como antes, e a plataforma volta a saber do assalto só no fim.
    */
   onEvents?: LiveEventSender;
-  /** Chamado depois de o servidor confirmar, para as listas se atualizarem. */
+  /** Chamado depois de o estado do servidor mudar, para as listas se atualizarem. */
   onRecorded: () => void;
+  /**
+   * O assalto acabou e o resultado é o do árbitro. **Quem decide para onde se vai é a rota**: a
+   * lista, numa poule; o resumo da pista, num combate, onde registar o resultado encerra a sessão.
+   * Ausente → volta-se pelo `back`, que é o comportamento de sempre.
+   */
+  onFinished?: (result: RecordedScore) => void;
 }
 
 type SheetKind = 'none' | 'time' | 'submit' | 'conflict';
@@ -84,9 +117,7 @@ type SheetKind = 'none' | 'time' | 'submit' | 'conflict';
  */
 export function BoutScreen(props: BoutScreenProps) {
   const { t } = useTranslation();
-  const { assignment, loading, error, onRetry, home } = props;
-
-  const goHome = () => router.replace(home);
+  const { assignment, loading, error, onRetry, back, chrome } = props;
 
   if (!assignment) {
     return (
@@ -102,7 +133,9 @@ export function BoutScreen(props: BoutScreenProps) {
               <Text variant="title">{t('bout.notFound')}</Text>
               {error ? <Text color={colors.textMuted}>{describe(error)}</Text> : null}
               <Button label={t('common.retry')} onPress={onRetry} />
-              <Button label={t('bout.back')} variant="secondary" onPress={goHome} />
+              {/* Sem lista por baixo não há "voltar": o que resta é o "Sair" do chrome, que
+                  termina a sessão de vez em vez de fingir que há para onde ir. */}
+              {back ? <Button label={t('bout.back')} variant="secondary" onPress={back} /> : chrome}
             </>
           )}
         </View>
@@ -117,7 +150,16 @@ interface RefereeingProps extends Omit<BoutScreenProps, 'assignment'> {
   assignment: BoutAssignment;
 }
 
-function Refereeing({ assignment, home, onStart, onEvents, onRecorded }: RefereeingProps) {
+function Refereeing({
+  assignment,
+  back,
+  eyebrow,
+  chrome,
+  onStart,
+  onEvents,
+  onRecorded,
+  onFinished,
+}: RefereeingProps) {
   const { t } = useTranslation();
 
   // Num assalto fechado não há nada a espelhar: a escrita está travada dos dois lados, e o
@@ -166,11 +208,11 @@ function Refereeing({ assignment, home, onStart, onEvents, onRecorded }: Referee
 
   const touched = rules.a !== (assignment.scoreA ?? 0) || rules.b !== (assignment.scoreB ?? 0);
 
-  const goHome = () => router.replace(home);
-
   const onLeave = () => {
+    if (!back) return;
+
     if (!touched) {
-      goHome();
+      back();
       return;
     }
 
@@ -178,8 +220,15 @@ function Refereeing({ assignment, home, onStart, onEvents, onRecorded }: Referee
     // propósito — é destrutivo e vem da navegação, e o corte de contexto do sistema é a mensagem.
     Alert.alert(t('bout.leaveTitle'), t('bout.leaveMessage'), [
       { text: t('bout.leaveStay'), style: 'cancel' },
-      { text: t('bout.leaveDiscard'), style: 'destructive', onPress: goHome },
+      { text: t('bout.leaveDiscard'), style: 'destructive', onPress: back },
     ]);
+  };
+
+  /** Registado, ou guardado à espera de rede: nos dois casos o assalto acabou para o árbitro. */
+  const finish = (queued: boolean) => {
+    setSheet('none');
+    if (onFinished) onFinished({ a: rules.a, b: rules.b, queued });
+    else back?.();
   };
 
   const nameOf = (side: Side): string =>
@@ -210,17 +259,15 @@ function Refereeing({ assignment, home, onStart, onEvents, onRecorded }: Referee
 
     switch (result.kind) {
       case 'recorded':
-        setSheet('none');
         onRecorded();
-        goHome();
+        finish(false);
         return;
 
       case 'queued':
       case 'unauthorized':
-        // Não se finge que enviou (spec §8). O aviso vive na lista, onde o árbitro vai a seguir,
-        // porque é lá que ele decide se continua a arbitrar ou se vai procurar rede.
-        setSheet('none');
-        goHome();
+        // Não se finge que enviou (spec §8). O aviso viaja com o resultado, e é onde o árbitro vai
+        // a seguir que ele decide se continua a arbitrar ou se vai procurar rede.
+        finish(true);
         return;
 
       case 'conflict':
@@ -320,18 +367,28 @@ function Refereeing({ assignment, home, onStart, onEvents, onRecorded }: Referee
     // coluna da esquerda fica por baixo do recorte do ecrã.
     <Screen edges={landscape ? ['top', 'bottom', 'left', 'right'] : ['top', 'bottom']}>
       <View style={[styles.header, landscape ? styles.headerCompact : null]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('bout.back')}
-          onPress={onLeave}
-          style={({ pressed }) => [styles.backButton, pressed ? styles.backPressed : null]}
-        >
-          <View style={styles.chevron} />
-        </Pressable>
+        {/* Sem `back` não há galho: numa sessão de combate não existe ecrã por baixo deste. */}
+        {back ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('bout.back')}
+            onPress={onLeave}
+            style={({ pressed }) => [styles.backButton, pressed ? styles.backPressed : null]}
+          >
+            <View style={styles.chevron} />
+          </Pressable>
+        ) : null}
 
-        <Text variant="title" style={styles.headerTitle} numberOfLines={1}>
-          {assignment.title}
-        </Text>
+        <View style={styles.headerTitles}>
+          {eyebrow && !landscape ? (
+            <Text variant="caption" color={colors.textMuted} numberOfLines={1}>
+              {eyebrow}
+            </Text>
+          ) : null}
+          <Text variant="title" style={styles.headerTitle} numberOfLines={1}>
+            {assignment.title}
+          </Text>
+        </View>
 
         <View style={styles.targetChip}>
           <Text variant="caption" color={colors.dark} style={styles.targetLabel}>
@@ -339,6 +396,10 @@ function Refereeing({ assignment, home, onStart, onEvents, onRecorded }: Referee
           </Text>
         </View>
       </View>
+
+      {/* Deitado o ecrã é do cronómetro e das duas colunas: um banner de sessão ali rouba a
+          altura que os dígitos precisam, e o árbitro está a olhar para a pista, não para a app. */}
+      {chrome && !landscape ? <View style={styles.chrome}>{chrome}</View> : null}
 
       {assignment.locked ? (
         <View style={styles.banner}>
@@ -421,12 +482,7 @@ function Refereeing({ assignment, home, onStart, onEvents, onRecorded }: Referee
           </>
         }
       >
-        <ScoreRecap
-          nameA={nameOf('a')}
-          nameB={nameOf('b')}
-          scoreA={rules.a}
-          scoreB={rules.b}
-        />
+        <ScoreRecap nameA={nameOf('a')} nameB={nameOf('b')} scoreA={rules.a} scoreB={rules.b} />
       </Sheet>
 
       {/* Conflito (spec §6, ecrã 4): folha modal, não ecrã. Sem opção de forçar — corrigir um
@@ -441,8 +497,11 @@ function Refereeing({ assignment, home, onStart, onEvents, onRecorded }: Referee
             <Button
               label={t('bout.conflict.backToList')}
               onPress={() => {
+                setSheet('none');
+                // O servidor tem outra verdade: reler é o que a traz. Numa poule volta-se à
+                // lista; num combate o `401 poule_complete` da releitura leva ao resumo sozinho.
                 onRecorded();
-                goHome();
+                back?.();
               }}
             />
             <Button
@@ -556,9 +615,17 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '45deg' }],
     marginLeft: 4,
   },
-  headerTitle: {
+  headerTitles: {
     flex: 1,
+    // Sem isto, um nome de prova comprido empurra a marca de alvo para fora do ecrã.
+    minWidth: 0,
+  },
+  headerTitle: {
     fontSize: type.xl,
+  },
+  chrome: {
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   targetChip: {
     paddingHorizontal: spacing.sm + 2,

@@ -3,8 +3,8 @@ import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testi
 import { useQueueStore } from '@/queue/store';
 import { useSessionStore } from '@/session/store';
 
-import { connectPoule, connectTournament, resetApp } from './support/app';
-import { eventsOf, seedBracket, state as fakeState } from './support/fakeApi';
+import { connectMatch, connectPoule, poll, resetApp } from './support/app';
+import { eventsOf, readyMatch, seedMatch, state as fakeState } from './support/fakeApi';
 
 /**
  * Percorre a app de ponta a ponta sobre a árvore de rotas real, contra o servidor falso:
@@ -19,7 +19,7 @@ describe('ligar', () => {
   it('liga com um PIN de 6 dígitos e mostra a lista de assaltos', async () => {
     const router = renderRouter('./app', { initialUrl: '/connect' });
     await router;
-    await screen.findByText('Connect to a poule');
+    await screen.findByText('Connect to your piste');
 
     await fireEvent.changeText(screen.getByLabelText('PIN'), '111111');
     await fireEvent.press(screen.getByText('Connect'));
@@ -31,7 +31,7 @@ describe('ligar', () => {
 
   it('assina o ecrã de abertura com a marca', async () => {
     await renderRouter('./app', { initialUrl: '/connect' });
-    await screen.findByText('Connect to a poule');
+    await screen.findByText('Connect to your piste');
 
     // O wordmark é uma imagem, e o rótulo é a única forma de o alcançar — no ecrã e no VoiceOver.
     expect(screen.getByLabelText('Esgrima.pt')).toBeTruthy();
@@ -39,7 +39,7 @@ describe('ligar', () => {
 
   it('não deixa ligar com o PIN incompleto', async () => {
     await renderRouter('./app', { initialUrl: '/connect' });
-    await screen.findByText('Connect to a poule');
+    await screen.findByText('Connect to your piste');
 
     await fireEvent.changeText(screen.getByLabelText('PIN'), '111');
     await fireEvent.press(screen.getByText('Connect'));
@@ -51,20 +51,20 @@ describe('ligar', () => {
   it('mostra o código inválido no ecrã e fica onde está', async () => {
     const router = renderRouter('./app', { initialUrl: '/connect' });
     await router;
-    await screen.findByText('Connect to a poule');
+    await screen.findByText('Connect to your piste');
 
     await fireEvent.changeText(screen.getByLabelText('PIN'), '000000');
     await fireEvent.press(screen.getByText('Connect'));
 
     // O `422 pin_invalid` é erro de digitação, não fim de caminho: o ecrã mantém-se (contrato §8).
-    await screen.findByText('Wrong code. Check the six digits on the poule sheet.');
+    await screen.findByText('Wrong code. Check the six digits for your piste.');
     expect(router.getPathname()).toBe('/connect');
     expect(useSessionStore.getState().phase).toBe('disconnected');
   });
 
   it('bloqueia o botão quando o servidor manda travar', async () => {
     await renderRouter('./app', { initialUrl: '/connect' });
-    await screen.findByText('Connect to a poule');
+    await screen.findByText('Connect to your piste');
 
     await fireEvent.changeText(screen.getByLabelText('PIN'), '999999');
     await fireEvent.press(screen.getByText('Connect'));
@@ -74,18 +74,20 @@ describe('ligar', () => {
     expect(screen.getByText('Connect')).toBeDisabled();
   });
 
-  it('um código de torneio vai direto ao quadro, sem lista de assaltos', async () => {
+  it('um código de combate vai direto ao combate, sem lista de assaltos', async () => {
     const router = renderRouter('./app', { initialUrl: '/connect' });
     await router;
-    await screen.findByText('Connect to a poule');
+    await screen.findByText('Connect to your piste');
 
     await fireEvent.changeText(screen.getByLabelText('PIN'), '777777');
     await fireEvent.press(screen.getByText('Connect'));
 
     // É o `scope` da resposta que decide o ecrã — o árbitro escreve seis dígitos e não sabe, nem
     // tem de saber, que tipo de código lhe deram (contrato §7).
-    await screen.findByText('Direct elimination');
-    expect(router.getPathname()).toBe('/bracket');
+    await screen.findByText('Round 2 · 1');
+    expect(router.getPathname()).toBe('/match/m_1');
+    // O combate veio no próprio `connect`: 15 toques, e não os 5 da poule.
+    expect(screen.getByText('To 15 touches')).toBeTruthy();
   });
 });
 
@@ -174,30 +176,20 @@ describe('arbitrar um assalto', () => {
 describe('mudança de fase', () => {
   beforeEach(() => resetApp());
 
-  it('a poule fechada com quadro gerado leva ao quadro sem pedir código novo', async () => {
-    seedBracket();
-    connectPoule({ locked: true, elimination: { matches_total: 3, matches_done: 0 } });
+  it('a poule fechada com quadro fica em leitura e diz para onde a competição foi', async () => {
+    connectPoule({ locked: true, elimination: { matches_total: 3, matches_done: 1 } });
 
     const router = renderRouter('./app', { initialUrl: '/poule' });
     await router;
 
-    await screen.findByText('Direct elimination');
-    expect(router.getPathname()).toBe('/bracket');
-  });
+    // O quadro corre em códigos que este token não alcança (contrato §7). O banner substitui o
+    // ecrã de quadro que aqui havia: sem ele, o árbitro vê uma lista que deixou de aceitar
+    // resultados e não tem nada que lho explique.
+    await screen.findByText(/moved on to the elimination table \(1\/3 matches decided\)/);
+    await screen.findByText(/each match has its own six-digit code/i);
 
-  it('feita a transição, a lista e o quadro alternam-se', async () => {
-    seedBracket();
-    connectPoule({ locked: true, elimination: { matches_total: 3, matches_done: 0 } });
-
-    const router = renderRouter('./app', { initialUrl: '/poule' });
-    await router;
-    await screen.findByText('Direct elimination');
-
-    await fireEvent.press(screen.getByText('Back to the bouts'));
-
-    // A transição automática acontece **uma vez** (spec §6). A lista fechada continua a ser
-    // consultável: os resultados já registados são metade do uso deste ecrã.
     expect(router.getPathname()).toBe('/poule');
+    expect(await screen.findByText('Resume')).toBeDisabled();
   });
 
   it('a poule fechada sem quadro fica em leitura, com a escrita desativada', async () => {
@@ -206,9 +198,7 @@ describe('mudança de fase', () => {
     const router = renderRouter('./app', { initialUrl: '/poule' });
     await router;
 
-    await screen.findByText(
-      'Poule locked — the direct elimination table has been generated. Read-only mode.',
-    );
+    await screen.findByText('Poule closed. Read-only mode.');
     expect(router.getPathname()).toBe('/poule');
     expect(await screen.findByText('Resume')).toBeDisabled();
   });
@@ -257,7 +247,7 @@ describe('sair e concluir', () => {
     await screen.findByText('Poule 3 — Sabre Masculino');
 
     await fireEvent.press(screen.getByText('Leave'));
-    await screen.findByText('Leave this competition?');
+    await screen.findByText('Leave this piste?');
     // O segundo "Leave" é o da folha — o do cabeçalho continua montado por baixo.
     await fireEvent.press(screen.getAllByText('Leave').at(-1)!);
 
@@ -318,49 +308,82 @@ describe('sair e concluir', () => {
   });
 });
 
-describe('quadro de eliminatórias', () => {
+/**
+ * O combate de eliminatória — uma sessão inteira, num ecrã só (contrato `2.0.0`).
+ *
+ * Não há quadro para desenhar: o código é da pista, e alcança **este** combate e mais nenhum. O que
+ * era a lista do quadro a decidir o que abre passou a ser este ecrã a decidir o que mostra.
+ */
+describe('combate de eliminatória', () => {
   beforeEach(() => resetApp());
 
-  it('mostra o quadro inteiro e não deixa abrir quem ainda espera o vencedor', async () => {
-    seedBracket();
-    connectTournament();
+  it('arbitra o combate no mesmo ecrã de assalto, com os presets do quadro', async () => {
+    connectMatch();
 
-    const router = renderRouter('./app', { initialUrl: '/bracket' });
+    const router = renderRouter('./app', { initialUrl: '/match/m_1' });
     await router;
 
-    await screen.findByText('Round 1');
-    // A final aparece por preencher — é assim que o árbitro vê o caminho (spec §6, ecrã 5).
-    expect(screen.getByText('Round 2')).toBeTruthy();
-    expect(screen.getAllByText('Awaiting winner').length).toBeGreaterThan(0);
-
-    await fireEvent.press(screen.getAllByText('Awaiting winner')[0]!);
-    expect(router.getPathname()).toBe('/bracket');
-  });
-
-  it('abre um combate pronto no mesmo ecrã de assalto, com os presets do quadro', async () => {
-    seedBracket();
-    connectTournament();
-
-    const router = renderRouter('./app', { initialUrl: '/bracket' });
-    await router;
-
-    await fireEvent.press(await screen.findByText('Ana Silva'));
-
-    await screen.findByText('Round 1 · 1');
-    expect(router.getPathname()).toBe('/match/m_1');
+    await screen.findByText('Round 2 · 1');
+    // A prova é a única coisa que diz ao árbitro onde está: chegou com seis dígitos (contrato §7).
+    expect(screen.getByText('Torneio de Verão 2026')).toBeTruthy();
     // 15 toques, e não os 5 da poule: o alvo vem da API (contrato §7).
     expect(screen.getByText('To 15 touches')).toBeTruthy();
+    expect(router.getPathname()).toBe('/match/m_1');
   });
 
-  it('espelha o combate ao vivo para o quadro, e não para os assaltos de poule', async () => {
-    seedBracket();
-    connectTournament();
+  it('carrega o que a lista carregava numa poule: sessão, fila e "Sair"', async () => {
+    connectMatch();
 
-    const router = renderRouter('./app', { initialUrl: '/bracket' });
+    const router = renderRouter('./app', { initialUrl: '/match/m_1' });
     await router;
+    await screen.findByText('Round 2 · 1');
 
-    await fireEvent.press(await screen.findByText('Ana Silva'));
-    await screen.findByText('Round 1 · 1');
+    // Sem lista por baixo, este ecrã é a sessão: sem "Sair" aqui não havia forma de largar a
+    // pista antes de o token expirar sozinho, 60 minutos depois.
+    await fireEvent.press(screen.getByText('Leave'));
+    await screen.findByText('Leave this piste?');
+    await fireEvent.press(screen.getAllByText('Leave').at(-1)!);
+
+    await waitFor(() => expect(router.getPathname()).toBe('/connect'));
+    expect(useSessionStore.getState().phase).toBe('disconnected');
+  });
+
+  it('um combate por preencher espera, e não deixa arbitrar', async () => {
+    connectMatch({ ready: false, fencer_a: null, fencer_b: null });
+
+    await renderRouter('./app', { initialUrl: '/match/m_1' });
+
+    // O código pode ser entregue antes de se saber quem sobe (contrato §7, `ready`). Não é erro,
+    // não é "já arbitrado", e não há nada para o árbitro tocar.
+    await screen.findByText('Waiting for the previous round');
+    expect(screen.getAllByText('Awaiting winner').length).toBe(2);
+
+    // Nada de cronómetro nem de contadores: sem atletas não há o que cronometrar, e o servidor
+    // recusaria o resultado com `409 match_not_ready`.
+    expect(screen.queryByText('Submit result')).toBeNull();
+    expect(screen.queryByText('To 15 touches')).toBeNull();
+  });
+
+  it('destranca-se sozinho quando a ronda anterior acaba', async () => {
+    connectMatch({ ready: false, fencer_a: null, fencer_b: null });
+
+    await renderRouter('./app', { initialUrl: '/match/m_1' });
+    await screen.findByText('Waiting for the previous round');
+
+    // O vencedor subiu, do lado do servidor. É o *poll* deste ecrã que dá pela mudança — sem ele o
+    // árbitro ficava a olhar para um ecrã trancado à espera de nada.
+    readyMatch();
+    await act(() => poll());
+
+    await screen.findByText('To 15 touches');
+    expect(await screen.findByLabelText('One more touch for Ana Silva')).toBeTruthy();
+  });
+
+  it('espelha o combate ao vivo para a eliminatória, e não para os assaltos de poule', async () => {
+    connectMatch();
+
+    await renderRouter('./app', { initialUrl: '/match/m_1' });
+    await screen.findByText('Round 2 · 1');
 
     await fireEvent.press(screen.getByLabelText('One more touch for Ana Silva'));
 
@@ -370,5 +393,72 @@ describe('quadro de eliminatórias', () => {
       { seq: 1, type: 'touch', side: 'a', score_a: 1, score_b: 0 },
     ]);
     expect(eventsOf('bout', 'm_1')).toHaveLength(0);
+  });
+
+  it('registar o resultado encerra a pista e mostra o resumo com o resultado', async () => {
+    connectMatch();
+
+    const router = renderRouter('./app', { initialUrl: '/match/m_1' });
+    await router;
+    await screen.findByText('Round 2 · 1');
+
+    const addA = await screen.findByLabelText('One more touch for Ana Silva');
+    for (let i = 0; i < 15; i++) await fireEvent.press(addA);
+
+    await fireEvent.press(screen.getByText('Submit result'));
+    await screen.findByText('Confirm result');
+    await fireEvent.press(screen.getByText('Record'));
+
+    // Registado o resultado não há mais nada nesta pista: o token morre e a app leva o árbitro ao
+    // resumo (contrato §7). O resumo mostra o **resultado**, não "4/15 assaltos".
+    await waitFor(() => expect(router.getPathname()).toBe('/complete'));
+    await screen.findByText('Match recorded');
+    expect(screen.getByText('15–0')).toBeTruthy();
+    expect(fakeState.match).toMatchObject({ status: 'done', score_a: 15, score_b: 0 });
+  });
+
+  it('sem rede, o resultado do combate fica guardado e o resumo mostra-o na mesma', async () => {
+    connectMatch();
+    fakeState.failNextScore = 'network';
+
+    const router = renderRouter('./app', { initialUrl: '/match/m_1' });
+    await router;
+    await screen.findByText('Round 2 · 1');
+
+    await fireEvent.press(await screen.findByLabelText('One more touch for Ana Silva'));
+    await fireEvent.press(screen.getByText('Submit result'));
+    await fireEvent.press(await screen.findByText('Record'));
+
+    await waitFor(() => expect(router.getPathname()).toBe('/complete'));
+
+    // O resultado é do árbitro mesmo antes de chegar ao servidor — releitura nenhuma o traria, e
+    // o resumo mostraria um combate por pontuar sobre um resultado que ele deu (spec §8).
+    expect(screen.getByText('1–0')).toBeTruthy();
+    expect(useQueueStore.getState().items).toMatchObject([{ kind: 'match', target_id: 'm_1' }]);
+  });
+
+  it('um resultado preso noutra pista diz que precisa do código dessa pista', async () => {
+    connectMatch();
+    fakeState.failNextScore = 'network';
+
+    const first = renderRouter('./app', { initialUrl: '/match/m_1' });
+    await first;
+    await screen.findByText('Round 2 · 1');
+
+    await fireEvent.press(await screen.findByLabelText('One more touch for Ana Silva'));
+    await fireEvent.press(screen.getByText('Submit result'));
+    await fireEvent.press(await screen.findByText('Record'));
+    await waitFor(() => expect(useQueueStore.getState().items).toHaveLength(1));
+
+    // A pista seguinte, com outro código. O token dela não alcança o combate anterior — e o
+    // filtro do `drainQueue` existe para não o mandar com o token errado. Contá-lo à mistura com
+    // os desta pista dizia ao árbitro que a app estava a tratar do assunto; não está.
+    seedMatch({ id: 'm_2', round: 2, position: 2 });
+    connectMatch({ id: 'm_2', round: 2, position: 2 });
+
+    await renderRouter('./app', { initialUrl: '/match/m_2' });
+    await screen.findByText('Round 2 · 2');
+
+    expect(await screen.findByText(/no longer connected to/)).toBeTruthy();
   });
 });

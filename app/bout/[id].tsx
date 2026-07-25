@@ -1,10 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { postBoutEvents, startBout } from '@/api/endpoints';
-import { invalidateCompetition, useBoutDetail } from '@/api/queries';
+import { invalidatePoule, useBoutDetail } from '@/api/queries';
 import { BoutScreen, boutTiming, type BoutAssignment } from '@/bout';
 import type { LiveBoutEvent } from '@/api/types';
 import { useSessionStore } from '@/session/store';
@@ -54,7 +54,7 @@ export default function BoutRoute() {
   );
 
   const onRecorded = useCallback(() => {
-    if (pouleUuid) invalidateCompetition(client, pouleUuid);
+    if (pouleUuid) invalidatePoule(client, pouleUuid);
   }, [client, pouleUuid]);
 
   return (
@@ -63,7 +63,7 @@ export default function BoutRoute() {
       loading={detail.isLoading}
       error={detail.error}
       onRetry={() => void detail.refetch()}
-      home="/poule"
+      back={() => router.replace('/poule')}
       onStart={onStart}
       onEvents={id ? onEvents : undefined}
       onRecorded={onRecorded}

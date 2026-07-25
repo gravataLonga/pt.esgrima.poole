@@ -8,8 +8,8 @@ import { Screen } from '@/ui';
 
 /**
  * Porta de entrada. A app já não abre sempre no ecrã de ligar: havendo um token guardado, valida-o
- * primeiro com `GET /session` (contrato §7) e vai direta ao que há para arbitrar — que pode ser a
- * lista de assaltos ou o quadro, consoante a poule tenha fechado entretanto.
+ * primeiro com `GET /session` (contrato §7) e vai direta ao que há para arbitrar — o cartão da
+ * poule, ou o combate que o código abriu.
  *
  * Enquanto isso não resolve, o ecrã fica escuro como o *splash*. Piscar o formulário de PIN e
  * substituí-lo pela lista meio segundo depois é pior do que esperar meio segundo.
@@ -17,6 +17,7 @@ import { Screen } from '@/ui';
 export default function Index() {
   const restoring = useSessionStore((s) => s.restoring);
   const phase = useSessionStore((s) => s.phase);
+  const match = useSessionStore((s) => s.match);
   const restore = useSessionStore((s) => s.restore);
   const hydrate = useQueueStore((s) => s.hydrate);
 
@@ -36,7 +37,11 @@ export default function Index() {
   }
 
   if (phase === 'complete') return <Redirect href="/complete" />;
-  if (phase === 'bracket') return <Redirect href="/bracket" />;
+  // A fase `match` só existe com o combate em mão — é o `phaseFor` que o garante —, mas o `href`
+  // precisa do id e um `undefined` aqui abriria `/match/undefined`.
+  if (phase === 'match' && match) {
+    return <Redirect href={{ pathname: '/match/[id]', params: { id: match.id } }} />;
+  }
   if (phase === 'poule' || phase === 'read_only') return <Redirect href="/poule" />;
 
   return <Redirect href="/connect" />;

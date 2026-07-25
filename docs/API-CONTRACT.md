@@ -1,21 +1,21 @@
 # API de Arbitragem — Contrato
 
-**Versão do contrato: `2.0.0`** · Estado: **servido pela plataforma; a app tem de migrar** · 2026-07-25
+**Versão do contrato: `2.0.1`** · Estado: **servido pela plataforma e consumido pela app** · 2026-07-25
 
 Fronteira partilhada entre a **plataforma** (`poole.esgrima.pt`, Laravel 12) e a **app de arbitragem**
 (React Native, repositório separado). Este ficheiro é a **única fonte de verdade** do que os dois
 lados trocam entre si.
 
-> 🔴 **`2.0.0` é *breaking*, e a plataforma já a serve.** O código deixou de ser da competição e
+> ✅ **`2.0.0` foi *breaking*, e os dois lados já lá estão.** O código deixou de ser da competição e
 > passou a ser **da pista**: uma poule continua a ter o seu, e **cada combate de eliminatória passa
 > a ter um só dele**. O código de torneio deixou de existir, as duas listas de quadro saíram da API,
 > e o `scope` da sessão passou a ser `poule` \| `match`.
 >
-> **A app de hoje não funciona contra esta versão** — um código de combate chega-lhe com um `scope`
-> que ela não conhece, e o ecrã do quadro pede uma lista que já não existe. O que falta fazer do
-> lado dela está em [§11 C](#c-o-lado-da-app--por-fazer). Excecionalmente **não há `/api/v2`**: não
-> há nenhuma app instalada e o `/api/v1` nunca serviu produção, portanto não há nada a coexistir com
-> — a regra do [§1](#versionamento) mantém-se para o dia em que houver.
+> A plataforma serve-o desde 2026-07-25 e **a app migrou no mesmo dia** — o ponto a ponto do que
+> mudou do lado dela está em [§11 C](#c-o-lado-da-app--feito). Excecionalmente **não houve
+> `/api/v2`**: não havia nenhuma app instalada e o `/api/v1` nunca tinha servido produção, portanto
+> não havia nada com que coexistir — a regra do [§1](#versionamento) mantém-se para o dia em que
+> houver.
 >
 > ⚠️ **Duas coisas por corrigir, ambas do lado do servidor**, e nenhuma delas trava a app:
 > (1) a comparação do `If-None-Match` é forte, e o `304` do [§5](#5-polling-e-etag) nunca acontece
@@ -1116,6 +1116,7 @@ passar a emitir o formato 2 em vez do 1.
 
 | Versão | Data | Alterações |
 |---|---|---|
+| `2.0.1` | 2026-07-25 | **PATCH, redação — a app migrou, e este documento passa a dizê-lo.** Nada mudou no que os dois lados trocam. (1) A [§11 C](#c-o-lado-da-app--feito) deixou de ser uma lista de trabalho por fazer e passou a ser o registo do que foi feito, com três pontos novos — **C9**, **C10** e **C11** — que a lista original não previa e que só apareceram ao implementá-la: o detalhe do combate precisou de *polling* próprio (era a lista do quadro que revalidava por ele, e é assim que um `ready: false` se destranca sozinho); a chave da fila de submissões passou a aceitar o `id` de um combate, porque um `MatchDetail` não tem `uuid`; e um resultado que fica em fila **só pode ser entregue pelo token da pista que o gerou**, que é uma consequência operacional de o código ter descido ao combate e que a app passou a dizer ao árbitro em vez de a esconder. (2) O aviso de topo e o cabeçalho da §11 deixam de dizer que a app tem de migrar. (3) A caixa da [§12](#12-levantamento-de-campo--a-app-ligada-ao-servidor-a-sério) regista que o `live.test.ts` foi refeito. (4) Fica escrito, no C7, que mostrar o `message` do `410` põe pt-PT numa interface em `en`, e que a saída limpa é um `reason` estável — alteração **MINOR**, quando fizer falta. |
 | `2.0.0` | 2026-07-25 | **MAJOR — o código deixou de ser da competição e passou a ser da pista.** Um quadro corre em várias pistas ao mesmo tempo; um código só para o quadro inteiro dava a cada árbitro todos os combates e, porque um código segura um dispositivo de cada vez, o segundo a ligar-se tirava a sessão ao primeiro. **(1) Cada combate de eliminatória tem o seu PIN**, e o `scope` da sessão passa a `poule` \| `match`. **(2) `scope: "tournament"` e o `TournamentSummary` desaparecem** — um torneio nunca foi arbitrável como um todo e agora não tem por onde. **(3) `GET /poules/{poule}/elimination` e `GET /tournaments/{tournament}/elimination` saem da API**: uma sessão vê um combate, não um quadro; o quadro desenha-se na web. **(4) O `connect` e o `session` devolvem `match`** (o `MatchDetail`, que é o detalhe do combate) no lugar de `tournament`, com `competition_name` novo a dizer em que prova o árbitro está. **(5) Um token de poule deixa de alcançar o quadro dessa poule.** **(6) `PouleSummary.elimination` passa a apontar o quadro *para onde os atletas foram*** — o da poule quando ela corre sozinha, o do torneio quando é uma pool — e é informativo, não navegável: era aqui que uma pool de torneio ficava `locked` com `elimination: null` e a app encalhava num ecrã sem saída. **(7) O `message` do `410 competition_finished` passa a dizer qual dos casos é e para onde ir.** **(8) `422 poule_locked` sai do `POST /elimination/{match}/start`.** **Sem `/api/v2`:** não há app instalada e o `/api/v1` nunca serviu produção, portanto não há versão antiga para coexistir; a regra da §1 vale para a próxima. |
 | `1.5.0` | 2026-07-25 | **MINOR, aditivo — a pista passa a ver-se enquanto está a ser arbitrada.** `POST /bouts/{bout}/events` e `POST /elimination/{match}/events`: a app envia o toque, o duplo, o cartão e a prioridade **no momento em que acontecem**, com um contador `seq` por assalto que é a idempotência toda. Até aqui a plataforma só sabia do assalto no fim, e uma poule a meio parecia uma poule que ninguém tinha começado; agora o placar sobe toque a toque no painel do organizador, na gaveta do assalto e na página pública do evento. **Nada disto é obrigatório e nada disto entra no resultado** — quem não enviar continua a funcionar exatamente como antes. Consequência: uma app que envie em direto tem o `events` do `score` **ignorado**, porque são os mesmos toques contados duas vezes. |
 | `1.4.2` | 2026-07-25 | **PATCH, redação — a app ligou-se ao servidor a sério pela primeira vez.** Nada mudou no que os dois lados trocam; mudou o que este documento diz sobre isso. (1) [§12](#12-levantamento-de-campo--a-app-ligada-ao-servidor-a-sério) nova, com o levantamento de campo e a lista de arestas. (2) A caixa da [§5](#5-polling-e-etag) sobre o `If-None-Match`: a comparação tem de ser **fraca**, senão o `304` nunca dispara através de um proxy que comprima — é o único ponto que fica por corrigir, e é do servidor. (3) `Bout.scored_at` pode vir `null` com `status: "done"`, em resultados anteriores às colunas de metadados. (4) `EliminationMatch.bracket` pode vir `0` num quadro sem ronda 1. (5) `422 poule_locked` sai da lista de erros do `POST /elimination/{match}/score`, que nunca o devolve. (6) A [§2](#2-transporte-e-cabeçalhos) diz agora que o `POST /connect` não traz `X-Session-Expires-At` — a expiração vem no corpo. |
@@ -1132,8 +1133,8 @@ passar a emitir o formato 2 em vez do 1.
 ## 11. Estado da implementação
 
 **Levantado a 2026-07-25 contra o código da plataforma** (branch `test`). O servidor serve a `2.0.0`
-por inteiro; **a app ainda serve a `1.5.0`** e tem de migrar — a lista está em
-[C](#c-o-lado-da-app--por-fazer).
+por inteiro e **a app consome-a** — o que mudou do lado dela está em
+[C](#c-o-lado-da-app--feito).
 
 ### A. O que a plataforma serve
 
@@ -1183,26 +1184,40 @@ um token apagado não consegue dizer qual dos três foi. A regra do servidor:
 Sem a terceira linha o fim de uma competição chegava à app como "a sessão expirou", que é a única das
 três que se corrige a voltar a ligar — e não havia nada a que voltar.
 
-### C. O lado da app — por fazer
+### C. O lado da app — feito
 
-A app está tipada e escrita para a `1.5.0`, e **não funciona contra a `2.0.0`** sem estas mudanças.
-Estão por ordem de dependência; nenhuma delas é grande, e a última é a que muda o produto.
+**Migrada a 2026-07-25**, no mesmo dia em que a plataforma passou a servir a `2.0.0`. Estava tipada
+e escrita para a `1.5.0` e não funcionava contra esta versão; o que mudou, por ordem de dependência:
 
-| # | O quê | Onde |
+| # | O quê | Onde | Estado |
+|---|---|---|---|
+| **C1** | `SessionScope` passa a `'poule' \| 'match'`. Tirar `TournamentSummary`, acrescentar `MatchDetail` (o detalhe do combate, agora com `competition_name`, `scored_at` e `scored_by_me`) | `src/api/types.ts` | ✅ — e as duas formas do combate, a de lista e a de detalhe, colapsaram numa só, porque a lista deixou de existir |
+| **C2** | Tirar `getPouleElimination` e `getTournamentElimination` — os endpoints já não existem | `src/api/endpoints.ts` | ✅ |
+| **C3** | `connect()` e `getSession()` passam a ler `match` no lugar de `tournament`. Guardar o combate no *store* | `src/session/store.ts` | ✅ — e o combate que vem no `connect` é semeado na cache, para o ecrã abrir sem segundo pedido |
+| **C4** | `phaseFor()`: `scope === 'match'` → ecrã do combate, direto. Um `scope` desconhecido nunca deve cair no ramo da poule, que é o que faria com que a app pedisse `/poules/undefined/bouts` | `src/session/store.ts` | ✅ — com teste de regressão sobre esse caso exato |
+| **C5** | `app/bracket.tsx` deixa de fazer sentido: não há quadro para desenhar. O ecrã de combate (`app/match/[id].tsx`) passa a ser aberto **pela ligação**, não pela lista | `app/` | ✅ — apagado. O ecrã do combate herdou o que a lista carregava: cabeçalho, barra de sessão, fila e "Sair" |
+| **C6** | Poule fechada (`locked: true`) deixa de levar ao quadro. Passa a ler-se, com o `elimination` ao lado a dizer o progresso do quadro para onde os atletas foram, e uma frase a explicar que cada combate tem código próprio | `src/session/store.ts`, `app/poule.tsx` | ✅ |
+| **C7** | No `410 competition_finished`, mostrar o `message` do servidor em vez da constante `connect.error.finished` — é ele que agora diz para onde ir | `app/connect.tsx`, `src/i18n/` | ✅ — ver a nota de idioma abaixo |
+| **C8** | `API_CONTRACT_VERSION` → `'2.0.0'` | `src/config/` | ✅ — em `src/api/types.ts`, onde a constante vive |
+
+**E o que estava em aberto desde a `1.5.0`, também feito:** a app envia os eventos do assalto em
+direto ([`POST /bouts/{bout}/events`](#post-boutsboutevents) e o equivalente da eliminatória), com o
+contador `seq` por assalto. Era a **F7** da `app-arbitragem-client-spec.md` §14.
+
+#### Três coisas que esta lista não previa, e que só apareceram ao implementá-la
+
+| # | O que apareceu | Como ficou |
 |---|---|---|
-| **C1** | `SessionScope` passa a `'poule' \| 'match'`. Tirar `TournamentSummary`, acrescentar `MatchDetail` (o detalhe do combate, agora com `competition_name`, `scored_at` e `scored_by_me`) | `src/api/types.ts` |
-| **C2** | Tirar `getPouleElimination` e `getTournamentElimination` — os endpoints já não existem | `src/api/endpoints.ts` |
-| **C3** | `connect()` e `getSession()` passam a ler `match` no lugar de `tournament`. Guardar o combate no *store* | `src/session/store.ts` |
-| **C4** | `phaseFor()`: `scope === 'match'` → ecrã do combate, direto. Um `scope` desconhecido nunca deve cair no ramo da poule, que é o que hoje faria com que a app pedisse `/poules/undefined/bouts` | `src/session/store.ts` |
-| **C5** | `app/bracket.tsx` deixa de fazer sentido: não há quadro para desenhar. O ecrã de combate (`app/match/[id].tsx`) passa a ser aberto **pela ligação**, não pela lista | `app/` |
-| **C6** | Poule fechada (`locked: true`) deixa de levar ao quadro. Passa a ler-se, com o `elimination` ao lado a dizer o progresso do quadro para onde os atletas foram, e uma frase a explicar que cada combate tem código próprio | `src/session/store.ts`, `app/poule.tsx` |
-| **C7** | No `410 competition_finished`, mostrar o `message` do servidor em vez da constante `connect.error.finished` — é ele que agora diz para onde ir | `app/connect.tsx`, `src/i18n/` |
-| **C8** | `API_CONTRACT_VERSION` → `'2.0.0'` | `src/config/` |
+| C9 | **O detalhe do combate não fazia *polling*.** Era a lista do quadro que revalidava por ele, e sem lista ficou sem fonte de notícias — incluindo a única que o árbitro não pode perder: um combate entregue com `ready: false` **destranca-se sozinho** quando a ronda anterior acaba | O `GET /elimination/{match}` passou a ser pedido na cadência do ecrã de assalto da [§5](#5-polling-e-etag): 30 s com o cronómetro parado, pausado com ele a correr |
+| C10 | **A chave da fila de submissões.** É por competição, e um `MatchDetail` não tem `uuid` — tem o `id` opaco | A chave passou a ser o UUID da poule **ou** o id do combate. Nada a interpreta: é agrupamento, não identidade |
+| C11 | **Um resultado em fila fica preso à pista que o gerou.** Registado sem rede, a sessão daquela pista acaba (o combate foi arbitrado) e o árbitro liga-se à seguinte — mas nenhum token a não ser o daquela pista o pode entregar. Com o quadro inteiro num só código isto não acontecia | Não é resolúvel do lado da app, e por isso ela **não finge que está a tratar do assunto**: conta à parte o que pertence a outra pista e diz que é preciso voltar a ligar-se com aquele código. Resolve-se rodando o PIN dessa pista, ou registando o resultado na web |
 
-**E o que já estava em aberto desde a `1.5.0`:** enviar os eventos do assalto em direto
-([`POST /bouts/{bout}/events`](#post-boutsboutevents)). O servidor serve-os e a web mostra-os;
-enquanto a app não os enviar, a plataforma continua a saber do assalto só no fim. É a **F7** da
-`app-arbitragem-client-spec.md` §14, e é aditiva.
+> **Nota de idioma sobre o C7.** A app está em `en` e traduz os `code` que conhece, para não misturar
+> duas línguas no mesmo ecrã. O `410` é a exceção porque é a única `message` deste contrato que muda
+> com o caso — e, quando diz *"peça o da sua pista"*, é a diferença entre o árbitro continuar e ficar
+> parado à espera do organizador. A saída limpa é um campo `reason` estável (`poule_locked` \|
+> `poule_played` \| `match_scored`) que o cliente traduza, e isso é uma alteração **MINOR** deste
+> documento — que se faz alterando-o primeiro, dos dois lados.
 
 ### D. O que ficou deliberadamente de fora
 
@@ -1223,8 +1238,10 @@ enquanto a app não os enviar, a plataforma continua a saber do assalto só no f
 corre contra o servidor e não contra mocks (`npm run test:live`).
 
 > ⚠️ **Levantado contra a `1.5.0`.** As arestas 1, 2, 4, 5, 6 e 7 continuam a valer tal e qual; a 3
-> ficou resolvida por outro caminho. O `live.test.ts` tem de ser refeito com a [C](#c-o-lado-da-app--por-fazer),
-> porque duas das chamadas que ele faz já não existem.
+> ficou resolvida por outro caminho. O `live.test.ts` foi refeito com a
+> [C](#c-o-lado-da-app--feito) — as duas chamadas que ele fazia às listas de quadro deixaram de
+> existir, e no lugar delas verifica o combate que o próprio código abre, mais o `404` a qualquer
+> outro id.
 
 **Não falta nenhum endpoint.** Não houve nenhuma área da app à espera de um endpoint que não
 exista. O que se segue são as arestas que só aparecem com o servidor a sério do outro lado.

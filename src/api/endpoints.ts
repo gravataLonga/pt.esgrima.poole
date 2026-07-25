@@ -12,16 +12,14 @@ import type {
   BoutsResponse,
   ConnectRequest,
   ConnectResponse,
-  EliminationMatchDetail,
   LiveBoutEvent,
   LiveEventsResponse,
+  MatchDetail,
   MatchScoreResponse,
-  PouleEliminationResponse,
   ScoreRequest,
   SessionResponse,
   StandingsResponse,
   StartResponse,
-  TournamentEliminationResponse,
 } from './types';
 
 /** O corpo de um `GET` simples nunca é `null` — só as listas condicionais e o `204` o podem ser. */
@@ -116,24 +114,16 @@ export async function scoreBout(boutId: string, payload: ScoreRequest): Promise<
 
 // ─── Eliminatórias ──────────────────────────────────────────────────────────
 
-export function getPouleElimination(
-  pouleUuid: string,
-  etag?: string,
-): Promise<ApiResponse<PouleEliminationResponse>> {
-  return request<PouleEliminationResponse>(`/poules/${pouleUuid}/elimination`, { etag });
-}
+/*
+ * **Não há listas de quadro.** As duas que aqui viviam — `/poules/{p}/elimination` e
+ * `/tournaments/{t}/elimination` — saíram da API na `2.0.0`: uma sessão alcança um combate, e
+ * desenhar o resto seria desenhá-lo a partir de dados a que ela não tem direito. O quadro vê-se na
+ * web, que é onde é feito.
+ */
 
-export function getTournamentElimination(
-  tournamentUuid: string,
-  etag?: string,
-): Promise<ApiResponse<TournamentEliminationResponse>> {
-  return request<TournamentEliminationResponse>(`/tournaments/${tournamentUuid}/elimination`, {
-    etag,
-  });
-}
-
-export async function getMatch(matchId: string): Promise<EliminationMatchDetail> {
-  return body(await request<EliminationMatchDetail>(`/elimination/${matchId}`));
+/** Leitura pura, e **só o combate do próprio código**: qualquer outro id responde `404`. */
+export async function getMatch(matchId: string): Promise<MatchDetail> {
+  return body(await request<MatchDetail>(`/elimination/${matchId}`));
 }
 
 export async function startMatch(matchId: string): Promise<StartResponse> {

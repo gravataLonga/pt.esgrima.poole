@@ -5,10 +5,10 @@
   "connect": {
     "logoLabel": "Esgrima.pt",
     "eyebrow": "Refereeing",
-    "title": "Connect to a poule",
-    "intro": "Scan the QR code on the poule sheet or enter the 6-digit PIN.",
+    "title": "Connect to your piste",
+    "intro": "Scan the QR code for your piste — a poule sheet or a match card — or enter the 6-digit PIN.",
     "scan": "Scan QR",
-    "scanHint": "Point the camera at the poule sheet.",
+    "scanHint": "Point the camera at the poule sheet or the match card.",
     "or": "or",
     "pinLabel": "PIN",
     "submit": "Connect",
@@ -16,7 +16,7 @@
     "connecting": "Connecting…",
     "blockedUntil": "Too many attempts. Try again at {{time}}.",
     "error": {
-      "invalid": "Wrong code. Check the six digits on the poule sheet.",
+      "invalid": "Wrong code. Check the six digits for your piste.",
       "finished": "This competition has already finished.",
       "throttled": "Too many attempts. Wait a moment before trying again.",
       "network": "No connection to the server. Check the venue network.",
@@ -24,7 +24,7 @@
     },
     "ended": {
       "token_expired": "The session expired after 60 minutes without activity. Connect again.",
-      "token_revoked": "Another device took over this competition."
+      "token_revoked": "Another device took over this piste."
     }
   },
   "scan": {
@@ -50,7 +50,6 @@
     "resume": "Resume",
     "pairing": "{{a}} {{nameA}} vs {{b}} {{nameB}}",
     "listTitle": "Bouts",
-    "readOnly": "Poule locked — the direct elimination table has been generated. Read-only mode.",
     "vs": "vs",
     "viewSwitcher": "Poule view",
     "viewBouts": "Bouts",
@@ -64,10 +63,13 @@
     },
     "loading": "Loading bouts…",
     "empty": "No bouts in this poule yet.",
-    "openBracket": "Direct elimination table — {{done}}/{{total}}",
     "error": {
       "title": "Could not load the bouts",
       "body": "The server did not answer. The app keeps trying on its own."
+    },
+    "readOnly": {
+      "withBracket": "Poule closed — the competition moved on to the elimination table ({{done}}/{{total}} matches decided). Each match has its own six-digit code: ask for the one for your piste.",
+      "noBracket": "Poule closed. Read-only mode."
     }
   },
   "sheet": {
@@ -179,41 +181,27 @@
     "title": "Poule complete",
     "message": "Session ended.",
     "tallyLabel": "bouts recorded",
-    "again": "Connect to another poule"
+    "again": "Connect to another piste",
+    "matchTitle": "Match recorded",
+    "matchTallyLabel": "final score"
   },
   "common": {
     "cancel": "Cancel",
     "retry": "Try again"
-  },
-  "bracket": {
-    "eyebrow": "Direct elimination",
-    "progress": "{{done}} of {{total}} matches",
-    "round": "Round {{round}}",
-    "matchTitle": "Round {{round}} · {{position}}",
-    "loading": "Loading the table…",
-    "empty": "The table has not been drawn yet. It appears here as soon as the organiser generates it.",
-    "locked": "Table closed. Read-only mode.",
-    "awaiting": "Awaiting winner",
-    "backToPoule": "Back to the bouts",
-    "state": {
-      "ready": "Ready",
-      "in_progress": "In progress",
-      "waiting": "Waiting"
-    }
   },
   "session": {
     "offline": "No connection. The app keeps trying and nothing is lost.",
     "expiring": "The session ends in {{minutes}} min. Generate a new code on the platform to carry on.",
     "expired": "The session has ended.",
     "leave": "Leave",
-    "leaveTitle": "Leave this competition?",
+    "leaveTitle": "Leave this piste?",
     "leaveMessage": "The session ends here. Connect again any time with the same six-digit code.",
     "leaveQueued_one": "{{count}} result is still waiting for the network. It stays on this phone and is sent the next time you connect.",
     "leaveQueued_other": "{{count}} results are still waiting for the network. They stay on this phone and are sent the next time you connect.",
     "stay": "Stay",
     "finish": "Finish",
     "finishTitle": "Finish here?",
-    "finishMessage": "Nothing is left to referee in this competition. Connect again with the same code if you need to come back."
+    "finishMessage": "Nothing is left to referee on this piste. Connect again with the same code if you need to come back."
   },
   "queue": {
     "pending_one": "{{count}} result saved on this phone, waiting for the network.",
@@ -225,6 +213,17 @@
       "rejected": "{{label}} was refused by the server: {{detail}}",
       "expired": "{{label}} waited more than 24 h and was discarded. The result never reached the server.",
       "full": "{{label}} was not saved — the queue is full (50 results). Find a network before recording more."
+    },
+    "stranded_one": "{{count}} result belongs to a piste you are no longer connected to. Connect again with that code to send it.",
+    "stranded_other": "{{count}} results belong to pistes you are no longer connected to. Connect again with those codes to send them."
+  },
+  "match": {
+    "title": "Round {{round}} · {{position}}",
+    "versus": "vs",
+    "awaiting": "Awaiting winner",
+    "waiting": {
+      "title": "Waiting for the previous round",
+      "body": "This piste is yours. The bout opens on its own as soon as the previous round is decided — there is nothing to do here until then."
     }
   }
 }

@@ -24,23 +24,11 @@ import type { ApiResponse } from './client';
 import * as api from './endpoints';
 import { isGone, isUnauthorized } from './errors';
 import { POLL_INTERVAL_BOUT_MS, usePollInterval } from './polling';
-import type {
-  BoutDetail,
-  BoutsResponse,
-  EliminationMatch,
-  EliminationMatchDetail,
-  PouleEliminationResponse,
-  PouleSummary,
-  SessionScope,
-  StandingsResponse,
-  TournamentEliminationResponse,
-  TournamentSummary,
-} from './types';
+import type { BoutDetail, BoutsResponse, MatchDetail, StandingsResponse } from './types';
 
 export const queryKeys = {
   bouts: (pouleUuid: string): QueryKey => ['bouts', pouleUuid],
   standings: (pouleUuid: string): QueryKey => ['standings', pouleUuid],
-  bracket: (uuid: string): QueryKey => ['bracket', uuid],
   bout: (boutId: string): QueryKey => ['bout', boutId],
   match: (matchId: string): QueryKey => ['match', matchId],
 };
@@ -48,14 +36,23 @@ export const queryKeys = {
 const etags = new Map<string, string>();
 
 /** Um resultado registado invalida as duas listas — partilham `ETag` do lado do servidor. */
-export function invalidateCompetition(client: QueryClient, uuid: string): void {
+export function invalidatePoule(client: QueryClient, uuid: string): void {
   etags.delete(JSON.stringify(queryKeys.bouts(uuid)));
   etags.delete(JSON.stringify(queryKeys.standings(uuid)));
-  etags.delete(JSON.stringify(queryKeys.bracket(uuid)));
 
   void client.invalidateQueries({ queryKey: queryKeys.bouts(uuid) });
   void client.invalidateQueries({ queryKey: queryKeys.standings(uuid) });
-  void client.invalidateQueries({ queryKey: queryKeys.bracket(uuid) });
+}
+
+/**
+ * O combate acabou de ser registado: relê-lo é o que leva a app ao fim.
+ *
+ * O contrato §7 diz que registar o resultado **é o fim da sessão** — o token é invalidado e o
+ * pedido seguinte recebe `401 poule_complete`. Este *refetch* é esse pedido seguinte, e o `401`
+ * que ele apanha é o caminho normal para o ecrã de resumo, não uma avaria a esconder.
+ */
+export function invalidateMatch(client: QueryClient, matchId: string): void {
+  void client.invalidateQueries({ queryKey: queryKeys.match(matchId) });
 }
 
 /**
@@ -144,69 +141,6 @@ export function useStandings(
 }
 
 /**
- * O quadro, seja ele da poule ou do torneio. Os dois endpoints devolvem a mesma lista com um
- * *summary* diferente ao lado, e o ecrã do quadro não tem razão para distinguir os dois.
- */
-export interface BracketData {
-  matches: EliminationMatch[];
-  /** Nome da competição, para o cabeçalho do quadro. */
-  name: string;
-  locked: boolean;
-  poule?: PouleSummary;
-  tournament?: TournamentSummary;
-}
-
-export function useBracket(
-  scope: SessionScope | null,
-  uuid: string | null,
-): UseQueryResult<BracketData> {
-  const client = useQueryClient();
-  const applySummary = useSessionStore((s) => s.applySummary);
-  const refetchInterval = usePollInterval();
-
-  const query = useQuery({
-    queryKey: queryKeys.bracket(uuid ?? ''),
-    enabled: scope !== null && uuid !== null,
-    refetchInterval,
-    retry: retryPolicy,
-    queryFn: async (): Promise<BracketData> => {
-      const key = queryKeys.bracket(uuid as string);
-
-      if (scope === 'tournament') {
-        const data = await conditional<TournamentEliminationResponse>(client, key, (etag) =>
-          api.getTournamentElimination(uuid as string, etag),
-        );
-        return {
-          matches: data.matches,
-          name: data.tournament.name,
-          locked: data.tournament.locked,
-          tournament: data.tournament,
-        };
-      }
-
-      const data = await conditional<PouleEliminationResponse>(client, key, (etag) =>
-        api.getPouleElimination(uuid as string, etag),
-      );
-      return {
-        matches: data.matches,
-        name: data.poule.name,
-        locked: data.poule.locked,
-        poule: data.poule,
-      };
-    },
-  });
-
-  const data = query.data;
-
-  useEffect(() => {
-    if (!data) return;
-    applySummary({ poule: data.poule, tournament: data.tournament });
-  }, [data, applySummary]);
-
-  return query;
-}
-
-/**
  * Detalhe do assalto — é daqui que vêm os presets do cronómetro. **Sem polling:** o ecrã de
  * assalto não pode piscar por baixo de quem está a arbitrar, e o que interessa neste ecrã (alvo,
  * tempos) não muda a meio.
@@ -221,12 +155,37 @@ export function useBoutDetail(boutId: string | null): UseQueryResult<BoutDetail>
   });
 }
 
-export function useMatchDetail(matchId: string | null): UseQueryResult<EliminationMatchDetail> {
-  return useQuery({
+/**
+ * O combate — e, ao contrário do assalto de poule, **com** *polling*.
+ *
+ * Um assalto de poule tem a lista por baixo a revalidar por ele; um combate não tem lista nenhuma
+ * (contrato §5: *"não há `ETag` do lado da eliminatória, porque não há lista"*). Este pedido é a
+ * única coisa que traz notícias da pista, e há uma que o árbitro não pode perder: um combate
+ * entregue com `ready: false` **destranca-se sozinho** quando a ronda anterior acaba. Sem isto ele
+ * ficava a olhar para um ecrã trancado à espera de nada.
+ *
+ * A cadência é a do ecrã de assalto (contrato §5): 30 s com o cronómetro parado, **pausada** com
+ * ele a correr — não se interrompe uma arbitragem para perguntar por dados que não mudam a meio.
+ */
+export function useMatchDetail(matchId: string | null): UseQueryResult<MatchDetail> {
+  const applySummary = useSessionStore((s) => s.applySummary);
+  const refetchInterval = usePollInterval();
+
+  const query = useQuery({
     queryKey: queryKeys.match(matchId ?? ''),
     enabled: matchId !== null,
+    refetchInterval,
     retry: retryPolicy,
     staleTime: POLL_INTERVAL_BOUT_MS,
     queryFn: () => api.getMatch(matchId as string),
   });
+
+  // O combate **é** o *summary* desta sessão: o cabeçalho, o "Sair" e o resumo leem-no do store.
+  const match = query.data;
+
+  useEffect(() => {
+    if (match) applySummary({ match });
+  }, [match, applySummary]);
+
+  return query;
 }

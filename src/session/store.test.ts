@@ -1,9 +1,9 @@
 import { resetApp } from '@/__tests__/support/app';
-import { state as fakeState, seedPoule, seedTournament } from '@/__tests__/support/fakeApi';
+import { state as fakeState, seedMatch, seedPoule } from '@/__tests__/support/fakeApi';
 import { configureClient, request } from '@/api/client';
 import type { PouleSummary } from '@/api/types';
 
-import { competitionUuid, millisUntilExpiry, phaseFor, useSessionStore } from './store';
+import { competitionKey, millisUntilExpiry, phaseFor, useSessionStore } from './store';
 
 /** Uma poule fechada, com ou sem quadro gerado — as duas leituras de `locked` (contrato §7). */
 const locked = (elimination: PouleSummary['elimination']): PouleSummary => ({
@@ -30,14 +30,20 @@ describe('sessão', () => {
     expect(state.expiresAt).not.toBeNull();
   });
 
-  it('um PIN de torneio abre o quadro em vez da poule', async () => {
+  it('um PIN de combate abre o combate, que vem já na resposta do connect', async () => {
     await useSessionStore.getState().connect('777777');
 
     const state = useSessionStore.getState();
-    expect(state.phase).toBe('bracket');
-    expect(state.scope).toBe('tournament');
+    expect(state.phase).toBe('match');
+    expect(state.scope).toBe('match');
     expect(state.poule).toBeNull();
-    expect(competitionUuid(state)).toBe(state.tournament?.uuid);
+    // Sem um segundo pedido pelo meio: o combate inteiro vem no `connect` (contrato §7).
+    expect(state.match).toMatchObject({
+      id: 'm_1',
+      target: 15,
+      competition_name: expect.any(String),
+    });
+    expect(competitionKey(state)).toBe('m_1');
   });
 
   it('propaga o erro do servidor para o ecrã o apresentar', async () => {
@@ -91,14 +97,16 @@ describe('progresso e mudança de fase', () => {
     expect(useSessionStore.getState().phase).toBe('poule');
   });
 
-  it('a poule fechar com quadro gerado passa à fase de quadro sozinha', async () => {
+  it('a poule fechar deixa-a em leitura — o quadro corre em códigos que este token não alcança', async () => {
     await useSessionStore.getState().connect('111111');
 
+    // Até à `1.5.0` isto levava ao quadro. Na `2.0.0` um token de poule não alcança quadro
+    // nenhum, nem sequer o desenhado a partir dela: o que a app faz é dizê-lo (contrato §7).
     useSessionStore
       .getState()
       .applySummary({ poule: locked({ matches_total: 3, matches_done: 0 }) });
 
-    expect(useSessionStore.getState().phase).toBe('bracket');
+    expect(useSessionStore.getState().phase).toBe('read_only');
   });
 
   it('a poule fechar sem quadro fica em só leitura, e não acaba a sessão', async () => {
@@ -110,10 +118,18 @@ describe('progresso e mudança de fase', () => {
   });
 
   it('phaseFor decide a fase pelo âmbito e pelo fecho da poule', () => {
-    expect(phaseFor('tournament', null)).toBe('bracket');
+    expect(phaseFor('match', null, seedMatch())).toBe('match');
     expect(phaseFor('poule', seedPoule())).toBe('poule');
-    expect(phaseFor('poule', locked({ matches_total: 3, matches_done: 1 }))).toBe('bracket');
+    expect(phaseFor('poule', locked({ matches_total: 3, matches_done: 1 }))).toBe('read_only');
     expect(phaseFor('poule', locked(null))).toBe('read_only');
+  });
+
+  it('um âmbito que a app não conheça nunca cai no ramo da poule', () => {
+    // É este o bug que a `2.0.0` provocava numa app tipada para a `1.5.0`: o `scope: "match"` caía
+    // no ramo da poule, a poule vinha `null`, e o primeiro pedido era `/poules/undefined/bouts`.
+    expect(phaseFor('tournament' as never, null)).toBe('disconnected');
+    expect(phaseFor('match', null, null)).toBe('disconnected');
+    expect(phaseFor('poule', null)).toBe('disconnected');
   });
 });
 
@@ -169,11 +185,12 @@ describe('janela deslizante', () => {
     expect(millisUntilExpiry('2026-07-24T16:59:00Z', now)).toBe(-60_000);
   });
 
-  it('a competição da fila é a que estiver ligada, seja poule ou torneio', () => {
-    expect(competitionUuid({ poule: null, tournament: null })).toBeNull();
-    expect(competitionUuid({ poule: seedPoule(), tournament: null })).toBe(fakeState.poule!.uuid);
+  it('a pista da fila é a que estiver ligada: o UUID da poule, ou o id do combate', () => {
+    expect(competitionKey({ poule: null, match: null })).toBeNull();
+    expect(competitionKey({ poule: seedPoule(), match: null })).toBe(fakeState.poule!.uuid);
 
-    const tournament = seedTournament();
-    expect(competitionUuid({ poule: null, tournament })).toBe(tournament.uuid);
+    // Um combate não tem UUID — tem o seu id opaco, e é esse que agrupa a fila (spec §8).
+    const match = seedMatch();
+    expect(competitionKey({ poule: null, match })).toBe(match.id);
   });
 });

@@ -1,7 +1,7 @@
 /**
  * Tipos do contrato de API — fonte de verdade única.
  *
- * Tipados a partir de `docs/API-CONTRACT.md` v1.5.0 (§7 Endpoints, §8 Catálogo de erros,
+ * Tipados a partir de `docs/API-CONTRACT.md` v2.0.1 (§7 Endpoints, §8 Catálogo de erros,
  * §9 Emparelhamento QR/PIN). Este ficheiro não contém mais nada: sem lógica, sem helpers.
  *
  * Regra de tolerância (contrato §1): a app ignora campos que não conhece e nunca falha por os
@@ -9,12 +9,17 @@
  */
 
 /**
- * Versão do contrato **em vigor nos dois lados**. A plataforma passou a servi-lo por inteiro
- * (contrato §11) e a app passou a falar com ela — deixou de ser a versão só do documento.
+ * Versão do contrato **em vigor nos dois lados**. A `2.0.0` é a versão em que o código de árbitro
+ * deixou de ser da competição e passou a ser **da pista**: uma poule tem o seu, e cada combate de
+ * eliminatória tem um só dele. A `2.0.1` é redação — o documento a registar que a app migrou.
  */
-export const API_CONTRACT_VERSION = '1.5.0';
+export const API_CONTRACT_VERSION = '2.0.1';
 
-/** Prefixo de versão da API. Um MAJOR do contrato implica um prefixo novo. */
+/**
+ * Prefixo de versão da API. Um MAJOR do contrato implica normalmente um prefixo novo — a `2.0.0`
+ * abre uma exceção explícita (contrato §1): não há nenhuma app instalada e o `/api/v1` nunca serviu
+ * produção, portanto não há versão antiga com que coexistir. A regra vale para a próxima.
+ */
 export const API_PREFIX = '/api/v1';
 
 // ─── Objetos partilhados (contrato §7) ──────────────────────────────────────
@@ -59,7 +64,13 @@ export interface Bout {
 /** Arma da competição. Determina que regras a app oferece — não há passividade no sabre. */
 export type Weapon = 'foil' | 'epee' | 'sabre';
 
-/** Progresso do quadro de uma poule. `null` no `PouleSummary` enquanto o quadro não existir. */
+/**
+ * Progresso do quadro **para onde os atletas desta poule foram** — o da própria poule quando ela
+ * corre sozinha, o do torneio quando ela é uma pool de várias.
+ *
+ * **Informativo, não navegável** (contrato §7): esta sessão não alcança o quadro. Serve para a app
+ * dizer onde a competição foi, não para lá ir.
+ */
 export interface EliminationProgress {
   matches_total: number;
   matches_done: number;
@@ -93,33 +104,56 @@ export interface PouleSummary {
    * `false` → poule isolada: o plantel muda, a ordem é regerada, não há "próximo assalto".
    */
   ordered: boolean;
-  /** `null` enquanto o quadro não existir. Presente → há quadro desta poule para arbitrar. */
+  /**
+   * `null` enquanto não houver quadro. Presente → o progresso do quadro para onde estes atletas
+   * foram. **Informativo:** esta sessão não o alcança, e cada combate dele tem código próprio.
+   */
   elimination: EliminationProgress | null;
 }
 
-/** O equivalente para uma sessão de âmbito `tournament`, que arbitra o quadro e mais nada. */
-export interface TournamentSummary {
-  uuid: string;
-  name: string;
+/** Presets do cronómetro, iguais nos dois detalhes. Todos vêm da API, nenhum é hardcoded. */
+export interface ClockPresets {
+  /** Toques que terminam o assalto. `touch_cap` na poule, 15 por omissão no quadro. */
+  target: number;
+  /** Duração de **um** período, em segundos. */
+  duration_seconds: number;
+  /** Nº de períodos. `1` em poule, `3` por omissão num quadro. */
+  periods: number;
+  rest_seconds?: number | null;
+  sudden_death_seconds?: number | null;
+  passivity_seconds?: number | null;
   weapon?: Weapon | null;
-  /** Progresso do quadro. `0`/`0` enquanto o quadro não for gerado. */
-  matches_total: number;
-  matches_done: number;
-  /** `true` → o quadro já não aceita escrita. */
-  locked: boolean;
 }
 
-export interface EliminationMatch {
+/**
+ * O combate de eliminatória — **uma forma só**, porque uma sessão de combate só tem esta.
+ *
+ * É o que o `POST /connect` e o `GET /session` devolvem quando o código é de uma pista de quadro, e
+ * é o que o `GET /elimination/{match}` devolve. Até à `1.5.0` havia duas formas — uma de lista e uma
+ * de detalhe — porque havia uma lista; com o quadro fora da API, sobra o combate.
+ */
+export interface MatchDetail extends ClockPresets {
   /** Id **opaco**, como o do assalto. */
   id: string;
-  /** Tamanho do quadro — `8` num quadro de 8. Constante em todas as rondas. */
+  /**
+   * A prova a que o combate pertence — a poule quando o quadro é de uma poule, o torneio quando é
+   * de um torneio. É a única coisa que diz ao árbitro onde está: chegou com seis dígitos e mais nada.
+   */
+  competition_name: string;
+  /**
+   * Tamanho do quadro — `8` num quadro de 8. **Pode vir `0`** num quadro sem ronda 1 (contrato §12):
+   * não desenhar nada a partir daqui sem o verificar.
+   */
   bracket: number;
   /** Ronda, a contar do início do quadro. A app **não** deduz o nome da ronda daqui. */
   round: number;
   /** Posição dentro da ronda. É a ordem por que as pistas são chamadas. */
   position: number;
   status: BoutStatus;
-  /** `false` → um dos lados ainda espera o vencedor da ronda anterior. Não abre. */
+  /**
+   * `false` → um dos lados ainda espera o vencedor da ronda anterior. O combate **abre** — o código
+   * pode ser entregue antes de se saber quem sobe — mas não pode ser começado nem pontuado.
+   */
   ready: boolean;
   /** `null` enquanto o lugar não estiver preenchido. `number` é sempre `null` aqui. */
   fencer_a: Fencer | null;
@@ -128,6 +162,10 @@ export interface EliminationMatch {
   score_b: number | null;
   scored_at: string | null;
   scored_by_me: boolean;
+  /** `false` — um combate de quadro tem de ter vencedor, senão ninguém sobe. */
+  allow_draw: boolean;
+  /** `true` → **este** combate já foi arbitrado. Só leitura. */
+  locked: boolean;
 }
 
 // ─── POST /connect ──────────────────────────────────────────────────────────
@@ -139,18 +177,27 @@ export interface ConnectRequest {
   device_name?: string;
 }
 
-/** O que a sessão alcança. Determina o resto da resposta e o ecrã que a app abre. */
-export type SessionScope = 'poule' | 'tournament';
+/**
+ * O que a sessão alcança — **uma pista**, e a pista é de um de dois tipos (contrato §6).
+ *
+ * `poule` alcança o cartão de uma poule e **nenhum** quadro, nem sequer o desenhado a partir dela.
+ * `match` alcança **um** combate de eliminatória, e não o da pista ao lado. Não há âmbito de
+ * torneio: um torneio nunca foi arbitrado como um todo, e agora não tem por onde o ser.
+ */
+export type SessionScope = 'poule' | 'match';
 
 export interface ConnectResponse {
   token: string;
   /** ISO-8601 UTC. */
   expires_at: string;
   scope: SessionScope;
-  /** `PouleSummary` com `scope: 'poule'`; `null` com `scope: 'tournament'`. */
+  /** `PouleSummary` com `scope: 'poule'`; `null` com `scope: 'match'`. */
   poule: PouleSummary | null;
-  /** `TournamentSummary` com `scope: 'tournament'`; `null` com `scope: 'poule'`. */
-  tournament: TournamentSummary | null;
+  /**
+   * `MatchDetail` com `scope: 'match'`; `null` com `scope: 'poule'`. Vem já aqui: o árbitro escreve
+   * seis dígitos e o combate abre, sem um segundo pedido pelo meio (contrato §7).
+   */
+  match: MatchDetail | null;
 }
 
 // ─── GET /poules/{poule}/bouts ──────────────────────────────────────────────
@@ -185,34 +232,7 @@ export interface StandingsResponse {
   standings: Standing[];
 }
 
-// ─── GET /poules/{poule}/elimination · /tournaments/{tournament}/elimination ─
-
-export interface PouleEliminationResponse {
-  poule: PouleSummary;
-  /** Já ordenados por `round` e depois por `position`. Vazio → quadro por gerar. */
-  matches: EliminationMatch[];
-}
-
-export interface TournamentEliminationResponse {
-  tournament: TournamentSummary;
-  matches: EliminationMatch[];
-}
-
 // ─── GET /bouts/{bout} · GET /elimination/{match} ───────────────────────────
-
-/** Presets do cronómetro, iguais nos dois detalhes. Todos vêm da API, nenhum é hardcoded. */
-export interface ClockPresets {
-  /** Toques que terminam o assalto. `touch_cap` na poule, 15 por omissão no quadro. */
-  target: number;
-  /** Duração de **um** período, em segundos. */
-  duration_seconds: number;
-  /** Nº de períodos. `1` em poule, `3` por omissão num quadro. */
-  periods: number;
-  rest_seconds?: number | null;
-  sudden_death_seconds?: number | null;
-  passivity_seconds?: number | null;
-  weapon?: Weapon | null;
-}
 
 export interface BoutDetail extends ClockPresets {
   id: string;
@@ -228,22 +248,7 @@ export interface BoutDetail extends ClockPresets {
   poule_locked: boolean;
 }
 
-export interface EliminationMatchDetail extends ClockPresets {
-  id: string;
-  bracket: number;
-  round: number;
-  position: number;
-  status: BoutStatus;
-  ready: boolean;
-  fencer_a: Fencer | null;
-  fencer_b: Fencer | null;
-  score_a: number | null;
-  score_b: number | null;
-  /** `false` — um combate de quadro tem de ter vencedor, senão ninguém sobe. */
-  allow_draw: boolean;
-  /** `true` → quadro fechado, só leitura. */
-  locked: boolean;
-}
+/* O detalhe do combate é o `MatchDetail` lá de cima — uma forma só (contrato §7). */
 
 // ─── POST .../start ─────────────────────────────────────────────────────────
 
@@ -256,13 +261,7 @@ export interface StartResponse {
 
 /** Conjunto fechado (contrato §7). Um `type` fora da lista devolve `422 validation_failed`. */
 export type BoutEventType =
-  | 'touch'
-  | 'double'
-  | 'card_yellow'
-  | 'card_red'
-  | 'card_black'
-  | 'priority'
-  | 'period_end';
+  'touch' | 'double' | 'card_yellow' | 'card_red' | 'card_black' | 'priority' | 'period_end';
 
 export interface BoutEvent {
   type: BoutEventType;
@@ -349,12 +348,16 @@ export interface ScoreConflictCurrent {
 
 // ─── GET /session ───────────────────────────────────────────────────────────
 
-/** Mesma forma do `POST /connect`, sem o `token` — que a app já tem. */
+/**
+ * Mesma forma do `POST /connect`, sem o `token` — que a app já tem. É por aqui que uma app
+ * relançada descobre que a poule entretanto fechou, ou que o combate que tinha na mão já foi
+ * arbitrado pela web.
+ */
 export interface SessionResponse {
   expires_at: string;
   scope: SessionScope;
   poule: PouleSummary | null;
-  tournament: TournamentSummary | null;
+  match: MatchDetail | null;
 }
 
 // ─── Erros (contrato §3 e §8) ───────────────────────────────────────────────

@@ -15,7 +15,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { lockPortrait } from '@/bout';
 import '@/i18n';
 import { DRAIN_INTERVAL_MS, drainQueue } from '@/queue/drain';
-import { competitionUuid, useSessionStore } from '@/session/store';
+import { competitionKey, useSessionStore } from '@/session/store';
 import { colors } from '@/ui';
 
 void SplashScreen.preventAutoHideAsync();
@@ -58,7 +58,7 @@ export default function RootLayout() {
     const subscription = AppState.addEventListener('change', (status: AppStateStatus) => {
       const active = status === 'active';
       focusManager.setFocused(active);
-      if (active) void drainQueue(competitionUuid(useSessionStore.getState()));
+      if (active) void drainQueue(competitionKey(useSessionStore.getState()));
     });
 
     return () => subscription.remove();
@@ -67,7 +67,7 @@ export default function RootLayout() {
   /** A rede pode voltar sem a app sair do ecrã. De 30 em 30 s tenta-se de novo (spec §8). */
   useEffect(() => {
     const id = setInterval(
-      () => void drainQueue(competitionUuid(useSessionStore.getState())),
+      () => void drainQueue(competitionKey(useSessionStore.getState())),
       DRAIN_INTERVAL_MS,
     );
     return () => clearInterval(id);
@@ -87,7 +87,6 @@ export default function RootLayout() {
           <Stack.Screen name="timer" />
           <Stack.Screen name="poule" />
           <Stack.Screen name="bout/[id]" />
-          <Stack.Screen name="bracket" />
           <Stack.Screen name="match/[id]" />
           <Stack.Screen name="complete" />
         </Stack>

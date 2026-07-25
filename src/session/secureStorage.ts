@@ -49,7 +49,12 @@ export async function readSession(): Promise<StoredSession | null> {
 
     if (!token || !baseUrl) return null;
 
-    return { token, baseUrl, scope: scope === 'tournament' ? 'tournament' : 'poule' };
+    // Um `scope` que esta versão não conheça — o `'tournament'` de uma instalação anterior à
+    // `2.0.0`, por exemplo — não pode ser lido como poule: o token dele não alcança poule nenhuma.
+    // Sem sessão utilizável, a app abre no ecrã de ligar, que custa seis dígitos.
+    if (scope !== 'poule' && scope !== 'match') return null;
+
+    return { token, baseUrl, scope };
   } catch {
     return null;
   }

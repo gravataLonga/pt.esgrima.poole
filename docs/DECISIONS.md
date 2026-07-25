@@ -1099,3 +1099,96 @@ As duas folhas dizem a mesma coisa, e é o que torna as duas seguras: o PIN é d
 múltipla** (contrato §9, decisão da spec §3), portanto voltar a entrar é escrever seis dígitos. Se
 sair fosse caro — se o PIN se gastasse — este ADR teria de ser outro, com um passo de confirmação
 muito mais pesado.
+
+---
+
+## ADR-032 — O quadro saiu da app, e o combate passou a ser a sessão
+
+**Data:** 2026-07-25 · **Estado:** aceite · **Contrato:** `2.0.0`
+
+O contrato desceu o código de árbitro da competição para a **pista**: cada combate de eliminatória
+passou a ter o seu PIN, e o `scope` da sessão passou a `poule | match`. A razão vem do pavilhão e
+está na §7 do contrato — um quadro de 16 corre em oito pistas ao mesmo tempo, e um código só para o
+quadro inteiro dava a cada um dos oito árbitros todos os combates. Pior: como um código segura um
+dispositivo de cada vez, o segundo a lê-lo tirava a sessão ao primeiro.
+
+Do lado da app, a consequência não é uma mudança de tipos — é uma mudança de produto.
+
+### `app/bracket.tsx` foi apagado, e nada ficou no lugar
+
+Os dois endpoints que o alimentavam saíram da API. Não há como desenhar o quadro, e não deve haver:
+uma sessão alcança **um** combate, e desenhar o resto seria desenhá-lo a partir de dados a que ela
+não tem direito. Quem quer o quadro inteiro abre a página do organizador, que é onde ele é
+desenhado, semeado e onde os códigos são distribuídos — um por cartão.
+
+Isto apaga também a transição `poule fechada → quadro`, que era a peça mais elaborada do *store*: o
+`bracketAnnounced`, o `markBracketAnnounced` e o *redirect* de uma vez só. Uma poule que fecha passa
+a **ler-se**, com o `elimination` ao lado a dizer o progresso do quadro para onde os atletas foram, e
+uma frase a explicar que cada combate tem código próprio. O banner substitui um ecrã inteiro, e tem
+de o fazer: sem ele o árbitro vê uma lista que deixou de aceitar resultados e não tem nada que lho
+explique.
+
+### O ecrã do combate herdou o que a lista carregava
+
+Era uma rota-folha: chegava-se lá a partir do quadro, e o quadro carregava o cabeçalho, a barra de
+sessão, o banner da fila e o "Sair". Sem quadro, o combate é o **único** ecrã da sessão e passou a
+carregar tudo isso. Duas consequências que valem a pena estar escritas:
+
+- **Não há galho de "voltar".** O `BoutScreen` passou a receber `back?: () => void` em vez de
+  `home: Href`, e num combate não recebe nada: as saídas são o "Sair", que revoga o token, e registar
+  o resultado. Um galho que apontasse a um ecrã que não existe era pior do que não haver galho.
+- **`ready: false` ganhou ecrã próprio.** O código de uma pista pode ser entregue antes de se saber
+  quem lá joga, e até aqui esse caso era tratado pela *lista* — a linha aparecia e não abria. Agora
+  é o ecrã inteiro: os dois lugares, sem cronómetro e sem contadores. **Não se monta o motor do
+  assalto**, porque sem atletas não há o que cronometrar e o servidor recusaria o resultado com
+  `409 match_not_ready`.
+
+### O `useMatchDetail` passou a fazer *polling*, e é isso que destranca o ecrã
+
+Um assalto de poule tem a lista por baixo a revalidar por ele. Um combate não tem lista nenhuma — o
+contrato §5 diz isso mesmo ao explicar porque não há `ETag` do lado da eliminatória. Este pedido
+passou a ser a única fonte de notícias da pista, e há uma que o árbitro não pode perder: um combate
+entregue por preencher **destranca-se sozinho** quando a ronda anterior acaba. Sem *polling* ele
+ficava a olhar para um ecrã trancado à espera de nada. A cadência é a do ecrã de assalto — 30 s com o
+cronómetro parado, pausada com ele a correr.
+
+### Quem decide para onde se vai é a rota, não o ecrã
+
+Registar o resultado de um combate **encerra a sessão** do lado do servidor. O `BoutScreen` ganhou
+`onFinished(result)`, chamado quando o resultado passa a ser a palavra final do árbitro — registado
+ou em fila. A rota da poule ignora-o e volta à lista; a rota do combate escreve o resultado no
+*store* e leva ao resumo.
+
+**O resultado tem de viajar por aí e não por uma releitura**, e é a parte que só se vê ao usar: com
+a rede em baixo, releitura nenhuma o traz, e o resumo mostrava um combate por pontuar por cima de um
+resultado que o árbitro tinha acabado de dar.
+
+### A fila ganhou uma segunda contagem, e é uma aresta nova
+
+A fila é filtrada por pista, e tem de ser: um token de combate não alcança outro combate. Com um
+código por pista, isso abre um caso que antes não existia:
+
+1. o árbitro regista o resultado da pista 3 **sem rede**;
+2. a sessão da pista 3 acaba ali — não há mais nada a arbitrar nela;
+3. o árbitro liga-se à pista 5, com outro código;
+4. o resultado da pista 3 **não drena**, e não há token que o possa entregar a não ser o daquela
+   pista.
+
+Com o quadro inteiro num só código isto não acontecia: a sessão continuava viva e a fila drenava.
+Não há forma de a app resolver isto sozinha — o que ela pode fazer é **não fingir que está a tratar
+do assunto**. O `QueueBanner` passou a contar à parte o que pertence a outra pista, e diz o que é
+preciso: voltar a ligar-se com aquele código. Resolver resolve-se rodando o PIN daquela pista, ou
+registando o resultado na web.
+
+### O `410 competition_finished` passou a mostrar o texto do servidor
+
+Ia contra a regra escrita no `useConnect`: a app está em `en` e traduz os `code` que conhece, para
+não misturar duas línguas no mesmo ecrã. Mas esta é a única `message` do contrato que **muda com o
+caso** — diz se a poule fechou por um quadro, se foi toda disputada, ou se o combate já foi
+arbitrado — e, quando é a primeira, diz para onde ir: *"cada combate das eliminatórias tem o seu
+próprio código — peça o da sua pista."*
+
+Uma constante em `en` no lugar disso deixa o árbitro parado à espera do organizador no meio de um
+evento que claramente não terminou. **A frase certa na língua errada desbloqueia-o; a frase errada
+na língua certa não.** A saída limpa é um `reason` traduzível vindo do servidor, e isso é uma
+alteração MINOR do contrato — que se faz alterando o documento primeiro.

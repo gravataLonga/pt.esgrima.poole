@@ -39,7 +39,6 @@ export default function PouleScreen() {
   const { t } = useTranslation();
   const phase = useSessionStore((s) => s.phase);
   const poule = useSessionStore((s) => s.poule);
-  const bracketAnnounced = useSessionStore((s) => s.bracketAnnounced);
 
   const [view, setView] = useState<PouleView>('bouts');
 
@@ -57,10 +56,6 @@ export default function PouleScreen() {
 
   if (phase === 'disconnected') return <Redirect href="/connect" />;
   if (phase === 'complete') return <Redirect href="/complete" />;
-  // A poule fechou e o quadro abriu: a app muda de fase sozinha, sem pedir código novo (spec §6).
-  // **Uma vez.** Feita a transição, a lista continua alcançável — fechada para escrita, mas os
-  // resultados já registados são metade do uso deste ecrã, e o quadro tem um botão para cá voltar.
-  if (phase === 'bracket' && !bracketAnnounced) return <Redirect href="/bracket" />;
   if (!poule) return <Redirect href="/connect" />;
 
   const readOnly = phase === 'read_only';
@@ -98,22 +93,22 @@ export default function PouleScreen() {
       <SessionBar offline={bouts.isError} />
       <QueueBanner />
 
-      {readOnly ? <Banner message={t('poule.readOnly')} tone="warning" /> : null}
-
-      {/* Enquanto a poule e o quadro coexistem, o quadro fica a um toque. Quando a poule fecha, a
-          transição deixa de precisar deste botão — passa a ser automática. */}
-      {poule.elimination ? (
-        <View style={styles.bracketLink}>
-          <Button
-            label={t('poule.openBracket', {
-              done: poule.elimination.matches_done,
-              total: poule.elimination.matches_total,
-            })}
-            variant="secondary"
-            size="compact"
-            onPress={() => router.push('/bracket')}
-          />
-        </View>
+      {/* A poule fechou porque a competição passou ao quadro — e o quadro corre em códigos que
+          este token não alcança (contrato §7). Este banner substitui um ecrã inteiro: sem ele, o
+          árbitro vê uma lista que deixou de aceitar resultados e não tem nada que lho explique.
+          Com o `elimination` ao lado, tem o número para dizer para onde a competição foi. */}
+      {readOnly ? (
+        <Banner
+          tone="warning"
+          message={
+            poule.elimination
+              ? t('poule.readOnly.withBracket', {
+                  done: poule.elimination.matches_done,
+                  total: poule.elimination.matches_total,
+                })
+              : t('poule.readOnly.noBracket')
+          }
+        />
       ) : null}
 
       <View style={styles.switcher}>
@@ -374,9 +369,6 @@ const styles = StyleSheet.create({
   progress: {
     gap: spacing.xs,
     marginTop: spacing.sm,
-  },
-  bracketLink: {
-    marginBottom: spacing.sm,
   },
   switcher: {
     marginBottom: spacing.md,

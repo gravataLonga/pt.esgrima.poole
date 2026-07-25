@@ -5,10 +5,10 @@
   "connect": {
     "logoLabel": "Esgrima.pt",
     "eyebrow": "Arbitragem",
-    "title": "Ligar a uma poule",
-    "intro": "Lê o QR da folha de poule ou introduz o PIN de 6 dígitos.",
+    "title": "Ligar à sua pista",
+    "intro": "Lê o QR da tua pista — folha de poule ou cartão do combate — ou introduz o PIN de 6 dígitos.",
     "scan": "Ler QR",
-    "scanHint": "Aponta a câmara à folha de poule.",
+    "scanHint": "Aponta a câmara à folha de poule ou ao cartão do combate.",
     "or": "ou",
     "pinLabel": "PIN",
     "submit": "Ligar",
@@ -16,7 +16,7 @@
     "connecting": "A ligar…",
     "blockedUntil": "Demasiadas tentativas. Tente às {{time}}.",
     "error": {
-      "invalid": "Código inválido. Confirme os seis dígitos na folha de poule.",
+      "invalid": "Código inválido. Confirme os seis dígitos da sua pista.",
       "finished": "Esta competição já terminou.",
       "throttled": "Demasiadas tentativas. Aguarde um momento antes de tentar de novo.",
       "network": "Sem ligação ao servidor. Verifique a rede do pavilhão.",
@@ -24,7 +24,7 @@
     },
     "ended": {
       "token_expired": "A sessão expirou ao fim de 60 minutos sem atividade. Volte a ligar-se.",
-      "token_revoked": "Outro dispositivo assumiu esta competição."
+      "token_revoked": "Outro dispositivo assumiu esta pista."
     }
   },
   "scan": {
@@ -50,7 +50,6 @@
     "resume": "Retomar",
     "pairing": "{{a}} {{nameA}} vs {{b}} {{nameB}}",
     "listTitle": "Assaltos",
-    "readOnly": "Poule bloqueada — as eliminatórias já foram geradas. Modo de leitura.",
     "vs": "vs",
     "viewSwitcher": "Vista da poule",
     "viewBouts": "Assaltos",
@@ -64,10 +63,13 @@
     },
     "loading": "A carregar os assaltos…",
     "empty": "Ainda não há assaltos nesta poule.",
-    "openBracket": "Quadro de eliminatórias — {{done}}/{{total}}",
     "error": {
       "title": "Não foi possível carregar os assaltos",
       "body": "O servidor não respondeu. A app continua a tentar sozinha."
+    },
+    "readOnly": {
+      "withBracket": "Poule fechada — a competição passou às eliminatórias ({{done}}/{{total}} combates decididos). Cada combate tem o seu código de seis dígitos: peça o da sua pista.",
+      "noBracket": "Poule fechada. Modo de leitura."
     }
   },
   "sheet": {
@@ -179,41 +181,27 @@
     "title": "Poule completa",
     "message": "Sessão terminada.",
     "tallyLabel": "assaltos registados",
-    "again": "Ligar a outra poule"
+    "again": "Ligar a outra pista",
+    "matchTitle": "Combate registado",
+    "matchTallyLabel": "resultado final"
   },
   "common": {
     "cancel": "Cancelar",
     "retry": "Tentar de novo"
-  },
-  "bracket": {
-    "eyebrow": "Eliminatórias",
-    "progress": "{{done}} de {{total}} combates",
-    "round": "Ronda {{round}}",
-    "matchTitle": "Ronda {{round}} · {{position}}",
-    "loading": "A carregar o quadro…",
-    "empty": "O quadro ainda não foi gerado. Aparece aqui assim que o organizador o criar.",
-    "locked": "Quadro fechado. Modo de leitura.",
-    "awaiting": "À espera do vencedor",
-    "backToPoule": "Voltar aos assaltos",
-    "state": {
-      "ready": "Pronto",
-      "in_progress": "A decorrer",
-      "waiting": "À espera"
-    }
   },
   "session": {
     "offline": "Sem ligação. A app continua a tentar e nada se perde.",
     "expiring": "A sessão termina em {{minutes}} min. Gere um código novo na plataforma para continuar.",
     "expired": "A sessão terminou.",
     "leave": "Sair",
-    "leaveTitle": "Sair desta competição?",
-    "leaveMessage": "A sessão termina aqui. Volta a ligar-te quando quiseres com os mesmos seis dígitos.",
+    "leaveTitle": "Sair desta pista?",
+    "leaveMessage": "A sessão termina aqui. Volte a ligar-se quando quiser com o mesmo código de seis dígitos.",
     "leaveQueued_one": "{{count}} resultado ainda está à espera de rede. Fica guardado neste telemóvel e é enviado da próxima vez que te ligares.",
     "leaveQueued_other": "{{count}} resultados ainda estão à espera de rede. Ficam guardados neste telemóvel e são enviados da próxima vez que te ligares.",
     "stay": "Ficar",
     "finish": "Concluir",
     "finishTitle": "Concluir aqui?",
-    "finishMessage": "Já não há nada para arbitrar nesta competição. Volta a ligar-te com o mesmo código se precisares de regressar."
+    "finishMessage": "Não sobra nada por arbitrar nesta pista. Volte a ligar-se com o mesmo código se precisar de voltar."
   },
   "queue": {
     "pending_one": "{{count}} resultado guardado neste telemóvel, à espera de rede.",
@@ -225,6 +213,17 @@
       "rejected": "{{label}} foi recusado pelo servidor: {{detail}}",
       "expired": "{{label}} esperou mais de 24 h e foi descartado. O resultado nunca chegou ao servidor.",
       "full": "{{label}} não foi guardado — a fila está cheia (50 resultados). Procure rede antes de registar mais."
+    },
+    "stranded_one": "{{count}} resultado pertence a uma pista a que já não está ligado. Volte a ligar-se com esse código para o enviar.",
+    "stranded_other": "{{count}} resultados pertencem a pistas a que já não está ligado. Volte a ligar-se com esses códigos para os enviar."
+  },
+  "match": {
+    "title": "Ronda {{round}} · {{position}}",
+    "versus": "vs",
+    "awaiting": "À espera do vencedor",
+    "waiting": {
+      "title": "À espera da ronda anterior",
+      "body": "Esta pista é sua. O combate abre sozinho assim que a ronda anterior for decidida — até lá não há nada a fazer aqui."
     }
   }
 }

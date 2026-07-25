@@ -38,7 +38,7 @@ describe('sem ligação', () => {
   it('chega-se lá a partir do ecrã de ligar, sem passar pela poule', async () => {
     const router = renderRouter('./app', { initialUrl: '/connect' });
     await router;
-    await screen.findByText('Connect to a poule');
+    await screen.findByText('Connect to your piste');
 
     await fireEvent.press(screen.getByText('Timer only'));
 

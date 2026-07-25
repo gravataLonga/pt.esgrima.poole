@@ -29,12 +29,16 @@ export interface DrainOutcome {
 }
 
 /**
- * @param competitionUuid Só se drena o que pertence à competição ligada.
+ * @param competitionUuid A pista ligada — UUID da poule, ou id do combate. Só se drena o que é dela.
  *
- * A fila é **por competição** (spec §8). Sem este filtro, ligar-se a uma poule nova com resultados
- * por enviar de outra mandava-os com o token errado: o servidor responde `404` — não é seu — e a
- * app deitava-os fora com um aviso enganador sobre um atleta removido. Ficam onde estão, à espera
- * de quem os possa entregar.
+ * A fila é **por pista** (spec §8). Sem este filtro, ligar-se a uma pista nova com resultados por
+ * enviar de outra mandava-os com o token errado: o servidor responde `404` — não é seu — e a app
+ * deitava-os fora com um aviso enganador sobre um atleta removido. Ficam onde estão, à espera de
+ * quem os possa entregar.
+ *
+ * **Com um código por pista isto passou a ser visível ao árbitro**, e por isso é dito no ecrã: um
+ * resultado que ficou em fila numa pista já arbitrada não drena sozinho na pista seguinte, porque
+ * nenhum token a não ser o daquela o alcança. O `QueueBanner` conta-o à parte e diz o que fazer.
  */
 export async function drainQueue(competitionUuid?: string | null): Promise<DrainOutcome> {
   const outcome: DrainOutcome = { sent: 0, dropped: 0, interrupted: false };
