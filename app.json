@@ -29,7 +29,18 @@
       "expo-router",
       "expo-screen-orientation",
       "expo-status-bar",
-      "expo-splash-screen",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#1D3749",
+          "imageWidth": 220,
+          "android": {
+            "imageWidth": 150
+          }
+        }
+      ],
       "expo-asset"
     ],
     "experiments": {

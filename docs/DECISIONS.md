@@ -497,3 +497,51 @@ ficar verde a correr, e assim cada zona do ecrã mantém um só significado para
 ligada `tone` é `null` — aí quem distingue as colunas é o nome, e mais cor só competiria com ele.
 Os dois pares de contraste (`dark` sobre `green`, `light` sobre `cardRed`) já estavam cobertos por
 `contrast.test.ts`.
+
+## ADR-023 — O logo entra como PNG, não como SVG
+
+**Data:** 2026-07-25 · **Estado:** aceite
+
+O wordmark do design system (`.claude/skills/reference/design/logo-green.svg`) é uma máscara de
+letras atravessada por três barras diagonais — verde `#00F6B9` e branco `#FEFEFE`, as cores que o
+`theme.ts` já tem. Não se reproduz com Views, ao contrário dos ícones desenhados à mão que há pelo
+resto da app: uma máscara não é um retângulo com bordas.
+
+Render de SVG em React Native exige `react-native-svg`, uma dependência **nativa**. Instalá-la por
+causa de uma imagem contraria o [ADR-002](#adr-002--dependências-nativas-instaladas-só-na-fase-que-as-usa),
+e o splash precisa de um ficheiro de imagem de qualquer maneira — o `expo-splash-screen` não aceita
+SVG, seja qual for a biblioteca instalada. Havendo de rasterizar para o splash, rasterizar também
+para o ecrã é o mesmo trabalho e poupa a dependência.
+
+**Decisão:** PNG. `assets/logo.png` com as densidades `@2x`/`@3x` ao lado, que o Metro escolhe
+sozinho, e `assets/splash-icon.png` para o arranque.
+
+**Como se regeneram** (o SVG é a fonte; os PNG são derivados e não se editam à mão):
+
+```sh
+render() {  # $1 svg · $2 largura · $3 altura · $4 saída
+  printf '<!doctype html><style>html,body{margin:0;background:transparent}svg{display:block;width:%dpx;height:%dpx}</style>' "$2" "$3" > /tmp/logo.html
+  cat "$1" >> /tmp/logo.html
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --disable-gpu \
+    --default-background-color=00000000 --force-device-scale-factor=1 \
+    --window-size="$2,$3" --screenshot="$4" file:///tmp/logo.html
+}
+SVG=.claude/skills/reference/design/logo-green.svg
+render $SVG 150  40 assets/logo.png
+render $SVG 300  80 assets/logo@2x.png
+render $SVG 450 120 assets/logo@3x.png
+render $SVG 900 240 assets/splash-icon.png
+```
+
+**Consequências:**
+
+- **A variante é a `logo-green`**, com barras verdes e brancas: foi desenhada para fundo escuro, que
+  é o do ecrã de ligar (`tone="dark"`) e o do splash (`backgroundColor` a `#1D3749`, o `colors.dark`).
+  A `logo-mono` é a mesma coisa toda em branco, para quando não houver verde disponível.
+- **O *eyebrow* do ecrã de ligar deixou de dizer "Esgrima.pt"** — passou a só "Arbitragem". Com o
+  wordmark logo por cima, a marca aparecia duas vezes seguidas.
+- **`imageWidth` do splash é menor em Android** (150 contra 220). O Android 12+ recorta o ícone de
+  arranque num círculo; um wordmark de 3,75:1 só sobrevive inteiro se couber no diâmetro visível.
+  Por verificar em dispositivo — não há aqui como o ver.
+- **O ícone da app continua a ser o placeholder do Expo** (`assets/icon.png`). Precisa de uma marca
+  quadrada, que o design system não tem — o wordmark não serve para ícone.

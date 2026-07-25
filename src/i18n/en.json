@@ -3,7 +3,8 @@
     "name": "Refereeing"
   },
   "connect": {
-    "eyebrow": "Esgrima.pt · Refereeing",
+    "logoLabel": "Esgrima.pt",
+    "eyebrow": "Refereeing",
     "title": "Connect to a poule",
     "intro": "Scan the QR code on the poule sheet or enter the 6-digit PIN.",
     "scan": "Scan QR",

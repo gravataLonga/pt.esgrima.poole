@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   Animated,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -59,6 +60,18 @@ export default function ConnectScreen() {
           bounces={false}
         >
           <View style={styles.header}>
+            {/* A marca em imagem e não desenhada à mão: as barras diagonais do logo atravessam as
+                letras por baixo de uma máscara, e isso não se reproduz com Views. É PNG e não SVG
+                para não trazer o `react-native-svg` — uma dependência nativa por uma imagem
+                (ADR-002). As densidades @2x/@3x estão ao lado; o Metro escolhe a certa. */}
+            <Image
+              source={require('../assets/logo.png')}
+              style={styles.logo}
+              resizeMode="contain"
+              accessibilityRole="image"
+              accessibilityLabel={t('connect.logoLabel')}
+            />
+
             <Text variant="label" color={colors.green} style={styles.eyebrow}>
               {t('connect.eyebrow')}
             </Text>
@@ -259,6 +272,12 @@ const styles = StyleSheet.create({
   header: {
     gap: spacing.sm,
     paddingTop: spacing.xl,
+  },
+  /** Tamanho nativo do @1x — o wordmark não é para dominar o ecrã, é para o assinar. */
+  logo: {
+    width: 150,
+    height: 40,
+    marginBottom: spacing.xs,
   },
   /** Centra o formulário no espaço que sobra — encostado ao fundo ficaria debaixo do teclado. */
   formArea: {

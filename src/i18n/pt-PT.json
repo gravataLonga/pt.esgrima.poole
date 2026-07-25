@@ -3,7 +3,8 @@
     "name": "Arbitragem"
   },
   "connect": {
-    "eyebrow": "Esgrima.pt · Arbitragem",
+    "logoLabel": "Esgrima.pt",
+    "eyebrow": "Arbitragem",
     "title": "Ligar a uma poule",
     "intro": "Lê o QR da folha de poule ou introduz o PIN de 6 dígitos.",
     "scan": "Ler QR",

@@ -26,6 +26,14 @@ describe('fluxo do esqueleto', () => {
     expect(screen.getByText('3 of 15 bouts')).toBeTruthy();
   });
 
+  it('assina o ecrã de abertura com a marca', async () => {
+    await renderRouter('./app', { initialUrl: '/connect' });
+    await screen.findByText('Connect to a poule');
+
+    // O wordmark é uma imagem, e o rótulo é a única forma de o alcançar — no ecrã e no VoiceOver.
+    expect(screen.getByLabelText('Esgrima.pt')).toBeTruthy();
+  });
+
   it('não deixa ligar com o PIN incompleto', async () => {
     await renderRouter('./app', { initialUrl: '/connect' });
     await screen.findByText('Connect to a poule');
