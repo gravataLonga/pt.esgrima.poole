@@ -110,6 +110,19 @@
       "reset": "Repor {{time}}"
     }
   },
+  "timer": {
+    "entry": "Só cronómetro",
+    "entryHint": "Sem ligação. Um assalto, 5 toques, 3:00.",
+    "title": "Cronómetro",
+    "sideGreen": "Verde",
+    "sideRed": "Vermelho",
+    "newBout": "Novo assalto",
+    "newBoutTitle": "Começar um assalto novo?",
+    "newBoutMessage": "O resultado e os cartões atuais são apagados.",
+    "leaveTitle": "Sair do cronómetro?",
+    "leaveMessage": "Nada deste assalto fica guardado.",
+    "leaveDiscard": "Sair"
+  },
   "complete": {
     "title": "Poule completa",
     "message": "Sessão terminada.",

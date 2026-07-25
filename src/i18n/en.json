@@ -110,6 +110,19 @@
       "reset": "Reset to {{time}}"
     }
   },
+  "timer": {
+    "entry": "Timer only",
+    "entryHint": "No connection. One bout, 5 touches, 3:00.",
+    "title": "Timer",
+    "sideGreen": "Green",
+    "sideRed": "Red",
+    "newBout": "New bout",
+    "newBoutTitle": "Start a new bout?",
+    "newBoutMessage": "The current score and cards will be cleared.",
+    "leaveTitle": "Leave the timer?",
+    "leaveMessage": "Nothing from this bout is saved.",
+    "leaveDiscard": "Leave"
+  },
   "complete": {
     "title": "Poule complete",
     "message": "Session ended.",

@@ -427,3 +427,73 @@ hook — o redutor é puro e assim continua.
 **Consequência:** o `−` do contador também pára o tempo. Corrigir um toque a mais é raro e acontece
 com o assalto já parado; distinguir "somar" de "corrigir" acrescentava um ramo à regra para poupar
 um toque no mostrador num caso que quase não existe.
+
+---
+
+## ADR-021 — Modo cronómetro autónomo, sem sessão
+
+**Data:** 2026-07-25 · **Estado:** aceite
+
+A app é um companion: sem poule na plataforma, não fazia nada. Mas nem todo o assalto que se
+arbitra tem poule — treinos, provas locais e amigáveis não têm, e nesses o árbitro precisa
+exatamente do que a app já sabe fazer: contar tempo, contar toques e registar cartões.
+
+Há ainda uma razão de calendário: é a única parte da app inteiramente entregável hoje. Tudo o resto
+espera pela API (F1–F5); isto não espera por nada.
+
+**Decisão:** uma rota nova, `/timer`, em paralelo com o QR e o PIN — não em vez deles. Um assalto,
+offline, sem atletas, sem submissão. O ecrã de ligar ganha uma terceira via; o caminho principal
+continua a ser ligar a uma poule.
+
+**Onde vive:** `app/timer.tsx`. Conduzir o assalto — toques, cartões, prioridade, períodos,
+cronómetro, passividade — vem inteiro do `useBoutEngine`, partilhado com o `/bout/[id]`. Duplicar
+essa parte seria duplicar regra FIE, que é o género de código que não pode divergir entre cópias.
+
+**Regra:** `app/timer.tsx` **não importa `@/session/store`, e não pode passar a importar.** É essa
+ausência que garante que o modo continua a funcionar sem rede quando a F1–F5 trouxerem cliente
+HTTP, fila e expiração de sessão. Verificado em `timer-screen.test.tsx`: a sessão fica em
+`disconnected` do princípio ao fim.
+
+**Consequências:**
+
+- **O empate é resultado legítimo.** `canSubmit`/`needsDecidingTouch` existem porque a plataforma
+  recusa `a === b` (contrato §7, `allow_draw: false`). Sem plataforma não há quem o recuse, e pedir
+  um toque decisivo que ninguém vai receber seria inventar regra. A prioridade continua disponível
+  para quem a queira sortear.
+- **Os presets são fixos:** 5 toques, 3:00, um período. Não há API que os mande, e um ecrã de
+  configuração para os pedir seria mais interface do que o modo inteiro — o `± 10 s` e o "Acertar"
+  do mostrador cobrem o desvio pontual. Rever se aparecer uso real em eliminatórias (15 toques,
+  3 × 3:00).
+- **Nada fica guardado.** Matar a app perde o assalto em curso; é o significado de "um assalto só".
+  Sobreviver ao *background* exigia armazenamento persistente e mais uma dependência nativa
+  ([ADR-002](#adr-002--dependências-nativas-instaladas-só-na-fase-que-as-usa)).
+- O landscape do [ADR-013](#adr-013--landscape-só-no-ecrã-de-assalto) estende-se a esta rota: é um
+  ecrã de assalto como o outro.
+- **Está fora do âmbito da `CLIENT-SPEC.md` §2**, que assume sempre-ligado e exclui o modo
+  espectador. A spec é cópia byte a byte do documento da plataforma e não se altera aqui — quem for
+  dono desse documento do lado Laravel tem de espelhar esta decisão lá.
+
+## ADR-022 — `ScoreColumn` recebe um rótulo, não um `Fencer`
+
+**Data:** 2026-07-25 · **Estado:** aceite
+
+A coluna de resultado recebia um `Fencer` do contrato de API e lia-lhe `name`, `number` e `club` —
+para desenhar **e** para os rótulos de acessibilidade. Sem atletas ([ADR-021](#adr-021--modo-cronómetro-autónomo-sem-sessão))
+não havia o que lhe passar, e um `Fencer` falso com nome "Verde" punha dados inventados a atravessar
+tipos que descrevem respostas do servidor.
+
+**Decisão:** a coluna passa a receber `label`, `number`, `club` e `tone`. `number === null` **é** a
+definição de "não há atletas": colapsa o bloco de nome e dá lugar à faixa de cor. O `label` alimenta
+sempre os rótulos de acessibilidade — nome do atleta com a poule ligada, "Verde"/"Vermelho" sem ela.
+
+**Consequência:** `src/bout/` deixa de importar `@/api/types`. As regras de domínio do assalto já
+não conheciam a API ([ADR-012](#adr-012--cartões-e-prioridade-são-locais-ao-assalto)); agora as
+vistas também não.
+
+**Sobre a cor:** verde à esquerda, vermelho à direita, como as lâmpadas do aparelho — é o que o
+árbitro já chama em voz alta, o que torna "mais um toque para o verde" um rótulo melhor do que
+"para A". Fica confinada à faixa do topo da coluna: o `+` continua verde e o mostrador continua a
+ficar verde a correr, e assim cada zona do ecrã mantém um só significado para a cor. Com a poule
+ligada `tone` é `null` — aí quem distingue as colunas é o nome, e mais cor só competiria com ele.
+Os dois pares de contraste (`dark` sobre `green`, `light` sobre `cardRed`) já estavam cobertos por
+`contrast.test.ts`.

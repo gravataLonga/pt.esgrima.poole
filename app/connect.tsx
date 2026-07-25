@@ -140,6 +140,25 @@ export default function ConnectScreen() {
             />
           </View>
 
+          {/* Em paralelo com o QR e o PIN, não em vez deles: nem todo o assalto que se arbitra tem
+              poule na plataforma — treinos e provas locais não têm. Este caminho não liga a nada e
+              não toca no store da sessão (ADR-021). */}
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push('/timer')}
+            style={({ pressed }) => [styles.timerTile, pressed ? styles.timerTilePressed : null]}
+          >
+            <ClockMark />
+            <View style={styles.scanText}>
+              <Text variant="title" color={colors.light} style={styles.scanTitle}>
+                {t('timer.entry')}
+              </Text>
+              <Text variant="caption" color={colors.grayDark}>
+                {t('timer.entryHint')}
+              </Text>
+            </View>
+          </Pressable>
+
           <Text variant="caption" color={colors.grayDark} style={styles.notice}>
             {t('common.skeletonNotice')}
           </Text>
@@ -206,6 +225,16 @@ function Caret() {
   return <Animated.View style={[styles.caret, { opacity }]} />;
 }
 
+/** Mostrador com dois ponteiros, desenhado com Views — não há biblioteca de ícones instalada. */
+function ClockMark() {
+  return (
+    <View style={styles.clockMark}>
+      <View style={styles.clockHandHour} />
+      <View style={styles.clockHandMinute} />
+    </View>
+  );
+}
+
 /** Os três olhos de um código QR, desenhados com Views — não há biblioteca de ícones instalada. */
 function QrMark() {
   return (
@@ -263,6 +292,46 @@ const styles = StyleSheet.create({
   },
   scanTitle: {
     fontSize: type.lg,
+  },
+  /** Sem `opacity`, ao contrário do `scanTile`: este está vivo. */
+  timerTile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.r16,
+    borderWidth: 1,
+    borderColor: colors.darkBorder,
+    backgroundColor: colors.darkSurface,
+  },
+  timerTilePressed: {
+    borderColor: colors.green,
+  },
+  clockMark: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.full,
+    borderWidth: 4,
+    borderColor: colors.green,
+  },
+  /** Ponteiros a marcar 3:00 — a duração de um assalto de poule. */
+  clockHandHour: {
+    position: 'absolute',
+    width: 2,
+    height: 12,
+    borderRadius: 1,
+    backgroundColor: colors.green,
+    marginBottom: 12,
+  },
+  clockHandMinute: {
+    position: 'absolute',
+    width: 12,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: colors.green,
+    marginLeft: 12,
   },
   divider: {
     flexDirection: 'row',

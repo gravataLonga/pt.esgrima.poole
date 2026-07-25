@@ -6,6 +6,8 @@ export { PASSIVITY_SECONDS, usePassivity } from './usePassivity';
 export { usePriorityDraw } from './usePriorityDraw';
 export { boutTiming, nextClockAction, phaseDuration } from './phase';
 export type { BoutPhase, BoutTiming, ClockAction } from './phase';
+export { useBoutEngine } from './useBoutEngine';
+export type { BoutEngine } from './useBoutEngine';
 export {
   BLACK_CARD_LIMIT,
   PRIORITY_DRAW_STEPS,

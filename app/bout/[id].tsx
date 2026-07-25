@@ -1,32 +1,24 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useReducer, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Vibration, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import {
   Clock,
-  PRIORITY_SECONDS,
   ScoreColumn,
   TimeSheet,
-  boutRules,
   boutTiming,
   canSubmit,
   cardCount,
-  initialBoutRules,
   needsDecidingTouch,
-  nextClockAction,
-  phaseDuration,
   useAllowLandscape,
+  useBoutEngine,
   useIsLandscape,
-  usePassivity,
-  usePriorityDraw,
   winner,
-  type BoutPhase,
   type CardKind,
   type Side,
 } from '@/bout';
 import { useSessionStore } from '@/session/store';
-import { useTimer } from '@/timer/useTimer';
 import {
   Banner,
   Button,
@@ -68,43 +60,21 @@ export default function BoutScreen() {
     [poule?.duration_seconds, poule?.periods, poule?.rest_seconds],
   );
 
-  const [rules, dispatch] = useReducer(boutRules, undefined, () =>
-    initialBoutRules(target, bout?.score_a ?? 0, bout?.score_b ?? 0),
-  );
+  const engine = useBoutEngine({
+    target,
+    timing,
+    initialA: bout?.score_a ?? 0,
+    initialB: bout?.score_b ?? 0,
+  });
+  const { rules, timer } = engine;
 
-  // Período e descanso são fases do assalto, não do cronómetro (ADR-015). A prioridade já vive no
-  // redutor porque decide o vencedor, e é dela que se deriva a terceira fase.
-  const [period, setPeriod] = useState(1);
-  const [resting, setResting] = useState(false);
   const [sheet, setSheet] = useState<'none' | 'time' | 'submit'>('none');
   // O tempo com que a folha de acerto abre, fotografado no toque. Ler `timer.remainingMs` a cada
   // render remontava os campos dez vezes por segundo com o cronómetro a correr.
   const [timeSnapshotMs, setTimeSnapshotMs] = useState(0);
-  // Conta os sinais de combate — toque ou cartão. Cada incremento reinicia o minuto de passividade.
-  const [combatToken, setCombatToken] = useState(0);
-
-  const onPrioritySettled = useCallback(
-    (side: Side) => dispatch({ type: 'drawPriority', side }),
-    [],
-  );
-  const priorityDraw = usePriorityDraw(onPrioritySettled);
 
   useAllowLandscape();
   const landscape = useIsLandscape();
-
-  const phase: BoutPhase = rules.priority ? 'priority' : resting ? 'rest' : 'period';
-  const durationSeconds = phaseDuration(phase, timing, PRIORITY_SECONDS);
-
-  // Fim de tempo tem de ser percetível sem olhar (spec §7). `Vibration` é do core do RN; o som
-  // fica para a F3, com o `expo-av` (ADR-002).
-  const onExpire = useCallback(() => Vibration.vibrate([0, 400, 180, 400]), []);
-  const timer = useTimer(durationSeconds, { onExpire });
-
-  // Não se conta passividade no intervalo: os atletas não estão em pista.
-  const passivity = usePassivity({
-    running: timer.state === 'running' && phase !== 'rest',
-    resetToken: combatToken,
-  });
 
   const touched = rules.a !== (bout?.score_a ?? 0) || rules.b !== (bout?.score_b ?? 0);
 
@@ -139,33 +109,6 @@ export default function BoutScreen() {
 
   const nameOf = (side: Side) => (side === 'a' ? bout.fencer_a.name : bout.fencer_b.name);
 
-  const action = nextClockAction({
-    phase,
-    period,
-    timing,
-    expired: timer.state === 'expired',
-    tied: rules.a === rules.b,
-  });
-
-  const onAction = () => {
-    if (!action) return;
-
-    if (action.kind === 'rest') {
-      setResting(true);
-      return;
-    }
-
-    if (action.kind === 'nextPeriod') {
-      setResting(false);
-      setPeriod(action.period);
-      return;
-    }
-
-    // A piscadela mostra o sorteio a acontecer, como nos aparelhos da FIE. A marca fixa-se no
-    // atleta sorteado quando ela pára — daí não haver aqui nenhum aviso escrito.
-    priorityDraw.start();
-  };
-
   const onSubmit = () => {
     recordScore(bout.id, rules.a, rules.b);
     setSheet('none');
@@ -178,25 +121,6 @@ export default function BoutScreen() {
     black: cardCount(rules, side, 'black'),
   });
 
-  /**
-   * Um toque ou um cartão é sempre precedido de "halt": param o cronómetro, e reiniciam o minuto
-   * de passividade. Fica aqui e não no redutor porque mexe no cronómetro, que é um hook.
-   */
-  const registerCombat = () => {
-    if (timer.state === 'running') timer.toggle();
-    setCombatToken((token) => token + 1);
-  };
-
-  const setScore = (side: Side) => (value: number) => {
-    registerCombat();
-    dispatch({ type: 'touch', side, delta: value > rules[side] ? 1 : -1 });
-  };
-
-  const giveCard = (side: Side) => (kind: CardKind) => {
-    registerCombat();
-    dispatch({ type: 'card', side, kind });
-  };
-
   const submittable = canSubmit(rules);
   const deciding = needsDecidingTouch(rules);
   const decided = winner(rules);
@@ -204,14 +128,14 @@ export default function BoutScreen() {
   const clock = (
     <Clock
       timer={timer}
-      durationSeconds={durationSeconds}
-      phase={phase}
-      period={period}
+      durationSeconds={engine.durationSeconds}
+      phase={engine.phase}
+      period={engine.period}
       timing={timing}
       priorityName={rules.priority ? nameOf(rules.priority) : null}
-      passivityMs={phase === 'rest' ? null : passivity.remainingMs}
-      action={action}
-      onAction={onAction}
+      passivityMs={engine.passivityMs}
+      action={engine.action}
+      onAction={engine.onAction}
       onNudge={timer.adjust}
       onEditTime={() => {
         setTimeSnapshotMs(timer.remainingMs);
@@ -224,15 +148,18 @@ export default function BoutScreen() {
   const columns = (['a', 'b'] as const).map((side) => (
     <ScoreColumn
       key={side}
-      fencer={side === 'a' ? bout.fencer_a : bout.fencer_b}
+      label={side === 'a' ? bout.fencer_a.name : bout.fencer_b.name}
+      number={side === 'a' ? bout.fencer_a.number : bout.fencer_b.number}
+      club={side === 'a' ? bout.fencer_a.club : bout.fencer_b.club}
+      tone={null}
       score={rules[side]}
       opponentScore={side === 'a' ? rules.b : rules.a}
       target={target}
       cards={cardsOf(side)}
       hasPriority={rules.priority === side}
-      flashingPriority={priorityDraw.flashing === side}
-      onChange={setScore(side)}
-      onCard={giveCard(side)}
+      flashingPriority={engine.priorityDraw.flashing === side}
+      onChange={engine.setScore(side)}
+      onCard={engine.giveCard(side)}
       compact={landscape}
     />
   ));
@@ -253,7 +180,7 @@ export default function BoutScreen() {
       label={t('bout.cards.undo')}
       variant="secondary"
       size="compact"
-      onPress={() => dispatch({ type: 'undoCard' })}
+      onPress={engine.undoCard}
     />
   );
 
@@ -318,7 +245,7 @@ export default function BoutScreen() {
       <TimeSheet
         visible={sheet === 'time'}
         remainingMs={timeSnapshotMs}
-        durationSeconds={durationSeconds}
+        durationSeconds={engine.durationSeconds}
         onApply={(ms) => {
           timer.set(ms);
           setSheet('none');

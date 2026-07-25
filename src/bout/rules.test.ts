@@ -182,3 +182,30 @@ describe('submissão', () => {
     expect(needsDecidingTouch(state)).toBe(false);
   });
 });
+
+describe('assalto novo', () => {
+  it('limpa toques, cartões e prioridade, e mantém os presets', () => {
+    const state = run(
+      start(),
+      { type: 'touch', side: 'a', delta: 1 },
+      { type: 'card', side: 'b', kind: 'red' },
+      { type: 'drawPriority', side: 'a' },
+      { type: 'reset' },
+    );
+
+    expect(state).toEqual(initialBoutRules(5));
+  });
+
+  it('não deixa o "anular" alcançar cartões do assalto anterior', () => {
+    // Sem isto, um vermelho dado antes do reset devolveria um toque que já não existe.
+    const state = run(
+      start(),
+      { type: 'card', side: 'a', kind: 'red' },
+      { type: 'reset' },
+      { type: 'undoCard' },
+    );
+
+    expect(state.b).toBe(0);
+    expect(state.cards).toHaveLength(0);
+  });
+});

@@ -41,7 +41,9 @@ export type BoutAction =
   | { type: 'card'; side: Side; kind: CardKind }
   | { type: 'undoCard' }
   /** Sorteio de prioridade. O lado sorteado entra como argumento para o redutor ficar puro. */
-  | { type: 'drawPriority'; side: Side };
+  | { type: 'drawPriority'; side: Side }
+  /** Assalto novo com os mesmos presets. Só o modo cronómetro o usa — ali encadeiam-se assaltos. */
+  | { type: 'reset' };
 
 export function initialBoutRules(target: number, a = 0, b = 0): BoutRulesState {
   return { target, a, b, cards: [], priority: null };
@@ -92,6 +94,10 @@ export function boutRules(state: BoutRulesState, action: BoutAction): BoutRulesS
 
     case 'drawPriority': {
       return { ...state, priority: action.side };
+    }
+
+    case 'reset': {
+      return initialBoutRules(state.target);
     }
   }
 }

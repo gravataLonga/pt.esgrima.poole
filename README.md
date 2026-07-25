@@ -3,6 +3,9 @@
 App de arbitragem de poules de esgrima. Companion da plataforma `poole.esgrima.pt` — o árbitro liga-se
 a **uma** poule por QR ou PIN, conduz os assaltos com cronómetro local e regista os resultados.
 
+Em paralelo, um **modo cronómetro** autónomo: um assalto, offline, sem atletas e sem ligação a nada
+([ADR-021](docs/DECISIONS.md)). É para treinos e provas locais, que não têm poule na plataforma.
+
 **Estado: F0 — Andaimes.** O esqueleto navega e desenha os ecrãs com dados de exemplo. Não há rede,
 câmara, persistência nem cronómetro a contar. Ver [Onde está cada coisa](#onde-está-cada-coisa).
 
@@ -55,10 +58,11 @@ app/                    rotas (expo-router)
   poule.tsx             §6 ecrã 2 — assaltos e folha de poule
   bout/[id].tsx         §6 ecrã 3 — assalto (portrait e landscape)
   complete.tsx          §6 ecrã 5 — poule completa
+  timer.tsx             modo cronómetro — offline, sem atletas (ADR-021)
 src/
   api/                  types.ts (real) · client/endpoints/errors (esqueleto)
   poule/                sheet (classificação + matriz) · status (estados) · vistas
-  bout/                 rules (toques, cartões, prioridade) · Clock · ScoreColumn · orientation
+  bout/                 rules (toques, cartões, prioridade) · useBoutEngine · Clock · ScoreColumn
   session/              store zustand em memória · secureStorage (esqueleto)
   queue/                fila FIFO em memória · drain (esqueleto)
   timer/                format.ts (real) · useTimer (esqueleto)
@@ -85,3 +89,6 @@ classificação FIE da poule ([ADR-011](docs/DECISIONS.md)), e os cartões e a p
 | F4   | Resiliência: fila offline, 409, expiração, poule bloqueada  |           |
 | F5   | Ligação ao servidor real, E2E Maestro                       |           |
 | F6   | Polimento: acessibilidade, som/háptica, legibilidade em sol |           |
+
+O **modo cronómetro** (`/timer`) é ortogonal a esta tabela: não usa rede, por isso não espera por
+fase nenhuma. Está a funcionar a sério — é a única parte da app que não depende do servidor.

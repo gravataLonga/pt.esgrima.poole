@@ -2,13 +2,26 @@ import { useEffect, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
-import type { Fencer } from '@/api/types';
 import { Text, colors, fonts, radius, spacing, touch, type } from '@/ui';
 
 import { BLACK_CARD_LIMIT, type CardKind } from './rules';
 
 export interface ScoreColumnProps {
-  fencer: Fencer;
+  /**
+   * Como este lado se chama: o nome do atleta com a poule ligada, "Verde"/"Vermelho" no modo
+   * cronómetro. É sempre o que os rótulos de acessibilidade dizem — sem isto o VoiceOver leria
+   * dois `+` indistinguíveis.
+   */
+  label: string;
+  /** Número na folha de poule. `null` quando não há atletas: é isso que colapsa o bloco de nome. */
+  number: number | null;
+  /** `null` no modo cronómetro e nos atletas sem clube. */
+  club: string | null;
+  /**
+   * Cor do lado, como nas lâmpadas do aparelho. `null` com a poule ligada — aí quem distingue as
+   * colunas é o nome, e mais cor só competiria com ele.
+   */
+  tone: 'green' | 'red' | null;
   score: number;
   opponentScore: number;
   target: number;
@@ -27,7 +40,10 @@ export interface ScoreColumnProps {
 const CARD_KINDS: CardKind[] = ['yellow', 'red', 'black'];
 
 export function ScoreColumn({
-  fencer,
+  label,
+  number,
+  club,
+  tone,
   score,
   opponentScore,
   target,
@@ -45,33 +61,46 @@ export function ScoreColumn({
 
   return (
     <View style={[styles.column, leading ? styles.columnLeading : null]}>
-      {/* Altura fixa: sem isto, um nome que quebra para duas linhas desalinha as duas colunas. */}
-      <View style={[styles.nameBlock, compact ? styles.nameBlockCompact : null]}>
-        <View style={styles.nameRow}>
-          <View style={styles.numberChip}>
-            <Text variant="caption" color={colors.light} style={styles.numberLabel}>
-              {fencer.number}
-            </Text>
-          </View>
+      {number === null ? (
+        /* Sem atletas não há nada para escrever aqui — sobra a cor do lado, que é como o árbitro
+           já os chama em voz alta. Ocupa a faixa do nome em vez de a deixar vazia. */
+        <View style={[styles.toneBar, tone === 'red' ? styles.toneBarRed : styles.toneBarGreen]}>
+          <Text style={[styles.toneLabel, tone === 'red' ? styles.toneLabelRed : null]}>
+            {label}
+          </Text>
           {hasPriority || flashingPriority ? (
-            <PriorityChip name={fencer.name} settled={hasPriority} />
+            <PriorityChip name={label} settled={hasPriority} />
           ) : null}
         </View>
+      ) : (
+        /* Altura fixa: sem isto, um nome que quebra para duas linhas desalinha as duas colunas. */
+        <View style={[styles.nameBlock, compact ? styles.nameBlockCompact : null]}>
+          <View style={styles.nameRow}>
+            <View style={styles.numberChip}>
+              <Text variant="caption" color={colors.light} style={styles.numberLabel}>
+                {number}
+              </Text>
+            </View>
+            {hasPriority || flashingPriority ? (
+              <PriorityChip name={label} settled={hasPriority} />
+            ) : null}
+          </View>
 
-        <Text
-          variant="label"
-          numberOfLines={compact ? 1 : 2}
-          style={[styles.fencerName, compact ? styles.fencerNameCompact : null]}
-        >
-          {fencer.name}
-        </Text>
-
-        {compact ? null : (
-          <Text variant="caption" numberOfLines={1}>
-            {fencer.club ?? ''}
+          <Text
+            variant="label"
+            numberOfLines={compact ? 1 : 2}
+            style={[styles.fencerName, compact ? styles.fencerNameCompact : null]}
+          >
+            {label}
           </Text>
-        )}
-      </View>
+
+          {compact ? null : (
+            <Text variant="caption" numberOfLines={1}>
+              {club ?? ''}
+            </Text>
+          )}
+        </View>
+      )}
 
       {/* O resultado é o que cede espaço quando a coluna aperta — um banner por cima chegava para
           empurrar os `+`/`−` para fora do cartão. Encolher o número é sempre melhor do que pôr os
@@ -79,7 +108,7 @@ export function ScoreColumn({
       <View style={styles.scoreSlot}>
         {/* Sozinho, o número grande é lido pelo VoiceOver como "5" — sem dizer de quem. */}
         <Text
-          accessibilityLabel={t('bout.scoreLabel', { name: fencer.name, count: score })}
+          accessibilityLabel={t('bout.scoreLabel', { name: label, count: score })}
           numberOfLines={1}
           adjustsFontSizeToFit
           minimumFontScale={0.55}
@@ -93,12 +122,12 @@ export function ScoreColumn({
         </Text>
       </View>
 
-      <CardStrip fencer={fencer} cards={cards} onCard={onCard} />
+      <CardStrip label={label} cards={cards} onCard={onCard} />
 
       <View style={styles.stepper}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={t('bout.removeTouch', { name: fencer.name })}
+          accessibilityLabel={t('bout.removeTouch', { name: label })}
           onPress={() => onChange(Math.max(0, score - 1))}
           disabled={score <= 0}
           style={({ pressed }) => [
@@ -113,7 +142,7 @@ export function ScoreColumn({
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={t('bout.addTouch', { name: fencer.name })}
+          accessibilityLabel={t('bout.addTouch', { name: label })}
           onPress={() => onChange(Math.min(target, score + 1))}
           disabled={score >= target}
           style={({ pressed }) => [
@@ -177,7 +206,7 @@ function PriorityChip({ name, settled }: { name: string; settled: boolean }) {
 }
 
 interface CardStripProps {
-  fencer: Fencer;
+  label: string;
   cards: Record<CardKind, number>;
   onCard: (kind: CardKind) => void;
 }
@@ -190,7 +219,7 @@ interface CardStripProps {
  * A contagem aparece no próprio cartão. Anular é uma ação do ecrã, não de cada cartão: o vermelho
  * mexe no resultado do adversário e um "−" por cartão dava dois sítios para desfazer a mesma coisa.
  */
-function CardStrip({ fencer, cards, onCard }: CardStripProps) {
+function CardStrip({ label, cards, onCard }: CardStripProps) {
   const { t } = useTranslation();
 
   return (
@@ -205,7 +234,7 @@ function CardStrip({ fencer, cards, onCard }: CardStripProps) {
           <Pressable
             key={kind}
             accessibilityRole="button"
-            accessibilityLabel={t(`bout.cards.give.${kind}`, { name: fencer.name })}
+            accessibilityLabel={t(`bout.cards.give.${kind}`, { name: label })}
             accessibilityValue={{ text: t('bout.cards.count', { count }) }}
             accessibilityState={{ disabled: spent }}
             disabled={spent}
@@ -256,6 +285,40 @@ const styles = StyleSheet.create({
   },
   nameBlockCompact: {
     minHeight: 0,
+  },
+  /**
+   * A cor fica confinada a esta faixa. O `+` continua verde e o mostrador continua a ficar verde a
+   * correr — assim cada zona do ecrã mantém um só significado para a cor.
+   */
+  toneBar: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    height: 36,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.r10,
+  },
+  toneBarGreen: {
+    backgroundColor: colors.green,
+  },
+  /**
+   * `cardRed` e não `danger`, apesar de serem o mesmo hex: aqui o vermelho é cor de sinalização
+   * FIE — a lâmpada do aparelho —, não um estado de erro.
+   */
+  toneBarRed: {
+    backgroundColor: colors.cardRed,
+  },
+  toneLabel: {
+    fontFamily: fonts.montserrat,
+    fontSize: type.base,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    color: colors.dark,
+  },
+  toneLabelRed: {
+    color: colors.light,
   },
   scoreSlot: {
     flex: 1,
