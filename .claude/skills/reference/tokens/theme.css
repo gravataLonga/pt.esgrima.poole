@@ -1,0 +1,111 @@
+/**
+ * ESGRIMA.PT DESIGN SYSTEM — TAILWIND v4 THEME
+ * Drop this @theme block into your project's app.css (after @import 'tailwindcss').
+ * Fonts: import Montserrat + Work Sans from Google Fonts before using.
+ *
+ * Google Fonts import (add to <head>):
+ *   <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&family=Work+Sans:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&family=Work+Sans:ital,wght@0,100..900;1,100..900&display=swap');
+@import '../../../../../node_modules/tailwindcss/dist/lib.d.mts';
+
+/* ── Alpine.js cloak ─────────────────────────────────────── */
+[x-cloak] { display: none !important; }
+
+@theme {
+    /* ── Typography ─────────────────────────────────────────── */
+    --font-sans:        'Work Sans', ui-sans-serif, system-ui, sans-serif;
+    --font-montserrat:  'Montserrat', sans-serif;
+    --font-work-sans:   'Work Sans', sans-serif;
+
+    /* ── Colour Palette ─────────────────────────────────────── */
+
+    /* Neutrals */
+    --color-light:          #FEFEFE;   /* site background, light text on dark */
+    --color-dark:           #1D3749;   /* primary dark, headings, backgrounds */
+    --color-black:          #000000;
+
+    /* Grays */
+    --color-gray-dark:      #BBC3C8;   /* disabled text, subtle borders */
+    --color-gray-medium:    #E8EBED;   /* dividers, skeleton bg */
+    --color-gray-light:     #EFF1F2;   /* table stripe, input bg on light */
+
+    /* Brand accent — electric green */
+    --color-green:          #00F6B9;   /* primary CTA, highlights, focus rings */
+    --color-medium-green:   #00E0A9;   /* hover state for green elements */
+    --color-light-green:    #63FFDF;   /* tints, pressed state */
+    --color-green-4:        rgba(0, 246, 185, 0.04); /* ghost button hover bg */
+
+    /* Semantic — Danger */
+    --color-danger:         #DE161A;
+    --color-light-danger:   #FEF3F3;
+
+    /* Semantic — Warning */
+    --color-warning:        #E56B00;
+    --color-light-warning:  #FEF5EB;
+
+    /* Semantic — Success */
+    --color-success:        #008F61;
+    --color-light-success:  #E7F5F2;
+
+    /* ── Border Radius ──────────────────────────────────────── */
+    --radius-none:  0px;
+    --radius-4:     4px;    /* buttons, inputs, small chips */
+    --radius-6:     6px;    /* small cards, tags */
+    --radius-10:    10px;   /* medium cards */
+    --radius-16:    16px;   /* coach cards, panels */
+    --radius-22:    22px;   /* hero image, featured blocks */
+    --radius-full:  9999px; /* pills, avatars */
+
+    /* ── Custom Text Sizes ──────────────────────────────────── */
+    --text-subtitle: 1.5rem;   /* 24px — accent subtitles (green highlights) */
+
+    /* ── Shadows ────────────────────────────────────────────── */
+    --shadow-card:  0 2px 8px 0 rgba(29, 55, 73, 0.08);
+    --shadow-modal: 0 8px 32px 0 rgba(29, 55, 73, 0.18);
+}
+
+/* ── Prose utility (rich text content areas) ────────────── */
+@utility prose {
+    @apply text-dark;
+
+    ol, ul {
+        @apply my-4;
+
+        ol, ul { @apply my-1; }
+
+        li {
+            @apply my-1 ml-6;
+            h1,h2,h3,h4,h5,h6,p { @apply my-1; }
+        }
+    }
+
+    ol { @apply list-decimal; }
+    ol ol { @apply list-[lower-alpha]; }
+    ol ol ol { @apply list-[lower-roman]; }
+    ul { @apply list-disc; }
+
+    table {
+        @apply my-4 w-full table-auto border-collapse text-left text-sm/6;
+        caption { @apply mt-2 caption-bottom text-left text-sm/6; }
+        thead { @apply border-b border-gray-medium; }
+        tfoot { @apply border-t border-gray-medium; }
+        tr { @apply border-y border-gray-medium first:border-t-0 last:border-b-0; }
+        th { @apply align-bottom font-semibold; }
+        td, th { @apply p-2 first:pl-0 last:pr-0; }
+    }
+
+    del { @apply line-through opacity-60; }
+
+    h1,h2,h3,h4,h5,h6 { @apply my-4 font-bold empty:hidden text-dark font-montserrat; }
+    h1 { @apply text-4xl mt-6 tracking-tight; }
+    h2 { @apply text-3xl mt-5 tracking-tight; }
+    h3 { @apply text-2xl mt-4 tracking-tight; }
+    h4 { @apply text-xl mt-3 tracking-tight; }
+    h5 { @apply text-lg mt-2 tracking-tight; }
+    h6 { @apply text-lg mt-1 tracking-tight; }
+
+    p { @apply my-4 empty:hidden; }
+    a { @apply underline hover:text-green; }
+}

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buttons — Esgrima.pt Design System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&family=Work+Sans:wght@400;700&display=swap" rel="stylesheet">
+    <!-- In a real project: @vite / built CSS. Here we use CDN for preview. -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        light:          '#FEFEFE',
+                        dark:           '#1D3749',
+                        'gray-dark':    '#BBC3C8',
+                        'gray-medium':  '#E8EBED',
+                        'gray-light':   '#EFF1F2',
+                        green:          '#00F6B9',
+                        'medium-green': '#00E0A9',
+                        'light-green':  '#63FFDF',
+                        danger:         '#DE161A',
+                        'light-danger': '#FEF3F3',
+                        warning:        '#E56B00',
+                        success:        '#008F61',
+                    },
+                    borderRadius: {
+                        '4':  '4px',
+                        '6':  '6px',
+                        '10': '10px',
+                        '16': '16px',
+                        '22': '22px',
+                    },
+                    fontFamily: {
+                        montserrat: ['Montserrat', 'sans-serif'],
+                        'work-sans': ['Work Sans', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+        body { font-family: 'Work Sans', sans-serif; background: #EFF1F2; }
+        .ds-section { background: white; border-radius: 8px; padding: 2rem; margin-bottom: 2rem; }
+        .ds-label { font-size: 0.7rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #BBC3C8; margin-bottom: .5rem; }
+        .ds-row { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin-bottom: 1.5rem; }
+    </style>
+</head>
+<body class="p-8 max-w-4xl mx-auto">
+
+    <h1 class="font-montserrat text-3xl font-bold text-dark mb-8">Buttons</h1>
+
+    <!-- ── PRIMARY ─────────────────────────────────────────────── -->
+    <div class="ds-section">
+        <h2 class="font-montserrat text-xl font-bold text-dark mb-6">Primary</h2>
+
+        <div class="ds-label">Sizes</div>
+        <div class="ds-row">
+            <!-- Large -->
+            <button class="rounded-4 transition-all ease-in-out duration-300 bg-green hover:bg-medium-green text-dark font-bold font-montserrat text-base px-4 py-2">
+                Large
+            </button>
+            <!-- Medium -->
+            <button class="rounded-4 transition-all ease-in-out duration-300 bg-green hover:bg-medium-green text-dark font-bold font-montserrat text-base px-2 py-1">
+                Medium
+            </button>
+            <!-- Small -->
+            <button class="rounded-4 transition-all ease-in-out duration-300 bg-green hover:bg-medium-green text-dark font-bold font-montserrat text-sm px-1 py-0.5">
+                Small
+            </button>
+        </div>
+
+        <div class="ds-label">Large with animated arrow icon</div>
+        <div class="ds-row">
+            <button class="relative flex items-center overflow-hidden group rounded-4 transition-all ease-in-out duration-300 bg-green hover:bg-medium-green text-dark font-bold font-montserrat text-base px-4 py-2 hover:pr-10">
+                Inscreve-te
+                <!-- Arrow icon — slides in from right on hover -->
+                <svg class="absolute right-3 top-1/2 -translate-y-1/2 translate-x-10 opacity-0 transition-all ease-in-out duration-300 group-hover:translate-x-0 group-hover:opacity-100 w-5 h-5 shrink-0"
+                     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+            </button>
+
+            <button class="relative flex items-center overflow-hidden group rounded-4 transition-all ease-in-out duration-300 bg-green hover:bg-medium-green text-dark font-bold font-montserrat text-base px-4 py-2 hover:pr-10">
+                Enviar mensagem
+                <svg class="absolute right-3 top-1/2 -translate-y-1/2 translate-x-10 opacity-0 transition-all ease-in-out duration-300 group-hover:translate-x-0 group-hover:opacity-100 w-5 h-5 shrink-0"
+                     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+            </button>
+        </div>
+
+        <div class="ds-label">Disabled</div>
+        <div class="ds-row">
+            <button disabled class="rounded-4 bg-green text-dark font-bold font-montserrat text-base px-4 py-2 opacity-40 cursor-not-allowed pointer-events-none">
+                Indisponível
+            </button>
+        </div>
+    </div>
+
+    <!-- ── SECONDARY ───────────────────────────────────────────── -->
+    <div class="ds-section">
+        <h2 class="font-montserrat text-xl font-bold text-dark mb-6">Secondary</h2>
+
+        <div class="ds-label">On light background (dark border)</div>
+        <div class="ds-row">
+            <button class="flex rounded-4 bg-transparent border border-dark text-dark hover:bg-dark/15 font-bold font-montserrat text-base cursor-pointer ease-in-out duration-300 px-4 py-2">
+                Saber mais
+            </button>
+            <button class="flex rounded-4 bg-transparent border border-dark text-dark hover:bg-dark/15 font-bold font-montserrat text-base cursor-pointer ease-in-out duration-300 px-2 py-1">
+                Ver mais
+            </button>
+        </div>
+
+        <div class="ds-label">On dark background (green border)</div>
+        <div class="ds-row bg-dark rounded p-4">
+            <button class="flex rounded-4 bg-transparent border border-green text-green hover:bg-green/5 font-bold font-montserrat text-base cursor-pointer ease-in-out duration-300 px-4 py-2">
+                Dúvida?
+            </button>
+            <button class="flex rounded-4 bg-transparent border border-green text-green hover:bg-green/5 font-bold font-montserrat text-base cursor-pointer ease-in-out duration-300 px-2 py-1">
+                Cancelar
+            </button>
+        </div>
+    </div>
+
+    <!-- ── NAV BUTTON ─────────────────────────────────────────── -->
+    <div class="ds-section">
+        <h2 class="font-montserrat text-xl font-bold text-dark mb-6">Navigation</h2>
+
+        <div class="ds-label">Nav links (used inside dark header)</div>
+        <div class="ds-row bg-dark rounded p-4">
+            <a href="#" class="font-bold font-montserrat py-2 px-4 rounded-4 text-light whitespace-nowrap hover:text-medium-green active:text-green">
+                Horários
+            </a>
+            <a href="#" class="font-bold font-montserrat py-2 px-4 rounded-4 text-light whitespace-nowrap hover:text-medium-green active:text-green">
+                Mensalidades
+            </a>
+            <a href="#" class="font-bold font-montserrat py-2 px-4 rounded-4 text-light whitespace-nowrap hover:text-medium-green active:text-green">
+                Calendário
+            </a>
+        </div>
+    </div>
+
+    <!-- ── DANGER ─────────────────────────────────────────────── -->
+    <div class="ds-section">
+        <h2 class="font-montserrat text-xl font-bold text-dark mb-6">Danger / Destructive</h2>
+        <div class="ds-row">
+            <button class="rounded-4 transition-all ease-in-out duration-300 bg-danger hover:bg-red-700 text-white font-bold font-montserrat text-base px-4 py-2">
+                Eliminar conta
+            </button>
+            <button class="flex rounded-4 bg-transparent border border-danger text-danger hover:bg-light-danger font-bold font-montserrat text-base cursor-pointer ease-in-out duration-300 px-4 py-2">
+                Cancelar inscrição
+            </button>
+        </div>
+    </div>
+
+    <!-- ── ICON-ONLY ───────────────────────────────────────────── -->
+    <div class="ds-section">
+        <h2 class="font-montserrat text-xl font-bold text-dark mb-6">Icon-only</h2>
+        <div class="ds-row">
+            <!-- Square icon button -->
+            <button class="rounded-4 transition-all ease-in-out duration-300 bg-green hover:bg-medium-green text-dark p-2 flex items-center justify-center">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </button>
+            <!-- Round icon button -->
+            <button class="rounded-full transition-all ease-in-out duration-300 bg-green hover:bg-medium-green text-dark p-3 flex items-center justify-center">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <!-- Ghost icon button -->
+            <button class="rounded-4 border border-dark text-dark hover:bg-dark/10 p-2 flex items-center justify-center transition-all ease-in-out duration-300">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- ── LOADING STATE (Alpine) ─────────────────────────────── -->
+    <div class="ds-section">
+        <h2 class="font-montserrat text-xl font-bold text-dark mb-6">Loading state (Alpine.js)</h2>
+        <div class="ds-row" x-data="{ loading: false }">
+            <button
+                @click="loading = true; setTimeout(() => loading = false, 2000)"
+                :disabled="loading"
+                :class="loading ? 'opacity-70 cursor-not-allowed' : ''"
+                class="relative flex items-center justify-center gap-2 rounded-4 transition-all ease-in-out duration-300 bg-green hover:bg-medium-green text-dark font-bold font-montserrat text-base px-4 py-2 min-w-[140px]"
+            >
+                <svg x-show="loading" class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                </svg>
+                <span x-text="loading ? 'A enviar...' : 'Enviar'"></span>
+            </button>
+        </div>
+        <p class="text-sm text-gray-dark font-work-sans mt-2">Click to see the loading state (resets after 2s).</p>
+    </div>
+
+</body>
+</html>

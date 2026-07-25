@@ -1,6 +1,6 @@
 # API de Arbitragem — Contrato
 
-**Versão do contrato: `1.0.0`** · Estado: **proposto** (nada implementado do lado do servidor) · 2026-07-24
+**Versão do contrato: `1.1.0`** · Estado: **proposto** (nada implementado do lado do servidor) · 2026-07-25
 
 Fronteira partilhada entre a **plataforma** (`poole.esgrima.pt`, Laravel 12) e a **app de arbitragem**
 (React Native, repositório separado). Este ficheiro é a **única fonte de verdade** do que os dois
@@ -240,6 +240,7 @@ Base: `{base_url}/api/v1`. Todos exigem `Authorization: Bearer`, exceto `POST /c
   "touch_cap": 5,
   "duration_seconds": 180,
   "periods": 1,
+  "rest_seconds": 60,
   "bouts_total": 15,
   "bouts_done": 4,
   "locked": false
@@ -252,6 +253,7 @@ Base: `{base_url}/api/v1`. Todos exigem `Authorization: Bearer`, exceto `POST /c
 | `touch_cap` | Toques que terminam um assalto. **Os presets vêm sempre da API** — nunca *hardcoded* na app. |
 | `duration_seconds` | Duração **de um período** |
 | `periods` | Nº de períodos. `1` em poule |
+| `rest_seconds` | **Opcional.** Descanso entre períodos, em segundos (FIE: 60). Ausente, `null` ou `0` → sem descanso, e a app passa direto ao período seguinte. Irrelevante quando `periods` é `1`. |
 | `locked` | `true` → poule fechada porque as eliminatórias foram geradas. Toda a escrita passa a devolver 422. |
 
 ---
@@ -336,6 +338,7 @@ Detalhe de um assalto, com os presets necessários ao cronómetro.
   "target": 5,
   "duration_seconds": 180,
   "periods": 1,
+  "rest_seconds": 60,
   "allow_draw": false,
   "poule_locked": false
 }
@@ -344,6 +347,7 @@ Detalhe de um assalto, com os presets necessários ao cronómetro.
 | Campo | Notas |
 |---|---|
 | `target` | Toques que terminam o assalto. Igual ao `touch_cap` da poule. |
+| `rest_seconds` | **Opcional.** O mesmo campo do `PouleSummary`. |
 | `allow_draw` | **`false` em poule** — a plataforma rejeita `a == b` com 422. O cliente desativa o botão de submeter enquanto os resultados forem iguais. |
 | `poule_locked` | `true` → só leitura |
 
@@ -508,6 +512,7 @@ sem recompilar a app:
 
 | Versão | Data | Alterações |
 |---|---|---|
+| `1.1.0` | 2026-07-25 | **MINOR, aditivo.** `rest_seconds` opcional em `PouleSummary` e em `GET /bouts/{bout}` — descanso entre períodos, que a app cronometra. Um servidor em `1.0.0` continua compatível: sem o campo, a app não oferece descanso. |
 | `1.0.0` | 2026-07-24 | Versão inicial. Extraída de `docs/app-arbitragem-client-spec.md` §5–§8. Nada implementado ainda. |
 
 ---

@@ -1,0 +1,9 @@
+# O contrato é cópia byte a byte do repositório da plataforma — formatá-lo criava divergência.
+docs/
+
+# Referência do design system (Blade/Alpine, web), não código desta app.
+.claude/
+
+node_modules/
+.expo/
+dist/

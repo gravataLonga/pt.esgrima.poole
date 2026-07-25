@@ -1,0 +1,123 @@
+{
+  "app": {
+    "name": "Arbitragem"
+  },
+  "connect": {
+    "eyebrow": "Esgrima.pt · Arbitragem",
+    "title": "Ligar a uma poule",
+    "intro": "Lê o QR da folha de poule ou introduz o PIN de 6 dígitos.",
+    "scan": "Ler QR",
+    "scanUnavailable": "Leitura de QR disponível na próxima fase.",
+    "or": "ou",
+    "pinLabel": "PIN",
+    "submit": "Ligar",
+    "pinIncomplete": "O PIN tem 6 dígitos."
+  },
+  "poule": {
+    "progress": "{{done}} de {{total}} assaltos",
+    "isolated": "Poule isolada",
+    "current": "Assalto atual",
+    "start": "Começar",
+    "resume": "Retomar",
+    "pairing": "{{a}} {{nameA}} vs {{b}} {{nameB}}",
+    "listTitle": "Assaltos",
+    "readOnly": "Poule bloqueada — as eliminatórias já foram geradas. Modo de leitura.",
+    "vs": "vs",
+    "viewSwitcher": "Vista da poule",
+    "viewBouts": "Assaltos",
+    "viewSheet": "Grelha",
+    "state": {
+      "pending": "Por disputar",
+      "up_next": "Começar",
+      "on_deck": "Preparar",
+      "in_progress": "A decorrer",
+      "done": "Registado"
+    }
+  },
+  "sheet": {
+    "classificationTitle": "Classificação",
+    "gridTitle": "Grelha da poule",
+    "player": "Atleta",
+    "name": "Nome",
+    "notEnoughFencers": "A poule precisa de pelo menos dois atletas.",
+    "cellLabel": "{{row}} contra {{column}}: {{given}} dados, {{received}} recebidos"
+  },
+  "bout": {
+    "title": "Assalto {{sequence}}",
+    "target": "Até {{target}} toques",
+    "scoreLabel_one": "{{name}}: {{count}} toque",
+    "scoreLabel_other": "{{name}}: {{count}} toques",
+    "period": {
+      "label": "Período {{current}} de {{total}}"
+    },
+    "priority": {
+      "draw": "Sortear prioridade",
+      "suddenDeath": "Morte súbita",
+      "holder": "Prioridade: {{name}}",
+      "badge": "Prioridade",
+      "badgeLabel": "{{name}} tem prioridade",
+      "decidingTouch": "Prioridade a {{name}} — regista o toque decisivo."
+    },
+    "passivity": {
+      "tag": "P",
+      "label": "Passividade: {{seconds}} s"
+    },
+    "cards": {
+      "give": {
+        "yellow": "Cartão amarelo para {{name}}",
+        "red": "Cartão vermelho para {{name}} — dá um toque ao adversário",
+        "black": "Cartão preto para {{name}}"
+      },
+      "count_one": "{{count}} atribuído",
+      "count_other": "{{count}} atribuídos",
+      "undo": "Anular último cartão"
+    },
+    "timer": {
+      "label": "Cronómetro",
+      "idle": "Tocar para começar",
+      "running": "A correr — tocar para parar",
+      "paused": "Em pausa — tocar para continuar",
+      "expired": "Tempo esgotado"
+    },
+    "addTouch": "Mais um toque para {{name}}",
+    "removeTouch": "Menos um toque para {{name}}",
+    "submit": "Submeter resultado",
+    "confirmTitle": "Confirmar resultado",
+    "confirmMessage": "Vitória de {{winner}}. Registar não tem desfazer.",
+    "confirmYes": "Registar",
+    "confirmNo": "Cancelar",
+    "leaveTitle": "Sair sem submeter?",
+    "leaveMessage": "Os toques contados neste assalto não ficam guardados.",
+    "leaveStay": "Ficar",
+    "leaveDiscard": "Sair",
+    "notFound": "Assalto não encontrado.",
+    "back": "Voltar à lista",
+    "phase": {
+      "rest": "Descanso",
+      "beforePeriod": "antes do {{period}}.º tempo",
+      "startRest": "Iniciar descanso",
+      "startPeriod": "Começar {{period}}.º tempo"
+    },
+    "time": {
+      "minus": "− {{seconds}} s",
+      "plus": "+ {{seconds}} s",
+      "edit": "Acertar",
+      "title": "Acertar tempo",
+      "subtitle": "O cronómetro é local ao árbitro. Acertar não altera nada na plataforma.",
+      "minutes": "Minutos",
+      "seconds": "Segundos",
+      "apply": "Aplicar",
+      "reset": "Repor {{time}}"
+    }
+  },
+  "complete": {
+    "title": "Poule completa",
+    "message": "Sessão terminada.",
+    "tallyLabel": "assaltos registados",
+    "again": "Ligar a outra poule"
+  },
+  "common": {
+    "cancel": "Cancelar",
+    "skeletonNotice": "Esqueleto — dados de exemplo, sem ligação ao servidor."
+  }
+}

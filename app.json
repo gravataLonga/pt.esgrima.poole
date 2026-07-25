@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Arbitragem",
+    "slug": "poole-referee-app",
+    "version": "0.1.0",
+    "scheme": "poole-referee",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "pt.esgrima.poole.referee"
+    },
+    "android": {
+      "package": "pt.esgrima.poole.referee",
+      "adaptiveIcon": {
+        "backgroundColor": "#1D3749",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-screen-orientation",
+      "expo-status-bar",
+      "expo-splash-screen",
+      "expo-asset"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

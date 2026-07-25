@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UI Components — Esgrima.pt Design System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&family=Work+Sans:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        light: '#FEFEFE', dark: '#1D3749',
+                        'gray-dark': '#BBC3C8', 'gray-medium': '#E8EBED', 'gray-light': '#EFF1F2',
+                        green: '#00F6B9', 'medium-green': '#00E0A9', 'light-green': '#63FFDF',
+                        danger: '#DE161A', 'light-danger': '#FEF3F3',
+                        warning: '#E56B00', 'light-warning': '#FEF5EB',
+                        success: '#008F61', 'light-success': '#E7F5F2',
+                    },
+                    borderRadius: { '4': '4px', '6': '6px', '10': '10px', '16': '16px', '22': '22px' },
+                    fontFamily: { montserrat: ['Montserrat', 'sans-serif'], 'work-sans': ['Work Sans', 'sans-serif'] },
+                    fontSize: { subtitle: '1.5rem' },
+                }
+            }
+        }
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+        body { font-family: 'Work Sans', sans-serif; background: #EFF1F2; }
+        .ds-section { background: white; border-radius: 8px; padding: 2rem; margin-bottom: 2rem; }
+        .ds-label { font-size: 0.7rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #BBC3C8; margin-bottom: 1rem; margin-top: 1.5rem; }
+        .ds-label:first-child { margin-top: 0; }
+        .ds-row { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; margin-bottom: 1rem; }
+    </style>
+</head>
+<body class="p-8 max-w-5xl mx-auto">
+
+<h1 class="font-montserrat text-3xl font-bold text-dark mb-8">UI Components</h1>
+
+<!-- ── TYPOGRAPHY ─────────────────────────────────────────── -->
+<div class="ds-section">
+    <h2 class="font-montserrat text-xl font-bold text-dark mb-6">Typography Scale</h2>
+
+    <div class="ds-label">Montserrat — Display / Headings</div>
+    <div class="space-y-3 mb-6">
+        <div class="flex items-baseline gap-4">
+            <span class="text-xs text-gray-dark w-24 shrink-0">6xl / 60px</span>
+            <span class="font-montserrat text-6xl font-bold text-dark leading-none">Hero Title</span>
+        </div>
+        <div class="flex items-baseline gap-4">
+            <span class="text-xs text-gray-dark w-24 shrink-0">5xl / 48px</span>
+            <span class="font-montserrat text-5xl font-bold text-dark leading-none">Page Heading</span>
+        </div>
+        <div class="flex items-baseline gap-4">
+            <span class="text-xs text-gray-dark w-24 shrink-0">4xl / 36px</span>
+            <span class="font-montserrat text-4xl font-bold text-dark">Section Title</span>
+        </div>
+        <div class="flex items-baseline gap-4">
+            <span class="text-xs text-gray-dark w-24 shrink-0">3xl / 30px</span>
+            <span class="font-montserrat text-3xl font-bold text-dark">Sub-section</span>
+        </div>
+        <div class="flex items-baseline gap-4">
+            <span class="text-xs text-gray-dark w-24 shrink-0">subtitle / 24px</span>
+            <span class="font-montserrat text-2xl font-bold text-green">Accent Subtitle</span>
+        </div>
+        <div class="flex items-baseline gap-4">
+            <span class="text-xs text-gray-dark w-24 shrink-0">2xl / 24px</span>
+            <span class="font-montserrat text-2xl font-bold text-dark">Card Title</span>
+        </div>
+        <div class="flex items-baseline gap-4">
+            <span class="text-xs text-gray-dark w-24 shrink-0">xl / 20px</span>
+            <span class="font-montserrat text-xl font-bold text-dark">Sub-heading</span>
+        </div>
+    </div>
+
+    <div class="ds-label">Work Sans — Body</div>
+    <div class="space-y-3">
+        <div class="flex items-baseline gap-4">
+            <span class="text-xs text-gray-dark w-24 shrink-0">lg / 18px</span>
+            <span class="font-work-sans text-lg text-dark">Body large — used for intro paragraphs and pricing text.</span>
+        </div>
+        <div class="flex items-baseline gap-4">
+            <span class="text-xs text-gray-dark w-24 shrink-0">base / 16px</span>
+            <span class="font-work-sans text-base text-dark">Body default — standard paragraph and UI text throughout the site.</span>
+        </div>
+        <div class="flex items-baseline gap-4">
+            <span class="text-xs text-gray-dark w-24 shrink-0">sm / 14px</span>
+            <span class="font-work-sans text-sm text-dark">Small — form labels, helper text, captions.</span>
+        </div>
+        <div class="flex items-baseline gap-4">
+            <span class="text-xs text-gray-dark w-24 shrink-0">xs / 12px</span>
+            <span class="font-work-sans text-xs text-dark">Extra small — footnotes, legal copy, timestamps.</span>
+        </div>
+    </div>
+</div>
+
+<!-- ── CARDS ──────────────────────────────────────────────── -->
+<div class="ds-section">
+    <h2 class="font-montserrat text-xl font-bold text-dark mb-6">Cards</h2>
+
+    <div class="ds-label">Profile / Coach card</div>
+    <div class="ds-row">
+        <div class="rounded-16 overflow-hidden border border-dark bg-light max-w-[280px] shadow-sm">
+            <div class="h-48 bg-gray-medium flex items-center justify-center text-gray-dark text-sm">
+                Photo 280×192
+            </div>
+            <div class="flex flex-col p-4">
+                <div class="flex flex-col p-4">
+                    <h4 class="font-montserrat text-dark text-2xl font-bold text-center mb-4">Ricardo Gouveia</h4>
+                    <p class="font-work-sans text-dark text-base text-center">Treinador de Esgrima com vasta experiência em competição nacional e internacional.</p>
+                    <div class="flex space-x-4 justify-center mt-6">
+                        <a href="#" class="text-dark hover:text-green transition-colors">
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                        </a>
+                        <a href="#" class="text-dark hover:text-green transition-colors">
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ds-label">Info card (light bg, dark border)</div>
+    <div class="ds-row">
+        <div class="rounded-10 border border-dark bg-light p-6 flex flex-col space-y-2 max-w-sm">
+            <h4 class="font-montserrat text-xl font-bold text-dark">Aulas 3× semana</h4>
+            <p class="font-work-sans text-base text-dark">Segunda, Quarta e Sexta-feira das 19:00 às 20:30.</p>
+            <p class="font-work-sans text-sm text-gray-dark">(não é obrigatório ir às três aulas)</p>
+        </div>
+
+        <div class="rounded-10 border border-green bg-light p-6 flex flex-col space-y-2 max-w-sm">
+            <h4 class="font-montserrat text-xl font-bold text-dark">Destaque</h4>
+            <p class="font-work-sans text-base text-dark">Card com border verde para chamar atenção a informação importante.</p>
+        </div>
+    </div>
+
+    <div class="ds-label">Pricing card</div>
+    <div class="ds-row">
+        <div class="flex flex-col items-center space-y-1">
+            <div class="bg-green p-4 text-dark font-bold text-3xl flex flex-col items-center font-montserrat min-w-[100px]">
+                35€
+                <span class="text-sm font-normal text-center mt-1">Mensalidade</span>
+            </div>
+        </div>
+        <div class="flex flex-col items-center space-y-1">
+            <div class="bg-green p-4 text-dark font-bold text-3xl flex flex-col items-center font-montserrat min-w-[100px]">
+                300€
+                <span class="text-sm font-normal text-center mt-1">Anuidade</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── ALERTS ─────────────────────────────────────────────── -->
+<div class="ds-section">
+    <h2 class="font-montserrat text-xl font-bold text-dark mb-6">Alerts</h2>
+
+    <div class="flex flex-col space-y-4">
+        <!-- Danger -->
+        <div class="p-4 bg-light-danger border border-danger text-danger rounded-4">
+            <p class="font-work-sans text-sm font-bold">Corrija o formulário e volte a tentar.</p>
+            <ul class="list-disc list-inside mt-2 text-sm font-work-sans">
+                <li>O campo Nome é obrigatório.</li>
+                <li>Por favor insira um e-mail válido.</li>
+            </ul>
+        </div>
+
+        <!-- Success -->
+        <div class="p-4 bg-light-success border border-success text-success rounded-4">
+            <p class="font-work-sans text-sm font-bold">Inscrição enviada com sucesso!</p>
+            <p class="font-work-sans text-sm mt-1">Iremos contactar brevemente com mais informações.</p>
+        </div>
+
+        <!-- Warning -->
+        <div class="p-4 bg-light-warning border border-warning text-warning rounded-4">
+            <p class="font-work-sans text-sm font-bold">Atenção: a sua inscrição está pendente de confirmação.</p>
+        </div>
+
+        <!-- Info -->
+        <div class="p-4 bg-gray-light border border-gray-medium text-dark rounded-4">
+            <p class="font-work-sans text-sm">Esta informação é necessária para a inscrição na Federação Portuguesa de Esgrima.</p>
+        </div>
+    </div>
+</div>
+
+<!-- ── BADGES ─────────────────────────────────────────────── -->
+<div class="ds-section">
+    <h2 class="font-montserrat text-xl font-bold text-dark mb-6">Badges</h2>
+
+    <div class="ds-label">Status badges</div>
+    <div class="ds-row items-center">
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full bg-green text-dark text-xs font-bold font-montserrat">
+            Novo
+        </span>
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full bg-dark text-light text-xs font-bold font-montserrat">
+            Confirmado
+        </span>
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full bg-light-danger border border-danger text-danger text-xs font-bold font-montserrat">
+            Pendente
+        </span>
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full bg-light-success border border-success text-success text-xs font-bold font-montserrat">
+            Pago
+        </span>
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full bg-light-warning border border-warning text-warning text-xs font-bold font-montserrat">
+            Em análise
+        </span>
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full bg-gray-light border border-gray-medium text-gray-dark text-xs font-bold font-montserrat">
+            Inativo
+        </span>
+    </div>
+
+    <div class="ds-label">Pill chips (weapon / category)</div>
+    <div class="ds-row items-center">
+        <span class="inline-flex items-center px-3 py-1 rounded-full border border-dark text-dark text-sm font-work-sans">
+            Espada
+        </span>
+        <span class="inline-flex items-center px-3 py-1 rounded-full border border-dark text-dark text-sm font-work-sans">
+            Florete
+        </span>
+        <span class="inline-flex items-center px-3 py-1 rounded-full bg-dark text-light text-sm font-work-sans">
+            Sabre
+        </span>
+        <span class="inline-flex items-center px-3 py-1 rounded-full bg-green text-dark text-sm font-work-sans font-bold">
+            Iniciante
+        </span>
+    </div>
+</div>
+
+<!-- ── DIVIDERS ───────────────────────────────────────────── -->
+<div class="ds-section">
+    <h2 class="font-montserrat text-xl font-bold text-dark mb-6">Dividers</h2>
+
+    <div class="ds-label">Horizontal rule</div>
+    <hr class="border-t border-gray-medium my-4">
+
+    <div class="ds-label">Green accent line</div>
+    <hr class="border-t-2 border-green my-4 w-16">
+
+    <div class="ds-label">Dark separator</div>
+    <hr class="border-t border-dark my-4">
+</div>
+
+<!-- ── AVATARS ───────────────────────────────────────────── -->
+<div class="ds-section">
+    <h2 class="font-montserrat text-xl font-bold text-dark mb-6">Avatars</h2>
+
+    <div class="ds-row items-center">
+        <!-- Large -->
+        <div class="w-20 h-20 rounded-full bg-gray-medium border-2 border-dark flex items-center justify-center overflow-hidden">
+            <span class="font-montserrat font-bold text-xl text-dark">RG</span>
+        </div>
+        <!-- Medium -->
+        <div class="w-12 h-12 rounded-full bg-green border-2 border-dark flex items-center justify-center overflow-hidden">
+            <span class="font-montserrat font-bold text-sm text-dark">MF</span>
+        </div>
+        <!-- Small -->
+        <div class="w-8 h-8 rounded-full bg-dark flex items-center justify-center overflow-hidden">
+            <span class="font-montserrat font-bold text-xs text-light">AP</span>
+        </div>
+    </div>
+</div>
+
+<!-- ── SOCIAL ICONS ──────────────────────────────────────── -->
+<div class="ds-section">
+    <h2 class="font-montserrat text-xl font-bold text-dark mb-6">Social Icons</h2>
+
+    <div class="ds-label">On light background (dark)</div>
+    <div class="flex space-x-6 mb-4">
+        <a href="#" class="text-dark hover:text-green transition-colors">
+            <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+        </a>
+        <a href="#" class="text-dark hover:text-green transition-colors">
+            <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+        </a>
+        <a href="#" class="text-dark hover:text-green transition-colors">
+            <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        </a>
+    </div>
+</div>
+
+<!-- ── LINKS ──────────────────────────────────────────────── -->
+<div class="ds-section">
+    <h2 class="font-montserrat text-xl font-bold text-dark mb-6">Links</h2>
+    <div class="flex flex-col space-y-3">
+        <p class="font-work-sans text-base text-dark">
+            Inline link in body text: <a href="#" class="underline hover:text-green transition-colors">clique aqui para saber mais</a>.
+        </p>
+        <p>
+            <a href="#" class="font-montserrat font-bold text-dark hover:text-green transition-colors">Link with arrow →</a>
+        </p>
+        <p>
+            <a href="#" class="font-work-sans text-sm text-gray-dark hover:text-dark transition-colors">Subtle link (footer / secondary)</a>
+        </p>
+        <p>
+            <a href="#" class="font-work-sans text-sm text-danger hover:underline transition-colors">Danger link (delete / remove)</a>
+        </p>
+    </div>
+</div>
+
+</body>
+</html>

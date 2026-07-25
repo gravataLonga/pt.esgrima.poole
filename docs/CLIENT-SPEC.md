@@ -136,7 +136,7 @@ primeiras estão formalizadas no [contrato de API](app-arbitragem-api-contract.m
 | Início do assalto | `POST /bouts/{id}/start` | O widget "quem joga agora" da web precisa de `in_progress`; sem endpoint nunca sai de `pending`. |
 | Id de assalto | String **opaca** | Isola a app da migração do modelo de assaltos, ainda por fechar do lado do servidor. |
 | Fila offline | Persistente, FIFO, só para submissões de resultado | Rede de pavilhão cai. Perder um resultado é inaceitável; perder um `start` não é. |
-| Idioma | **pt-PT** apenas na v1, com i18n instalado desde o início | O utilizador é árbitro português. Traduzir depois sem refactor. |
+| Idioma | **en** como idioma inicial; pt-PT fica no repo, sem troca na interface na v1 | Um idioma só na v1 mantém a copy num sítio. A troca de idioma entra como funcionalidade depois, sem refactor. |
 
 ---
 
@@ -156,7 +156,7 @@ primeiras estão formalizadas no [contrato de API](app-arbitragem-api-contract.m
 | Câmara / QR | `expo-camera` (`barcodeScannerSettings: ['qr']`) | |
 | Ecrã ligado | `expo-keep-awake` | Durante um assalto o ecrã não pode apagar. |
 | Áudio/vibração | `expo-haptics` + `expo-av` | Fim de tempo tem de ser percetível sem olhar. |
-| i18n | `i18next` + `react-i18next` | Só `pt-PT` carregado na v1. |
+| i18n | `i18next` + `react-i18next` | `en` é o idioma inicial; `pt-PT` carregado mas sem troca na interface. |
 | Testes | Jest + React Native Testing Library; **MSW** para a API | |
 | E2E | Maestro | Fluxos de [§12](#12-testes-e-critérios-de-aceitação). |
 | Qualidade | ESLint + Prettier + `tsc --noEmit` em CI | |
@@ -425,7 +425,7 @@ poole-referee-app/
 │   │   ├── useTimer.ts       # cronómetro monotónico §7
 │   │   └── feedback.ts       # som + háptica
 │   ├── qr/parse.ts           # payload do QR, com fallbacks
-│   ├── i18n/pt-PT.json
+│   ├── i18n/en.json          # idioma inicial; pt-PT.json ao lado
 │   ├── mocks/handlers.ts     # §10
 │   └── ui/                   # componentes partilhados
 ├── e2e/                      # Maestro
@@ -481,7 +481,7 @@ servidor local, como gerar *build* de teste, e onde está o contrato.
 - [ ] Poule bloqueada e poule completa têm ecrã próprio, não uma mensagem de erro.
 - [ ] Token nunca aparece em logs nem em *crash reports* (verificado à mão).
 - [ ] Cronómetro legível a 2 m e com desvio ≤ 100 ms em 3 min.
-- [ ] Tudo em pt-PT, sem strings *hardcoded* em componentes.
+- [ ] Tudo em `en`, sem strings *hardcoded* em componentes.
 
 ---
 

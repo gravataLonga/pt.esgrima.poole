@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forms — Esgrima.pt Design System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&family=Work+Sans:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        light: '#FEFEFE', dark: '#1D3749',
+                        'gray-dark': '#BBC3C8', 'gray-medium': '#E8EBED', 'gray-light': '#EFF1F2',
+                        green: '#00F6B9', 'medium-green': '#00E0A9',
+                        danger: '#DE161A', 'light-danger': '#FEF3F3',
+                        success: '#008F61', 'light-success': '#E7F5F2',
+                    },
+                    borderRadius: { '4': '4px', '16': '16px', '22': '22px' },
+                    fontFamily: { montserrat: ['Montserrat', 'sans-serif'], 'work-sans': ['Work Sans', 'sans-serif'] },
+                }
+            }
+        }
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+        body { font-family: 'Work Sans', sans-serif; background: #EFF1F2; }
+        .ds-section { background: white; border-radius: 8px; padding: 2rem; margin-bottom: 2rem; }
+        .ds-label { font-size: 0.7rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #BBC3C8; margin-bottom: 1rem; }
+        .field-base { font-family: 'Work Sans', sans-serif; }
+    </style>
+</head>
+<body class="p-8 max-w-4xl mx-auto">
+
+    <h1 class="font-montserrat text-3xl font-bold text-dark mb-8">Forms</h1>
+
+    <!-- ── TEXT INPUT ─────────────────────────────────────────── -->
+    <div class="ds-section">
+        <h2 class="font-montserrat text-xl font-bold text-dark mb-6">Text Input</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            <!-- Default -->
+            <div>
+                <div class="ds-label">Default</div>
+                <div>
+                    <label for="ex-default" class="block text-sm font-work-sans mb-1">Nome</label>
+                    <input id="ex-default" type="text" placeholder="Joaquim Fernando"
+                        class="font-work-sans bg-white/10 border border-dark rounded p-4 focus:outline-offset-4 focus:outline-2 focus:outline-green w-full">
+                </div>
+            </div>
+
+            <!-- With required indicator -->
+            <div>
+                <div class="ds-label">Required</div>
+                <div>
+                    <label for="ex-required" class="block text-sm font-work-sans mb-1">
+                        E-mail <span class="text-danger">*</span>
+                    </label>
+                    <input id="ex-required" type="email" placeholder="exemplo@email.com" required
+                        class="font-work-sans bg-white/10 border border-dark rounded p-4 focus:outline-offset-4 focus:outline-2 focus:outline-green w-full">
+                </div>
+            </div>
+
+            <!-- Error state -->
+            <div>
+                <div class="ds-label">Error state</div>
+                <div>
+                    <label for="ex-error" class="block text-sm font-work-sans mb-1">
+                        E-mail <span class="text-danger">*</span>
+                    </label>
+                    <input id="ex-error" type="email" value="invalid-email"
+                        class="font-work-sans bg-white/10 border-2 border-danger rounded p-4 focus:outline-offset-4 focus:outline-2 focus:outline-danger w-full">
+                    <p class="text-danger text-sm mt-1">Por favor insira um e-mail válido.</p>
+                </div>
+            </div>
+
+            <!-- Disabled state -->
+            <div>
+                <div class="ds-label">Disabled</div>
+                <div>
+                    <label for="ex-disabled" class="block text-sm font-work-sans mb-1 text-gray-dark">Campo bloqueado</label>
+                    <input id="ex-disabled" type="text" value="Não editável" disabled
+                        class="font-work-sans bg-gray-light border border-gray-medium rounded p-4 w-full text-gray-dark cursor-not-allowed">
+                </div>
+            </div>
+
+            <!-- With helper text -->
+            <div>
+                <div class="ds-label">With helper text</div>
+                <div>
+                    <label for="ex-helper" class="block text-sm font-work-sans mb-1">Número de Cidadão</label>
+                    <input id="ex-helper" type="text" placeholder="99999999 ABC"
+                        class="font-work-sans bg-white/10 border border-dark rounded p-4 focus:outline-offset-4 focus:outline-2 focus:outline-green w-full">
+                    <p class="text-xs font-work-sans mt-1 text-gray-dark">Para inscrição na Federação Portuguesa de Esgrima.</p>
+                </div>
+            </div>
+
+            <!-- Date -->
+            <div>
+                <div class="ds-label">Date</div>
+                <div>
+                    <label for="ex-date" class="block text-sm font-work-sans mb-1">Data de Nascimento <span class="text-danger">*</span></label>
+                    <input id="ex-date" type="date"
+                        class="font-work-sans bg-white/10 border border-dark rounded p-4 focus:outline-offset-4 focus:outline-2 focus:outline-green w-full">
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ── SELECT ─────────────────────────────────────────────── -->
+    <div class="ds-section">
+        <h2 class="font-montserrat text-xl font-bold text-dark mb-6">Select</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            <div>
+                <div class="ds-label">Default</div>
+                <div>
+                    <label for="ex-select" class="block text-sm font-work-sans mb-1">Sexo <span class="text-danger">*</span></label>
+                    <select id="ex-select"
+                        class="font-work-sans bg-white/10 border border-dark rounded p-4 focus:outline-offset-4 focus:outline-2 focus:outline-green w-full">
+                        <option value="">— Selecione —</option>
+                        <option value="M">Masculino</option>
+                        <option value="F">Feminino</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <div class="ds-label">Error state</div>
+                <div>
+                    <label for="ex-select-err" class="block text-sm font-work-sans mb-1">Interesse <span class="text-danger">*</span></label>
+                    <select id="ex-select-err"
+                        class="font-work-sans bg-white/10 border-2 border-danger rounded p-4 focus:outline-offset-4 focus:outline-2 focus:outline-danger w-full">
+                        <option value="">— Selecione —</option>
+                        <option value="competition">Competição</option>
+                        <option value="leisure">Lazer</option>
+                    </select>
+                    <p class="text-danger text-sm mt-1">Selecione uma opção.</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ── TEXTAREA ───────────────────────────────────────────── -->
+    <div class="ds-section">
+        <h2 class="font-montserrat text-xl font-bold text-dark mb-6">Textarea</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            <div>
+                <div class="ds-label">Default</div>
+                <div>
+                    <label for="ex-ta" class="block text-sm font-work-sans mb-1">Observações</label>
+                    <textarea id="ex-ta" rows="4" placeholder="Ex: dificuldades, problemas de saúde, etc."
+                        class="font-work-sans bg-white/10 border border-dark rounded p-4 focus:outline-offset-4 focus:outline-2 focus:outline-green w-full"></textarea>
+                </div>
+            </div>
+
+            <div>
+                <div class="ds-label">On dark background (contact form style)</div>
+                <div class="bg-dark p-4 rounded">
+                    <textarea rows="4" placeholder="Mensagem"
+                        class="font-work-sans bg-white px-4 py-2 border-0 rounded focus:ring focus:ring-green focus:outline-offset-4 focus:outline-2 focus:outline-green w-full"></textarea>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ── CHECKBOX ───────────────────────────────────────────── -->
+    <div class="ds-section">
+        <h2 class="font-montserrat text-xl font-bold text-dark mb-6">Checkbox</h2>
+
+        <div class="ds-label">Single</div>
+        <div class="flex flex-col space-y-3 mb-6">
+            <label class="inline-flex items-center cursor-pointer">
+                <input type="checkbox" name="tos" value="1"
+                    class="h-5 w-5 text-green focus:ring-green rounded border-dark border">
+                <span class="ml-2 font-work-sans text-dark">
+                    Aceito os <a href="#" class="underline hover:text-green">Termos e Condições</a>
+                    <span class="text-danger">*</span>
+                </span>
+            </label>
+            <label class="inline-flex items-center cursor-pointer">
+                <input type="checkbox" name="newsletter" value="1"
+                    class="h-5 w-5 text-green focus:ring-green rounded border-dark border">
+                <span class="ml-2 font-work-sans text-dark">Aceito receber comunicações</span>
+            </label>
+        </div>
+
+        <div class="ds-label">Group (weekly preferences)</div>
+        <div class="flex flex-wrap gap-4">
+            <label class="inline-flex items-center cursor-pointer" for="seg">
+                <input type="checkbox" id="seg" name="days[]" value="2"
+                    class="h-5 w-5 text-green focus:ring-green rounded border-dark border">
+                <span class="ml-2 font-work-sans text-dark">Segunda-feira</span>
+            </label>
+            <label class="inline-flex items-center cursor-pointer" for="ter">
+                <input type="checkbox" id="ter" name="days[]" value="4"
+                    class="h-5 w-5 text-green focus:ring-green rounded border-dark border">
+                <span class="ml-2 font-work-sans text-dark">Terça-feira</span>
+            </label>
+            <label class="inline-flex items-center cursor-pointer" for="qua">
+                <input type="checkbox" id="qua" name="days[]" value="8" checked
+                    class="h-5 w-5 text-green focus:ring-green rounded border-dark border">
+                <span class="ml-2 font-work-sans text-dark">Quarta-feira</span>
+            </label>
+            <label class="inline-flex items-center cursor-pointer" for="qui">
+                <input type="checkbox" id="qui" name="days[]" value="16"
+                    class="h-5 w-5 text-green focus:ring-green rounded border-dark border">
+                <span class="ml-2 font-work-sans text-dark">Quinta-feira</span>
+            </label>
+            <label class="inline-flex items-center cursor-pointer" for="sex">
+                <input type="checkbox" id="sex" name="days[]" value="32" checked
+                    class="h-5 w-5 text-green focus:ring-green rounded border-dark border">
+                <span class="ml-2 font-work-sans text-dark">Sexta-feira</span>
+            </label>
+        </div>
+    </div>
+
+    <!-- ── RADIO ──────────────────────────────────────────────── -->
+    <div class="ds-section">
+        <h2 class="font-montserrat text-xl font-bold text-dark mb-6">Radio</h2>
+
+        <div class="ds-label">Group</div>
+        <div class="flex flex-col space-y-3">
+            <label class="inline-flex items-center cursor-pointer">
+                <input type="radio" name="interest" value="competition"
+                    class="h-5 w-5 text-green focus:ring-green border-dark">
+                <span class="ml-2 font-work-sans text-dark">Competição</span>
+            </label>
+            <label class="inline-flex items-center cursor-pointer">
+                <input type="radio" name="interest" value="leisure"
+                    class="h-5 w-5 text-green focus:ring-green border-dark">
+                <span class="ml-2 font-work-sans text-dark">Lazer</span>
+            </label>
+            <label class="inline-flex items-center cursor-pointer">
+                <input type="radio" name="interest" value="dontknow"
+                    class="h-5 w-5 text-green focus:ring-green border-dark">
+                <span class="ml-2 font-work-sans text-dark">Não sei ainda</span>
+            </label>
+        </div>
+    </div>
+
+    <!-- ── FULL FORM EXAMPLE ──────────────────────────────────── -->
+    <div class="ds-section">
+        <h2 class="font-montserrat text-xl font-bold text-dark mb-6">Full form example</h2>
+
+        <form class="flex flex-col space-y-8" x-data="{ loading: false }" @submit.prevent="loading = true; setTimeout(() => loading = false, 2000)">
+
+            <!-- Section: Dados Pessoais -->
+            <div>
+                <h3 class="font-montserrat text-2xl font-bold text-dark mb-4">Dados Pessoais</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="f-nome" class="block text-sm font-work-sans mb-1">Nome <span class="text-danger">*</span></label>
+                        <input id="f-nome" type="text" placeholder="Joaquim Fernando"
+                            class="font-work-sans bg-white/10 border border-dark rounded p-4 focus:outline-offset-4 focus:outline-2 focus:outline-green w-full">
+                    </div>
+                    <div>
+                        <label for="f-apelido" class="block text-sm font-work-sans mb-1">Apelido <span class="text-danger">*</span></label>
+                        <input id="f-apelido" type="text" placeholder="Fonseca"
+                            class="font-work-sans bg-white/10 border border-dark rounded p-4 focus:outline-offset-4 focus:outline-2 focus:outline-green w-full">
+                    </div>
+                    <div>
+                        <label for="f-gender" class="block text-sm font-work-sans mb-1">Sexo <span class="text-danger">*</span></label>
+                        <select id="f-gender"
+                            class="font-work-sans bg-white/10 border border-dark rounded p-4 focus:outline-offset-4 focus:outline-2 focus:outline-green w-full">
+                            <option value="">— Selecione —</option>
+                            <option value="M">Masculino</option>
+                            <option value="F">Feminino</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="f-dob" class="block text-sm font-work-sans mb-1">Data de Nascimento <span class="text-danger">*</span></label>
+                        <input id="f-dob" type="date"
+                            class="font-work-sans bg-white/10 border border-dark rounded p-4 focus:outline-offset-4 focus:outline-2 focus:outline-green w-full">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section: Contacto -->
+            <div>
+                <h3 class="font-montserrat text-2xl font-bold text-dark mb-4">Contacto</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="f-email" class="block text-sm font-work-sans mb-1">E-mail <span class="text-danger">*</span></label>
+                        <input id="f-email" type="email" placeholder="exemplo@email.com"
+                            class="font-work-sans bg-white/10 border border-dark rounded p-4 focus:outline-offset-4 focus:outline-2 focus:outline-green w-full">
+                    </div>
+                    <div>
+                        <label for="f-tel" class="block text-sm font-work-sans mb-1">Contacto</label>
+                        <input id="f-tel" type="tel" placeholder="9XX XXX XXX"
+                            class="font-work-sans bg-white/10 border border-dark rounded p-4 focus:outline-offset-4 focus:outline-2 focus:outline-green w-full">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section: Observações -->
+            <div>
+                <label for="f-obs" class="block text-sm font-work-sans mb-1">Observações</label>
+                <textarea id="f-obs" rows="4" placeholder="Ex: dificuldades, problemas de saúde, etc."
+                    class="font-work-sans bg-white/10 border border-dark rounded p-4 focus:outline-offset-4 focus:outline-2 focus:outline-green w-full"></textarea>
+            </div>
+
+            <!-- Terms -->
+            <div class="flex flex-col space-y-4">
+                <label class="inline-flex items-center cursor-pointer">
+                    <input type="checkbox" class="h-5 w-5 text-green focus:ring-green rounded border-dark border">
+                    <span class="ml-2 font-work-sans text-dark">
+                        Aceito os <a href="#" class="underline hover:text-green">Termos e Condições</a>
+                        <span class="text-danger">*</span>
+                    </span>
+                </label>
+                <label class="inline-flex items-center cursor-pointer">
+                    <input type="checkbox" class="h-5 w-5 text-green focus:ring-green rounded border-dark border">
+                    <span class="ml-2 font-work-sans text-dark">Aceito receber comunicações</span>
+                </label>
+            </div>
+
+            <!-- Submit -->
+            <div class="pt-2">
+                <button
+                    type="submit"
+                    :disabled="loading"
+                    :class="loading ? 'opacity-70 cursor-not-allowed' : ''"
+                    class="relative flex items-center justify-center gap-2 overflow-hidden group rounded-4 transition-all ease-in-out duration-300 bg-green hover:bg-medium-green text-dark font-bold font-montserrat text-base px-4 py-2 min-w-[140px]"
+                >
+                    <svg x-show="loading" class="animate-spin h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                    </svg>
+                    <span x-text="loading ? 'A enviar...' : 'Enviar inscrição'"></span>
+                </button>
+            </div>
+
+        </form>
+    </div>
+
+</body>
+</html>

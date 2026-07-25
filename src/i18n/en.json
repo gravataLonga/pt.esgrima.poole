@@ -1,0 +1,123 @@
+{
+  "app": {
+    "name": "Refereeing"
+  },
+  "connect": {
+    "eyebrow": "Esgrima.pt · Refereeing",
+    "title": "Connect to a poule",
+    "intro": "Scan the QR code on the poule sheet or enter the 6-digit PIN.",
+    "scan": "Scan QR",
+    "scanUnavailable": "QR scanning arrives in the next phase.",
+    "or": "or",
+    "pinLabel": "PIN",
+    "submit": "Connect",
+    "pinIncomplete": "The PIN has 6 digits."
+  },
+  "poule": {
+    "progress": "{{done}} of {{total}} bouts",
+    "isolated": "Standalone poule",
+    "current": "Current bout",
+    "start": "Start",
+    "resume": "Resume",
+    "pairing": "{{a}} {{nameA}} vs {{b}} {{nameB}}",
+    "listTitle": "Bouts",
+    "readOnly": "Poule locked — the direct elimination table has been generated. Read-only mode.",
+    "vs": "vs",
+    "viewSwitcher": "Poule view",
+    "viewBouts": "Bouts",
+    "viewSheet": "Grid",
+    "state": {
+      "pending": "Pending",
+      "up_next": "Start",
+      "on_deck": "On deck",
+      "in_progress": "In progress",
+      "done": "Recorded"
+    }
+  },
+  "sheet": {
+    "classificationTitle": "Standings",
+    "gridTitle": "Poule grid",
+    "player": "Fencer",
+    "name": "Name",
+    "notEnoughFencers": "The poule needs at least two fencers.",
+    "cellLabel": "{{row}} against {{column}}: {{given}} given, {{received}} received"
+  },
+  "bout": {
+    "title": "Bout {{sequence}}",
+    "target": "To {{target}} touches",
+    "scoreLabel_one": "{{name}}: {{count}} touch",
+    "scoreLabel_other": "{{name}}: {{count}} touches",
+    "period": {
+      "label": "Period {{current}} of {{total}}"
+    },
+    "priority": {
+      "draw": "Draw priority",
+      "suddenDeath": "Sudden death",
+      "holder": "Priority: {{name}}",
+      "badge": "Priority",
+      "badgeLabel": "{{name}} has priority",
+      "decidingTouch": "Priority to {{name}} — record the deciding touch."
+    },
+    "passivity": {
+      "tag": "P",
+      "label": "Passivity: {{seconds}} s"
+    },
+    "cards": {
+      "give": {
+        "yellow": "Yellow card for {{name}}",
+        "red": "Red card for {{name}} — awards a touch to the opponent",
+        "black": "Black card for {{name}}"
+      },
+      "count_one": "{{count}} given",
+      "count_other": "{{count}} given",
+      "undo": "Undo last card"
+    },
+    "timer": {
+      "label": "Timer",
+      "idle": "Tap to start",
+      "running": "Running — tap to stop",
+      "paused": "Paused — tap to resume",
+      "expired": "Time up"
+    },
+    "addTouch": "One more touch for {{name}}",
+    "removeTouch": "One fewer touch for {{name}}",
+    "submit": "Submit result",
+    "confirmTitle": "Confirm result",
+    "confirmMessage": "{{winner}} wins. Recording cannot be undone.",
+    "confirmYes": "Record",
+    "confirmNo": "Cancel",
+    "leaveTitle": "Leave without submitting?",
+    "leaveMessage": "The touches counted in this bout will not be saved.",
+    "leaveStay": "Stay",
+    "leaveDiscard": "Leave",
+    "notFound": "Bout not found.",
+    "back": "Back to list",
+    "phase": {
+      "rest": "Rest",
+      "beforePeriod": "before period {{period}}",
+      "startRest": "Start rest",
+      "startPeriod": "Start period {{period}}"
+    },
+    "time": {
+      "minus": "− {{seconds}} s",
+      "plus": "+ {{seconds}} s",
+      "edit": "Adjust",
+      "title": "Adjust time",
+      "subtitle": "The timer is local to the referee. Adjusting it changes nothing on the platform.",
+      "minutes": "Minutes",
+      "seconds": "Seconds",
+      "apply": "Apply",
+      "reset": "Reset to {{time}}"
+    }
+  },
+  "complete": {
+    "title": "Poule complete",
+    "message": "Session ended.",
+    "tallyLabel": "bouts recorded",
+    "again": "Connect to another poule"
+  },
+  "common": {
+    "cancel": "Cancel",
+    "skeletonNotice": "Skeleton — sample data, not connected to the server."
+  }
+}
