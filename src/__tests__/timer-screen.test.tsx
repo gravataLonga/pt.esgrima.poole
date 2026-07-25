@@ -3,6 +3,8 @@ import { Alert, Vibration } from 'react-native';
 
 import { useSessionStore } from '@/session/store';
 
+import { resetApp } from './support/app';
+
 /**
  * Modo cronómetro (ADR-021): um assalto, offline, sem atletas.
  *
@@ -17,7 +19,7 @@ const open = async () => {
 };
 
 beforeEach(() => {
-  useSessionStore.getState().disconnect();
+  resetApp();
   jest.spyOn(Vibration, 'vibrate').mockImplementation(() => {});
 });
 
@@ -29,7 +31,7 @@ describe('sem ligação', () => {
   it('abre sem sessão nenhuma e deixa-a por ligar', async () => {
     await open();
 
-    expect(useSessionStore.getState().status).toBe('disconnected');
+    expect(useSessionStore.getState().phase).toBe('disconnected');
     expect(useSessionStore.getState().poule).toBeNull();
   });
 
@@ -42,7 +44,7 @@ describe('sem ligação', () => {
 
     await screen.findByText('Timer');
     expect(router.getPathname()).toBe('/timer');
-    expect(useSessionStore.getState().status).toBe('disconnected');
+    expect(useSessionStore.getState().phase).toBe('disconnected');
   });
 });
 

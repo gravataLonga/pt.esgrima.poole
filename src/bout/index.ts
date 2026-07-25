@@ -1,3 +1,5 @@
+export { BoutScreen } from './BoutScreen';
+export type { BoutAssignment } from './BoutScreen';
 export { Clock, NUDGE_MS } from './Clock';
 export { ScoreColumn } from './ScoreColumn';
 export { TimeSheet } from './TimeSheet';
@@ -11,7 +13,6 @@ export type { BoutEngine } from './useBoutEngine';
 export {
   BLACK_CARD_LIMIT,
   PRIORITY_DRAW_STEPS,
-  PRIORITY_SECONDS,
   boutRules,
   canGiveCard,
   canSubmit,

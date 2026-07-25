@@ -4,16 +4,38 @@ const timing = (over: Partial<BoutTiming> = {}): BoutTiming => ({
   durationSeconds: 180,
   periods: 3,
   restSeconds: 60,
+  suddenDeathSeconds: 60,
+  passivitySeconds: 60,
   ...over,
 });
 
 describe('boutTiming', () => {
   it('lê os presets da API', () => {
-    expect(boutTiming({ duration_seconds: 180, periods: 3, rest_seconds: 60 })).toEqual({
+    expect(
+      boutTiming({
+        duration_seconds: 180,
+        periods: 3,
+        rest_seconds: 60,
+        sudden_death_seconds: 60,
+        passivity_seconds: 60,
+      }),
+    ).toEqual({
       durationSeconds: 180,
       periods: 3,
       restSeconds: 60,
+      suddenDeathSeconds: 60,
+      passivitySeconds: 60,
     });
+  });
+
+  it('cai nos valores FIE quando o servidor não manda os opcionais', () => {
+    const fallback = boutTiming({ duration_seconds: 180, periods: 1 });
+    expect(fallback.suddenDeathSeconds).toBe(60);
+    expect(fallback.passivitySeconds).toBe(60);
+  });
+
+  it('respeita `passivity_seconds: 0` — não contar é uma escolha, não uma ausência', () => {
+    expect(boutTiming({ duration_seconds: 180, periods: 1, passivity_seconds: 0 }).passivitySeconds).toBe(0);
   });
 
   it('trata a ausência de `rest_seconds` como sem descanso', () => {
@@ -32,9 +54,10 @@ describe('boutTiming', () => {
 
 describe('phaseDuration', () => {
   it('dá a duração de cada fase', () => {
-    expect(phaseDuration('period', timing(), 60)).toBe(180);
-    expect(phaseDuration('rest', timing(), 60)).toBe(60);
-    expect(phaseDuration('priority', timing(), 60)).toBe(60);
+    expect(phaseDuration('period', timing())).toBe(180);
+    expect(phaseDuration('rest', timing())).toBe(60);
+    // A morte súbita conta o que a API mandou, não um valor fixo (contrato §7).
+    expect(phaseDuration('priority', timing({ suddenDeathSeconds: 90 }))).toBe(90);
   });
 });
 

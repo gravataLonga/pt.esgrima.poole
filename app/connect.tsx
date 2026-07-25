@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Image,
@@ -13,32 +13,49 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
+import { useConnect } from '@/session/useConnect';
 import { useSessionStore } from '@/session/store';
-import { Button, Screen, Text, colors, fonts, radius, spacing, type } from '@/ui';
+import { Banner, Button, Screen, Text, colors, fonts, radius, spacing, type } from '@/ui';
 
 const PIN_LENGTH = 6;
 
 /**
  * Ecrã 1 — Ligar (spec §6).
  *
- * O URL do servidor **não** aparece: é detalhe interno, o QR trá-lo no payload (contrato §9) e o
- * árbitro em pavilhão não tem nada a fazer com ele. O store guarda o valor por omissão.
- *
- * ESQUELETO: o botão de QR está inerte (a câmara chega na F1) e o PIN não é validado contra nada —
- * qualquer valor de 6 dígitos carrega a fixture.
+ * O URL do servidor **não** aparece: é detalhe interno, o QR pode trazê-lo no payload (contrato
+ * §9) e o árbitro em pavilhão não tem nada a fazer com ele. O store guarda o valor por omissão.
  */
 export default function ConnectScreen() {
   const { t } = useTranslation();
-  const connect = useSessionStore((s) => s.connect);
+  const { connecting, error, blocked, blockedUntil, connect, clearError } = useConnect();
+  const endReason = useSessionStore((s) => s.endReason);
+
   const [pin, setPin] = useState('');
   const [focused, setFocused] = useState(false);
 
+  /**
+   * O campo real é invisível e está por cima das casas. Contar com o toque a cair-lhe em cima
+   * sozinho é frágil — basta uma camada pelo meio para o alvo desaparecer e o ecrã ficar com ar de
+   * avariado, sem teclado e sem explicação. O `Pressable` à volta torna o alvo explícito e pede o
+   * foco à mão.
+   */
+  const input = useRef<TextInput>(null);
+
   const complete = pin.length === PIN_LENGTH;
+  const canSubmit = complete && !connecting && !blocked;
 
   const onSubmit = () => {
-    connect(pin);
-    router.replace('/poule');
+    if (!canSubmit) return;
+    void connect(pin);
   };
+
+  // O ecrã de ligar aparece por três razões diferentes — sessão expirada, outro dispositivo
+  // assumiu a competição, ou fim de sessão pedido. Só a primeira e a segunda precisam de
+  // explicação, e sem ela o árbitro só vê o formulário de novo e conclui que a app se enganou.
+  const reason =
+    endReason === 'token_expired' || endReason === 'token_revoked'
+      ? t(`connect.ended.${endReason}`)
+      : null;
 
   return (
     <Screen tone="dark">
@@ -108,14 +125,24 @@ export default function ConnectScreen() {
               <View style={styles.dividerLine} />
             </View>
 
+            {error ? <Banner tone="danger" message={error} /> : null}
+            {!error && reason ? <Banner tone="warning" message={reason} /> : null}
+
             <View>
               <Text variant="label" color={colors.light} style={styles.fieldLabel}>
                 {t('connect.pinLabel')}
               </Text>
 
-              {/* O input real está por cima das casas, transparente: o toque cai nele e abre o
-                teclado, mas quem se vê são as seis casas. */}
-              <View style={styles.pinField}>
+              {/* O input real está por cima das casas, transparente: quem se vê são as seis
+                casas, e é o `Pressable` que garante que o toque em qualquer uma delas dá foco ao
+                campo — mesmo nas que ficam entre caixas. */}
+              {/* `accessible={false}`: o controlo a sério é o campo lá dentro, e é ele que o
+                VoiceOver deve anunciar. Isto é só o alvo do dedo. */}
+              <Pressable
+                accessible={false}
+                onPress={() => input.current?.focus()}
+                style={styles.pinField}
+              >
                 <View style={styles.pinRow} pointerEvents="none">
                   {Array.from({ length: PIN_LENGTH }, (_, index) => (
                     <PinBox
@@ -131,8 +158,13 @@ export default function ConnectScreen() {
                   entrar e tapava o botão de ler QR, que é o caminho principal. O PIN é agora a
                   alternativa, e quem a quer toca nas casas. */}
                 <TextInput
+                  ref={input}
                   value={pin}
-                  onChangeText={(value) => setPin(value.replace(/\D/g, '').slice(0, PIN_LENGTH))}
+                  onChangeText={(value) => {
+                    clearError();
+                    setPin(value.replace(/\D/g, '').slice(0, PIN_LENGTH));
+                  }}
+                  editable={!connecting}
                   keyboardType="number-pad"
                   onFocus={() => setFocused(true)}
                   onBlur={() => setFocused(false)}
@@ -140,14 +172,20 @@ export default function ConnectScreen() {
                   style={styles.hiddenInput}
                   accessibilityLabel={t('connect.pinLabel')}
                 />
-              </View>
+              </Pressable>
             </View>
 
             <Button
-              label={t('connect.submit')}
+              label={connecting ? t('connect.connecting') : t('connect.submit')}
               onPress={onSubmit}
-              disabled={!complete}
-              hint={complete ? undefined : t('connect.pinIncomplete')}
+              disabled={!canSubmit}
+              hint={
+                blocked
+                  ? t('connect.blockedUntil', { time: formatTime(blockedUntil) })
+                  : complete
+                    ? undefined
+                    : t('connect.pinIncomplete')
+              }
             />
           </View>
 
@@ -170,13 +208,17 @@ export default function ConnectScreen() {
             </View>
           </Pressable>
 
-          <Text variant="caption" color={colors.grayDark} style={styles.notice}>
-            {t('common.skeletonNotice')}
-          </Text>
+
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
   );
+}
+
+/** Hora local a que o bloqueio levanta — "aguarde 47 s" obrigava a uma contagem que ninguém vê. */
+function formatTime(at: number | null): string {
+  if (at === null) return '';
+  return new Date(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
 interface PinBoxProps {
@@ -416,9 +458,6 @@ const styles = StyleSheet.create({
     opacity: 0,
     color: colors.light,
     fontSize: type.xxxl,
-    textAlign: 'center',
-  },
-  notice: {
     textAlign: 'center',
   },
   qrMark: {

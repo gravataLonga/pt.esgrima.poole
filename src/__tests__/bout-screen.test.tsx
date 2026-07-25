@@ -4,6 +4,9 @@ import { Dimensions, Vibration } from 'react-native';
 import type { PouleSummary } from '@/api/types';
 import { useSessionStore } from '@/session/store';
 
+import { connectPoule, resetApp } from './support/app';
+import { state as fakeState } from './support/fakeApi';
+
 /**
  * Ecrã 3, na parte que só se vê renderizando: fases, cartões, acerto de tempo, morte súbita e
  * landscape. As regras por trás disto estão em `src/bout/rules.test.ts` e `src/bout/phase.test.ts`;
@@ -13,8 +16,12 @@ import { useSessionStore } from '@/session/store';
  */
 const BOUT = '/bout/b_01J8X004';
 
-/** Mexe nos presets da poule — é assim que se testa o que a API há de mandar. */
+/**
+ * Mexe nos presets da poule — é assim que se testa o que a API há de mandar. Tem de ser **antes**
+ * do `open()`: os presets chegam ao ecrã no `GET /bouts/{id}`, não do store da sessão.
+ */
 const withPoule = (patch: Partial<PouleSummary>) => {
+  if (fakeState.poule) fakeState.poule = { ...fakeState.poule, ...patch };
   const current = useSessionStore.getState().poule;
   if (current) useSessionStore.setState({ poule: { ...current, ...patch } });
 };
@@ -25,8 +32,8 @@ const open = async () => {
 };
 
 beforeEach(() => {
-  useSessionStore.getState().disconnect();
-  useSessionStore.getState().connect('111111');
+  resetApp();
+  connectPoule();
   jest.spyOn(Vibration, 'vibrate').mockImplementation(() => {});
 });
 
@@ -346,9 +353,8 @@ describe('submeter', () => {
     await fireEvent.press(await screen.findByText('Cancel'));
 
     expect(screen.queryByText('Confirm result')).toBeNull();
-    expect(useSessionStore.getState().bouts.find((b) => b.id === 'b_01J8X004')?.status).toBe(
-      'in_progress',
-    );
+    // Cancelar não escreve: o assalto continua como estava do lado do servidor.
+    expect(fakeState.bouts.find((b) => b.id === 'b_01J8X004')?.status).toBe('in_progress');
   });
 });
 

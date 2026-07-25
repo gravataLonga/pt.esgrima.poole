@@ -243,6 +243,10 @@ continua a ser `{ a, b }`.
 memória, durante o assalto. **Não são submetidos.** O que sobe é o resultado — incluindo o toque que
 o cartão vermelho deu, porque esse é resultado.
 
+> **Atualizado pelo [ADR-029](#adr-029--contrato-150-a-pista-passa-a-ver-se-enquanto-está-a-ser-arbitrada) (contrato `1.5.0`).**
+> Continuam locais e autoritários — o árbitro vê-os sem servidor —, mas passam a ser **espelhados**
+> para a plataforma como eventos descritivos. O corpo do `score` mantém-se `{ a, b }`.
+
 **Porquê:** um árbitro que dá um vermelho precisa de o ver contado no resultado *já*, e precisa de
 saber quantos amarelos vão. Nada disso exige o servidor. Fazer disto um pedido de API era esperar
 por uma alteração de contrato para resolver um problema que é de ecrã.
@@ -795,3 +799,181 @@ lido como bug.
 
 **`API_CONTRACT_VERSION` continua em `'1.0.0'`** até a plataforma servir isto. Sobe direta a
 `'1.4.0'`: as intermédias nunca existiram em código.
+
+---
+
+## ADR-027 — A plataforma serve o contrato; o desbloqueio é agora deste lado
+
+**Data:** 2026-07-25 · **Estado:** aceite · **Fecha o ADR-025 e o segundo ADR-026**
+
+O servidor alinhou-se pelo contrato. Está servido, em `/api/v1` e fixado por teste do lado da
+plataforma: o envelope `{ code, message, errors? }` com o catálogo do §8, o `submission_id`
+obrigatório com a matriz 201/200/409, os `POST .../start` com os `GET` de detalhe a voltarem a ser
+leituras puras, o `PouleSummary`/`TournamentSummary` com `scope`, os `ETag` nas quatro listas, o
+`X-Session-Expires-At`, a classificação servida, o `GET`/`DELETE /session`, os presets completos
+(`weapon`, `rest_seconds`, `sudden_death_seconds`, `passivity_seconds`) e o PIN reutilizável.
+
+**A regra do §1 do contrato deixa de nos travar.** "Alterar o contrato primeiro, implementar depois"
+foi cumprido: o documento está na `1.4.1` e os dois lados conhecem-no. O que estava à espera do
+servidor passa a estar à espera de nós.
+
+### Duas coisas que o contrato não previa e que mudam o que a app pode assumir
+
+**1. Os quadros de consolação não vêm na API.** O `EliminationMatch` não tem forma de os distinguir
+do quadro principal — viriam com `round`/`position` repetidos, e a app desenharia um quadro
+impossível. `GET .../elimination` devolve **só o quadro principal**; consolação arbitra-se na web.
+Se um dia fizerem falta, é um campo novo (`bracket_type`) e uma versão MINOR.
+
+**2. O `401` distingue-se em três, e o servidor teve de trabalhar para isso.** Um token apagado não
+consegue dizer porque desapareceu, por isso a plataforma passou a **apagar** o token que foi
+substituído ou rodado (`token_revoked`) e a **expirar no lugar** o de uma competição encerrada
+(`poule_complete`). Para a app isto significa que **`poule_complete` é de confiança**: quando chega,
+a competição acabou mesmo, e o ecrã a mostrar é o de conclusão, não o de voltar a ligar.
+
+### O trabalho que fica
+
+1. `src/api/types.ts` tipado a partir da `1.4.1`.
+2. A fila a guardar o `submission_id` gerado **na confirmação**, com teste que o prove — é a metade
+   do ADR-026 que só a app pode entregar.
+3. `/bracket` e `/match/[id]`, e a transição `POULE → BRACKET` na máquina de estados.
+4. `API_CONTRACT_VERSION` sobe para `'1.4.1'` quando a app deixar de correr só contra os mocks.
+
+---
+
+## ADR-028 — A app ligada ao servidor a sério: o que se decidiu ao fazê-lo
+
+**Data:** 2026-07-25 · **Estado:** aceite · **Fecha o ADR-027**
+
+O ADR-027 listava o que faltava deste lado. Está feito. Estas são as decisões que só apareceram
+com o servidor a sério do outro lado — nenhuma delas estava no plano.
+
+### 1. O `ETag` reenvia-se na forma forte, e a correção a sério é do servidor
+
+O `304` do contrato §5 **nunca acontecia**. Não por culpa de nenhum dos lados isoladamente: o
+servidor compara o `If-None-Match` por igualdade de string com o `ETag` forte que gerou, e o nginx
+à frente enfraquece-o para `W/"..."` sempre que comprime — ou seja, para todos os clientes que
+mandam `Accept-Encoding: gzip`, que são todos.
+
+O cliente passa a normalizar para a forma forte antes de reenviar (`strongEtag`). **É mitigação,
+não correção**: resolve o polling desta app e continua correto quando o servidor passar a fazer a
+comparação fraca que o RFC 9110 §13.1.2 manda. Qualquer outro cliente do `/api/v1` continua a
+transferir a lista inteira de dez em dez segundos até lá.
+
+Isto só se descobre ligando os dois lados. Um mock teria concordado com a app para sempre.
+
+### 2. A classificação deixou de se calcular aqui
+
+O contrato `1.2.0` acrescentou `GET /poules/{poule}/standings` e diz-lhe o essencial: *"O servidor
+é que ordena. (…) O cliente mostra `place` tal como vem e não reordena."* A app tinha uma
+implementação própria dos critérios FIE (V/M → indicador → TD), do tempo em que a classificação não
+era servida (ADR-011).
+
+Duas implementações dos mesmos critérios de desempate são duas respostas para a mesma pergunta, e a
+que o árbitro vê na web ganha sempre. A daqui saiu, com os testes que a cobriam. **A matriz fica**:
+o contrato §7 diz explicitamente que não é servida, e cada célula é um assalto que a lista já traz —
+não é cálculo de classificação, é a mesma lista noutra disposição.
+
+### 3. Servidor falso no lugar do MSW, mais um teste contra a plataforma
+
+A spec §10 previa MSW. O que ela quer é que os cenários de erro se testem sem os provocar num
+servidor, e isso consegue-se trocando `@/api/endpoints` inteiro — que é a fronteira exata onde o
+contrato acaba e a app começa — por um servidor em memória. Uma dependência a menos, e o mesmo
+alcance: 409, assalto removido, sessão expirada, rede em baixo.
+
+Mas um mock testa a app contra a **leitura que a app fez** do contrato. Foi por isso que o `ETag`
+acima passou despercebido. Daí o `src/api/live.test.ts`, que corre contra a plataforma com um PIN
+de uma competição descartável e verifica as formas campo a campo, a matriz 201/200/409 e o `304`.
+Fica fora do `npm test` — sem as variáveis de ambiente é saltado, e a suite continua a não precisar
+de rede.
+
+### 4. O polling pára enquanto o cronómetro corre
+
+O `Stack` do expo-router não desmonta a lista ao empilhar o ecrã de assalto por cima. Sem nada, a
+lista revalidava de dez em dez segundos durante um assalto inteiro. O contrato §5 já previa a
+cadência — 10 s com a lista em foco, 30 s no ecrã de assalto parado, **pausado** com o cronómetro a
+correr — e faltava só um sítio onde a declarar: `src/api/polling.ts`.
+
+### 5. A morte súbita e a passividade passaram a vir da API
+
+Estavam em constantes (`PRIORITY_SECONDS`, `PASSIVITY_SECONDS`), e o contrato §7 é explícito: *"nenhum
+é hardcoded na app, nem sequer o minuto da morte súbita"*. Entraram no `BoutTiming`, ao lado da
+duração e dos períodos. A constante `PRIORITY_SECONDS` desapareceu — o nome do contrato é o do
+regulamento (`sudden_death_seconds`), e não existem dois campos.
+
+### 6. Um ecrã de assalto, não dois
+
+O contrato §7 diz que a app arbitra a poule e o quadro *"no mesmo ecrã de assalto"*, e é literal: a
+única diferença é o URL para onde o resultado vai e o texto do cabeçalho. `src/bout/BoutScreen.tsx`
+recebe um `BoutAssignment` e não sabe em que fase da competição está; `app/bout/[id].tsx` e
+`app/match/[id].tsx` são as duas rotas que o alimentam. Duplicá-lo seria duplicar condução de
+assalto, que é a parte que não pode divergir entre cópias.
+
+---
+
+## ADR-029 — Contrato 1.5.0: a pista passa a ver-se enquanto está a ser arbitrada
+
+**Data:** 2026-07-25 · **Estado:** aceite · **Servidor entregue; o lado da app é a F7**
+
+Levantado do lado da plataforma: os eventos de dentro de um assalto não apareciam em lado nenhum. A
+web mostrava `Bout called` e `Result recorded`, e no meio — o assalto inteiro — nada. Uma poule a
+meio era, vista de fora, indistinguível de uma poule que ninguém tinha começado.
+
+O contrato já tinha desde a `1.0.0` o `events` **opcional no `score`**, e nunca ninguém o enviou.
+Não é acidente: chega no fim, e o que faz falta é durante.
+
+**Decisão:** `POST /bouts/{id}/events` e `POST /elimination/{id}/events`, aditivos (MINOR), com o
+toque, o duplo, os cartões, a prioridade e o fim de período enviados **no instante em que
+acontecem**. A plataforma já os serve e já os mostra no painel do organizador, na gaveta do assalto
+e na página pública do evento.
+
+### A idempotência é um contador por assalto, não um UUID
+
+O `score` usa `submission_id` porque uma submissão é única e cara: perdê-la é perder o resultado.
+Um toque é o contrário — barato, repetido e **indistinguível do toque idêntico ao lado dele**. Dois
+toques seguidos para o mesmo atleta, no mesmo período, com `at_ms` a 40 ms de distância, são duas
+linhas legitimamente quase iguais; nada no conteúdo diz se são dois toques ou o mesmo enviado duas
+vezes por uma rede que falhou.
+
+**Decisão:** a app numera os eventos a partir de `1` **dentro do assalto** e envia `seq`. O servidor
+tem `(assalto, seq)` como chave única e ignora um repetido em silêncio, devolvendo `accepted: 0`.
+
+**Porquê não um UUID por evento:** funcionava, e custava 36 bytes por toque e uma tabela de chaves
+do lado do servidor para dizer o que um inteiro por assalto já diz. O contador tem outra
+propriedade que o UUID não tem: é **legível** — uma linha temporal com buracos vê-se a olho.
+
+### O placar vai no evento e não se recalcula
+
+Contar os `touch` e derivar o placar parece mais limpo e está errado: um árbitro que retire um toque
+deixa a contagem a divergir do que o telemóvel mostra, e o que o público vê na parede tem de ser o
+que o árbitro tem à frente. Cada evento leva `score_a`/`score_b` **depois** do evento, e a web mostra
+o último. Mantém a regra que o contrato já tinha para o `events` do `score`: **descritivo, nunca
+autoritário**.
+
+### Ou em direto, ou em lote
+
+Uma app que envie em direto tem o `events` do `score` **ignorado** pelo servidor — são os mesmos
+toques contados duas vezes, e só a cópia em direto tem contador para se impedir de duplicar. Não há
+modo misto e não vale a pena inventar um.
+
+### Não entram na fila offline
+
+A fila da `CLIENT-SPEC.md` §8 existe para o que não se pode perder, e tem limite de 50 itens. Um
+assalto pode gerar 30 eventos; três assaltos sem rede enchiam-na e passavam a competir com
+resultados por enviar. **Um toque perdido é uma linha a menos num ecrã que ninguém está a arbitrar
+por ele.** Na falha, junta-se ao lote seguinte (o `seq` trata da duplicação) e desiste-se dele
+quando o assalto é submetido.
+
+### O que isto muda no [ADR-012](#adr-012--cartões-e-prioridade-são-locais-ao-assalto)
+
+Nada do que ele decidiu. Os cartões e a prioridade **continuam locais e autoritários** durante o
+assalto — o árbitro vê-os já, sem servidor. O que muda é que passam também a ser **espelhados** para
+a plataforma como eventos descritivos. O ADR-012 dizia "não são submetidos" a respeito do
+*resultado*, e isso mantém-se: o que sobe no `score` continua a ser `{ a, b }`.
+
+### O trabalho da F7
+
+1. Um contador por assalto no `useBoutEngine`, reiniciado a cada assalto.
+2. `postEvents(...)` em `src/api/endpoints.ts`, *fire-and-forget*, com o lote acumulado na falha.
+3. `API_CONTRACT_VERSION` sobe para `'1.5.0'`.
+4. Teste que prove o essencial: reenviar o mesmo `seq` não duplica, e uma falha de rede não estraga
+   o assalto nem enche a fila de resultados.

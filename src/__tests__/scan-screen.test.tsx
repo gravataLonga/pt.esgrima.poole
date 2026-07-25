@@ -3,13 +3,15 @@ import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-librar
 
 import { useSessionStore } from '@/session/store';
 
+import { resetApp } from './support/app';
+
 /**
  * O que este teste prova é a ligação entre as três peças — câmara, `parseQr` e store. As regras de
  * leitura em si estão cobertas em `src/qr/parse.test.ts`, que não precisa de ecrã nenhum.
  */
 describe('ecrã de leitura de QR', () => {
   beforeEach(() => {
-    useSessionStore.getState().disconnect();
+    resetApp();
     jest
       .mocked(useCameraPermissions)
       .mockReturnValue([
@@ -41,9 +43,10 @@ describe('ecrã de leitura de QR', () => {
 
     await scan(JSON.stringify({ v: 1, base_url: 'https://staging.esgrima.pt', pin: '483920' }));
 
+    await screen.findByText('Poule 3 — Sabre Masculino');
     expect(router.getPathname()).toBe('/poule');
     expect(useSessionStore.getState().baseUrl).toBe('https://staging.esgrima.pt');
-    expect(useSessionStore.getState().status).toBe('connected');
+    expect(useSessionStore.getState().phase).toBe('poule');
   });
 
   it('liga com um QR de só seis dígitos — é o que a plataforma gera hoje', async () => {
@@ -52,7 +55,9 @@ describe('ecrã de leitura de QR', () => {
 
     await scan('483920');
 
+    await screen.findByText('Poule 3 — Sabre Masculino');
     expect(router.getPathname()).toBe('/poule');
+    // Sem `base_url` no código, fica o valor por omissão — a app não pergunta o servidor a ninguém.
     expect(useSessionStore.getState().baseUrl).toBe('https://poole.esgrima.pt');
   });
 
@@ -66,7 +71,7 @@ describe('ecrã de leitura de QR', () => {
       screen.getByText('QR code not recognised. Check that it is the code on the poule sheet.'),
     ).toBeTruthy();
     expect(router.getPathname()).toBe('/scan');
-    expect(useSessionStore.getState().status).toBe('disconnected');
+    expect(useSessionStore.getState().phase).toBe('disconnected');
   });
 
   it('para de ler enquanto o erro está no ecrã, e volta a ler no "Scan again"', async () => {

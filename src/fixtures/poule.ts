@@ -83,6 +83,9 @@ export const poule: PouleSummary = {
   bouts_total: bouts.length,
   bouts_done: Object.keys(scored).length,
   locked: false,
+  // Poule de torneio: a ordem é para cumprir e o `sequence` não se desloca (contrato §7).
+  ordered: true,
+  elimination: null,
 };
 
 /** Detalhe de um assalto, montado a partir da lista — o formato do `GET /bouts/{bout}`. */
@@ -102,6 +105,8 @@ export function boutDetail(boutId: string): BoutDetail | undefined {
     duration_seconds: poule.duration_seconds,
     periods: poule.periods,
     rest_seconds: poule.rest_seconds,
+    sudden_death_seconds: poule.sudden_death_seconds,
+    passivity_seconds: poule.passivity_seconds,
     allow_draw: false,
     poule_locked: poule.locked,
   };

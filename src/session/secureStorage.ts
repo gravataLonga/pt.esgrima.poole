@@ -3,19 +3,66 @@
  *
  * Nunca `AsyncStorage`, nunca ficheiro, nunca log (spec §9).
  *
- * ESQUELETO — por implementar na F1, quando houver token para guardar.
+ * O que fica guardado é o token **e o que é preciso para o usar**: o `base_url` a que ele pertence
+ * e o âmbito que alcança. Um token sozinho não diz a que servidor pertence, e a app relançada
+ * apontaria o token de um servidor ao outro.
  */
 
+import * as SecureStore from 'expo-secure-store';
+
+import type { SessionScope } from '@/api/types';
+
 const TOKEN_KEY = 'poole.referee.token';
+const BASE_URL_KEY = 'poole.referee.base_url';
+const SCOPE_KEY = 'poole.referee.scope';
 
-export function saveToken(_token: string): Promise<void> {
-  return Promise.reject(new Error(`session/secureStorage: ${TOKEN_KEY} por implementar (F1)`));
+export interface StoredSession {
+  token: string;
+  baseUrl: string;
+  scope: SessionScope;
 }
 
-export function readToken(): Promise<string | null> {
-  return Promise.reject(new Error(`session/secureStorage: ${TOKEN_KEY} por implementar (F1)`));
+/**
+ * Uma falha do Keychain — dispositivo sem código de acesso, keystore corrompida — não pode impedir
+ * o árbitro de arbitrar. A sessão continua em memória; o que se perde é sobreviver a um relançar
+ * da app, e isso resolve-se voltando a ligar com o mesmo PIN, que não se gasta (contrato §9).
+ */
+export async function saveSession(session: StoredSession): Promise<void> {
+  try {
+    await Promise.all([
+      SecureStore.setItemAsync(TOKEN_KEY, session.token),
+      SecureStore.setItemAsync(BASE_URL_KEY, session.baseUrl),
+      SecureStore.setItemAsync(SCOPE_KEY, session.scope),
+    ]);
+  } catch {
+    // Silêncio de propósito: registar o erro arrisca registar o valor com ele.
+  }
 }
 
-export function clearToken(): Promise<void> {
-  return Promise.reject(new Error(`session/secureStorage: ${TOKEN_KEY} por implementar (F1)`));
+export async function readSession(): Promise<StoredSession | null> {
+  try {
+    const [token, baseUrl, scope] = await Promise.all([
+      SecureStore.getItemAsync(TOKEN_KEY),
+      SecureStore.getItemAsync(BASE_URL_KEY),
+      SecureStore.getItemAsync(SCOPE_KEY),
+    ]);
+
+    if (!token || !baseUrl) return null;
+
+    return { token, baseUrl, scope: scope === 'tournament' ? 'tournament' : 'poule' };
+  } catch {
+    return null;
+  }
+}
+
+export async function clearSession(): Promise<void> {
+  try {
+    await Promise.all([
+      SecureStore.deleteItemAsync(TOKEN_KEY),
+      SecureStore.deleteItemAsync(BASE_URL_KEY),
+      SecureStore.deleteItemAsync(SCOPE_KEY),
+    ]);
+  } catch {
+    // Idem. Quem apaga a sessão já limpou o que estava em memória.
+  }
 }

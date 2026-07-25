@@ -1,6 +1,7 @@
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
+import type { Standing } from '@/api/types';
 import { Text, colors, fonts, radius, type } from '@/ui';
 
 import { SHEET_METRICS, SheetEmpty, SheetPanel } from './SheetChrome';
@@ -8,6 +9,12 @@ import type { PouleSheet, SheetCell } from './sheet';
 
 export interface GridProps {
   sheet: PouleSheet;
+  /**
+   * Classificação **servida** por `GET /poules/{uuid}/standings` (contrato §7). As colunas de
+   * estatística da direita são a mesma tabela, encostada à matriz; o cliente não as recalcula.
+   * Vazia enquanto a classificação não chegar — a matriz não espera por ela.
+   */
+  standings: Standing[];
   /** Clube só aparece quando a poule pertence a um torneio (spec §9 da grelha). */
   showClubs: boolean;
 }
@@ -28,9 +35,9 @@ const { cell, gutter, nameColumn, headerHeight, rowHeight, rowHeightWithClub } =
  * diagonal), diagonal preenchida a escuro, assalto por disputar em branco — nunca `0` — e o
  * separador verde de 2 pt a abrir o bloco de estatísticas.
  */
-export function Grid({ sheet, showClubs }: GridProps) {
+export function Grid({ sheet, standings, showClubs }: GridProps) {
   const { t } = useTranslation();
-  const { fencers, cells, standings } = sheet;
+  const { fencers, cells } = sheet;
 
   if (fencers.length < 2) {
     return (

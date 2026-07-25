@@ -5,7 +5,7 @@ import { Linking, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { parseQr } from '@/qr/parse';
-import { useSessionStore } from '@/session/store';
+import { useConnect } from '@/session/useConnect';
 import { Banner, Button, Screen, Text, colors, radius, spacing } from '@/ui';
 
 /**
@@ -20,9 +20,13 @@ import { Banner, Button, Screen, Text, colors, radius, spacing } from '@/ui';
  */
 export default function ScanScreen() {
   const { t } = useTranslation();
-  const connect = useSessionStore((s) => s.connect);
+  const { connecting, error: connectError, connect, clearError } = useConnect();
   const [permission, requestPermission] = useCameraPermissions();
-  const [error, setError] = useState<string | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+
+  // O QR mal lido e o PIN recusado pelo servidor são a mesma coisa para quem está a apontar a
+  // câmara: um código que não serve. Um banner, um botão de voltar a tentar.
+  const error = scanError ?? connectError;
 
   /**
    * `onBarcodeScanned` dispara a cada frame enquanto o código estiver enquadrado, não uma vez por
@@ -38,33 +42,35 @@ export default function ScanScreen() {
     const result = parseQr(data);
 
     switch (result.kind) {
+      // Formato reservado do contrato §9: a plataforma ainda não o emite, mas reconhecê-lo agora
+      // evita uma migração coordenada no dia em que passar a emiti-lo.
       case 'payload':
-        connect(result.payload.pin, result.payload.base_url);
-        router.replace('/poule');
+        void connect(result.payload.pin, result.payload.base_url);
         return;
 
       // Só o PIN: hoje é o que a plataforma gera (contrato §9). Sem `base_url` no código, fica o
-      // valor por omissão do store — a app não pergunta o servidor ao árbitro.
+      // valor por omissão do store — a app não pergunta o servidor ao árbitro. Quem navega é o
+      // `useConnect`, e só depois de o servidor confirmar: um QR válido pode dar 422 na mesma.
       case 'pin':
-        connect(result.pin);
-        router.replace('/poule');
+        void connect(result.pin);
         return;
 
       case 'unsupported_version':
-        setError(t('scan.error.unsupportedVersion'));
+        setScanError(t('scan.error.unsupportedVersion'));
         return;
 
       case 'insecure_base_url':
-        setError(t('scan.error.insecure', { url: result.baseUrl }));
+        setScanError(t('scan.error.insecure', { url: result.baseUrl }));
         return;
 
       case 'unrecognised':
-        setError(t('scan.error.unrecognised'));
+        setScanError(t('scan.error.unrecognised'));
     }
   };
 
   const retry = () => {
-    setError(null);
+    setScanError(null);
+    clearError();
     handled.current = false;
   };
 
@@ -125,11 +131,12 @@ export default function ScanScreen() {
             style={StyleSheet.absoluteFill}
             facing="back"
             barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-            onBarcodeScanned={error ? undefined : onBarcodeScanned}
+            onBarcodeScanned={error || connecting ? undefined : onBarcodeScanned}
           />
         </View>
 
         <View style={styles.actions}>
+          {connecting ? <Banner message={t('connect.connecting')} tone="warning" /> : null}
           {error ? <Banner message={error} tone="danger" /> : null}
           {error ? <Button label={t('scan.retry')} onPress={retry} /> : null}
           <Button

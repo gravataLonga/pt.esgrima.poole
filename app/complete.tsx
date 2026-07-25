@@ -5,16 +5,27 @@ import { useTranslation } from 'react-i18next';
 import { useSessionStore } from '@/session/store';
 import { Button, Screen, Text, colors, fonts, radius, spacing, type } from '@/ui';
 
-/** Ecrã 5 — Poule completa (spec §6). Sessão terminada, não é um erro. */
+/**
+ * Ecrã 6 — Competição completa (spec §6). Sessão terminada, **não é um erro**.
+ *
+ * Chega-se aqui de um `401 poule_complete`, que o servidor só devolve quando a competição está
+ * encerrada para sempre — assaltos feitos **e** quadro decidido (contrato §6). O token já foi
+ * limpo pelo ouvinte da sessão; o que sobra no store é o retrato do que ficou feito.
+ */
 export default function CompleteScreen() {
   const { t } = useTranslation();
   const poule = useSessionStore((s) => s.poule);
+  const tournament = useSessionStore((s) => s.tournament);
   const disconnect = useSessionStore((s) => s.disconnect);
 
-  if (!poule) return <Redirect href="/connect" />;
+  if (!poule && !tournament) return <Redirect href="/connect" />;
+
+  const name = poule?.name ?? tournament?.name ?? '';
+  const done = poule ? poule.bouts_done : (tournament?.matches_done ?? 0);
+  const total = poule ? poule.bouts_total : (tournament?.matches_total ?? 0);
 
   const onRestart = () => {
-    disconnect();
+    void disconnect();
     router.replace('/connect');
   };
 
@@ -37,13 +48,13 @@ export default function CompleteScreen() {
           <View style={styles.tally}>
             {/* Padrão numérico, como o `5–3` da lista: não passa por `t()`. */}
             <Text style={styles.tallyNumber}>
-              {poule.bouts_done}/{poule.bouts_total}
+              {done}/{total}
             </Text>
             <Text variant="label" color={colors.dark}>
               {t('complete.tallyLabel')}
             </Text>
             <Text variant="caption" color={colors.grayDark} style={styles.tallyName}>
-              {poule.name}
+              {name}
             </Text>
           </View>
         </View>

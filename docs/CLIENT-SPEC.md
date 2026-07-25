@@ -11,11 +11,21 @@ Documento de arranque do repositório **novo e separado** que aloja a app React 
 Complementa `docs/app-arbitragem-spec.md` (visão de produto + trabalho do lado do servidor). Onde os
 dois divergirem, **este documento manda no cliente** e o outro manda no servidor.
 
-> ⚠️ **Estado à data (2026-07-25):** a plataforma **já tem** Sanctum, `routes/api.php` e uma API de
-> arbitragem a correr — mas ela **não é a do contrato**: URLs diferentes, sem `code` nos erros, sem
-> `ETag`, sem `/start` e sem chave de idempotência. **Está decidido que é o servidor que se alinha**,
-> e a lista de trabalho está em **§11 do contrato**. Até estar feito, o desenvolvimento da app corre
-> contra o **mock server** de [§10](#10-mock-server--desbloquear-a-app), não contra produção.
+> ✅ **Estado à data (2026-07-25): a app está ligada.** A F5 está feita — a app fala com a
+> plataforma a sério em `/api/v1`, sem *fixtures* pelo meio: ligar por PIN e por QR, lista de
+> assaltos com *polling* e `ETag`, folha de poule com a classificação **servida**, ecrã de assalto
+> com os presets vindos da API, registo de resultado com `submission_id`, fila persistente, quadro de
+> eliminatórias da poule e do torneio, e a transição `poule fechada → quadro` sem pedir código novo.
+>
+> O levantamento de campo — o que se encontrou ao ligar os dois lados — está em **§12 do contrato**.
+> Fica **uma coisa por corrigir, e é do servidor**: a comparação do `If-None-Match` é forte, e o
+> `304` nunca dispara através do proxy (contrato §5). A app mitiga; a correção é de lá.
+>
+> ⏳ **Aberto deste lado desde a `1.5.0` do contrato: a pista ao vivo.** O servidor passou a aceitar
+> `POST /bouts/{id}/events` e `POST /elimination/{id}/events` — o toque, o duplo, o cartão e a
+> prioridade **no instante em que acontecem** —, e a web já os mostra. **A app ainda não os envia**,
+> e enquanto não enviar a plataforma continua a saber do assalto só no fim. É trabalho da
+> [F7](#14-fases-de-entrega), e é opcional por construção: não enviar nada mantém tudo a funcionar.
 
 ---
 
@@ -27,7 +37,7 @@ dois divergirem, **este documento manda no cliente** e o outro manda no servidor
 4. [Tecnologia](#4-tecnologia)
 5. [Contrato de API](#5-contrato-de-api)
 6. [Máquina de estados e ecrãs](#6-máquina-de-estados-e-ecrãs)
-7. [Cronómetro](#7-cronómetro)
+7. [Cronómetro](#7-cronómetro) · [7.1 A pista ao vivo](#71-a-pista-ao-vivo)
 8. [Offline e fila de submissões](#8-offline-e-fila-de-submissões)
 9. [Segurança](#9-segurança)
 10. [Mock server](#10-mock-server--desbloquear-a-app)
@@ -222,7 +232,7 @@ Regras de trabalho:
 |---|---|
 | Base | `{base_url}/api/v1`, HTTPS, JSON, sem cookies |
 | Auth | `Authorization: Bearer <token>` — token de **âmbito de uma competição** (`scope: poule` \| `tournament`), 60 min deslizantes, sem *refresh* |
-| Endpoints | `POST /connect` · `GET /poules/{uuid}/bouts` · `.../standings` · `.../elimination` · `GET /tournaments/{uuid}/elimination` · `GET /bouts/{id}` e `/elimination/{id}` · `POST .../start` e `.../score` · `GET/DELETE /session` |
+| Endpoints | `POST /connect` · `GET /poules/{uuid}/bouts` · `.../standings` · `.../elimination` · `GET /tournaments/{uuid}/elimination` · `GET /bouts/{id}` e `/elimination/{id}` · `POST .../start`, `.../events` e `.../score` · `GET/DELETE /session` |
 | Erros | `{ code, message, errors? }` — a app só faz lógica sobre `code`, nunca sobre `message` |
 | Sincronização | Polling de 10 s com `If-None-Match`/`ETag`; sem *push* |
 
@@ -352,6 +362,9 @@ O cronómetro é **local e autoritário**. O servidor não cronometra e não é 
   *hardcoded*), prioridade sorteada, quem toca primeiro ganha. A regra é conduzida pela app; o
   servidor não a conhece. Na linha temporal, a morte súbita é `period = periods + 1`.
 - `expo-keep-awake` ativo enquanto o cronómetro corre; desativado ao sair do ecrã.
+- Cada toque, duplo, cartão, sorteio de prioridade e fim de período dispara
+  `POST /bouts/{id}/events` (ou `/elimination/{id}/events`), *fire-and-forget* — ver
+  [§7.1](#71-a-pista-ao-vivo).
 
 ### Precisão
 
@@ -373,6 +386,27 @@ Requisito: **≤ 100 ms de desvio** ao fim de 3 minutos, incluindo 30 s em *back
 - Fonte tabular (`fontVariant: ['tabular-nums']`) — sem os dígitos a saltar.
 - Contraste alto; o pavilhão tem luz má e o telemóvel está a um braço de distância.
 
+### 7.1 A pista ao vivo
+
+Contrato `1.5.0`. **O ecrã não muda por causa disto** — o que muda é que a plataforma deixa de saber
+do assalto só no fim. Sem isto, uma poule a meio parece, na web, uma poule que ninguém começou.
+
+- **Um contador por assalto.** A app numera os eventos a partir de `1` dentro do assalto e envia o
+  número em `seq`. É a idempotência toda: um toque enviado por cima de uma rede de pavilhão chega
+  duas vezes tantas vezes como não chega, e nada distingue um toque do toque idêntico ao lado dele a
+  não ser o contador. O servidor ignora um `seq` repetido em silêncio. O assalto seguinte volta a
+  numerar a partir de `1`.
+- **O placar vai com o evento** (`score_a`/`score_b`, depois do evento). Não é o servidor que o
+  conta: um árbitro que retire um toque deixa a contagem dos eventos a não bater certo, e quem manda
+  é o placar da app.
+- **Nada disto entra no resultado.** O que fica registado continua a ser o `a`/`b` do
+  `POST .../score`, com o `submission_id` da [§8](#8-offline-e-fila-de-submissões).
+- **Ou em direto, ou em lote — nunca as duas.** Uma app que envie eventos em direto tem o campo
+  `events` do `score` **ignorado** pelo servidor; são os mesmos toques contados duas vezes.
+- **O cronómetro é a fonte do `at_ms`**, medido dentro do período e pelo relógio monotónico da
+  [precisão](#precisão) — não é hora de parede. A morte súbita é `period = periods + 1`, como já era.
+- **Não entram na fila offline** — [§8](#8-offline-e-fila-de-submissões) diz porquê.
+
 ---
 
 ## 8. Offline e fila de submissões
@@ -382,7 +416,15 @@ Rede de pavilhão cai. **Perder um resultado registado é inaceitável.**
 ### O que entra na fila
 
 **Só** os registos de resultado — `POST /bouts/{id}/score` e `POST /elimination/{id}/score`. Tudo o
-resto (`start`, `GET`) falha em silêncio ou tenta de novo mais tarde — nada disso é dado do árbitro.
+resto (`start`, `events`, `GET`) falha em silêncio ou tenta de novo mais tarde — nada disso é dado do
+árbitro.
+
+> **Os eventos ao vivo da [§7.1](#71-a-pista-ao-vivo) não entram na fila**, e é deliberado. A fila
+> existe para o que não se pode perder: o resultado. Um toque que não chegou é uma linha a menos num
+> ecrã que ninguém está a arbitrar por ele. O que a app faz numa falha é **juntá-lo ao lote
+> seguinte** — o `seq` garante que nada duplica se afinal tinha chegado —, e desistir dele quando o
+> assalto é submetido. Enfileirá-los seria pôr a fila que protege resultados a competir com dados
+> descritivos, e a fila tem limite de 50 itens por boas razões.
 
 ### Comportamento
 
@@ -443,30 +485,49 @@ resto (`start`, `GET`) falha em silêncio ou tenta de novo mais tarde — nada d
 
 ---
 
-## 10. Mock server — desbloquear a app
+## 10. Servidor falso e testes contra o servidor a sério
 
-A API não existe. **O desenvolvimento da app não espera pelo servidor.**
+O que a spec pedia a esta secção era que **os cenários de erro se pudessem testar sem os provocar
+num servidor** — 409, assalto removido, sessão expirada, rede em baixo. Isso está feito, com uma
+dependência a menos do que o MSW previsto.
 
-- **MSW** (`msw` + `msw/native`) implementa o contrato por inteiro em `src/mocks/handlers.ts`, ativo
-  com `EXPO_PUBLIC_API_MOCK=1`.
-- *Fixtures*: poule de 6 atletas (15 assaltos), com nomes e clubes portugueses realistas.
-- Cenários acionáveis por PIN, para testar sem servidor:
+### `src/__tests__/support/fakeApi.ts` — o servidor falso
 
-| PIN | Cenário |
+Substitui o módulo `@/api/endpoints` inteiro, que é a fronteira exata onde o contrato acaba e a app
+começa. Troca feita uma vez, no `jest.setup.ts`, e vale para toda a suite.
+
+O estado é manipulável a partir do teste, que é o que torna os cenários alcançáveis:
+
+| O que se quer testar | Como se pede |
 |---|---|
-| `111111` | Poule normal, 6 atletas, 0 assaltos feitos |
-| `222222` | Poule a meio (7/15 feitos) |
-| `333333` | Poule bloqueada (`locked: true`) |
-| `444444` | Poule a um assalto do fim (testa `poule_complete`) |
-| `555555` | Todos os `score` devolvem **409** |
-| `666666` | Rede intermitente: 50% dos pedidos falham (testa fila e *retry*) |
-| `000000` | PIN inválido |
+| Poule normal, 6 atletas | `seedPoule()` |
+| Poule bloqueada | `seedPoule({ locked: true, elimination: … })` |
+| Quadro de 4, com uma final por preencher | `seedBracket()` |
+| Sessão de torneio | `seedTournament()` + PIN `777777` |
+| O próximo `score` dá 409 | `state.failNextScore = 'conflict'` |
+| O próximo `score` não chega ao servidor | `state.failNextScore = 'network'` |
+| Rede em baixo, tudo | `state.offline = true` |
+| PIN inválido · travado · competição terminada | PIN `000000` · `999999` · `888888` |
 
-Os mesmos *handlers* servem os testes de integração — o contrato é testado uma vez só.
+### `src/api/live.test.ts` — o contrato contra a plataforma
 
-**Contrato de aceitação:** quando a API real ficar pronta, trocar `EXPO_PUBLIC_API_MOCK=0` deve
-bastar. Qualquer divergência encontrada nesse momento é *bug de contrato* e resolve-se **atualizando
-o documento de contrato primeiro**, depois os dois lados.
+O servidor falso testa a app contra a leitura que a app fez do contrato. Só isso deixaria os dois
+lados a discordar sem ninguém dar por isso — foi exatamente assim que o `If-None-Match` do §5 do
+contrato passou despercebido até alguém ligar as duas coisas.
+
+Este teste corre contra a plataforma a sério, com um PIN de uma competição descartável:
+
+```sh
+LIVE_API_BASE_URL=https://poole.esgrima.pt.test LIVE_API_PIN=123456 \
+  NODE_OPTIONS=--use-system-ca npm run test:live
+```
+
+Verifica as formas do contrato campo a campo, a matriz de idempotência do §4 (201 → 200 → 409), o
+`304` do §5, e que um `GET` de detalhe não muda estado. Não corre no `npm test`: sem as variáveis de
+ambiente é saltado, e a suite de toda a gente continua a não precisar de rede.
+
+**Regra que se mantém:** uma divergência encontrada aqui é *bug de contrato*, e resolve-se
+**atualizando o documento primeiro**, depois os dois lados.
 
 ---
 
@@ -570,40 +631,50 @@ servidor local, como gerar *build* de teste, e onde está o contrato.
 
 ## 13. Dependências no servidor (o que a plataforma tem de entregar)
 
-A app está bloqueada em tudo o que se segue. Ordem de dependência, não de importância:
+**Todas entregues (2026-07-25).** A tabela fica como registo do que estava em falta e do que a
+plataforma passou a servir; o levantamento vivo está em **§11 do contrato**.
 
-| # | Entrega | Bloqueia | Estado (2026-07-25) |
-|---|---|---|---|
-| 1 | Modelo de assaltos com **id estável**, `sequence` e `status`, gerados e regerados a cada alteração de plantel | Tudo. É o alicerce. | ✅ feito — id inteiro, não opaco |
-| 2 | Serviço de ordem de assaltos (tabelas FIE 4–12 **ou** *round-robin*) | `sequence` | ✅ feito |
-| 3 | Colunas de preset `duration_seconds` e `periods` na poule (hoje só existe `touch_cap`) | Cronómetro | ✅ feito (falta `sudden_death_seconds`) |
-| 4 | Sanctum em modo token + `personal_access_tokens` polimórfica + `HasApiTokens` no model `Poule` | Auth | ✅ feito |
-| 5 | Campo PIN de árbitro na poule + geração/rotação + `throttle` | `/connect` | ✅ feito — PIN de **uso único** |
-| 6 | Registar `api:` no `withRouting()` do `bootstrap/app.php` + criar `routes/api.php` | Todos os endpoints | ✅ feito — **sem prefixo `v1`** |
-| 7 | Os endpoints do contrato, com o envelope de erro e os `code` do catálogo | — | ⚠️ URLs e formas diferentes; **sem `code`** |
-| 8 | **Concorrência 409** no `score` (hoje a plataforma faz *overwrite* silencioso — é lógica nova) | Conflitos | ✅ feito (sem `current` no corpo) |
-| 9 | Regra de *retry* seguro: mesmo token + mesmo resultado → **200**, não 409 | Fila offline | ❌ por fazer — **bloqueia a fila** |
-| 10 | `X-Session-Expires-At` em todas as respostas autenticadas | Aviso de expiração | ❌ por fazer |
-| 11 | `ETag` / `If-None-Match` em `GET /poules/{uuid}/bouts` | Polling barato | ❌ por fazer |
-| 12 | Invalidação automática do token quando a competição fica encerrada | Ecrã de conclusão | ✅ feito |
-| 13 | Geração do QR na web com o payload do contrato (a plataforma já tem `chillerlan/php-qrcode`) | Emparelhamento | ⚠️ QR só com os 6 dígitos |
-| 14 | `POST /bouts/{id}/start` e `POST /elimination/{id}/start` — hoje é o `GET` do detalhe que muda o estado | "Joga agora" sem efeitos laterais | ❌ por fazer |
-| 15 | `submission_id` guardado com o resultado (assalto e combate), e a matriz 201/200/409 | **Fila offline** | ❌ por fazer |
-| 16 | `scope` no `connect` e no `session`, mais `PouleSummary` / `TournamentSummary` | Saber o que abrir | ❌ por fazer |
-| 17 | Endpoints de eliminatória com as URLs e as formas do contrato | Arbitrar o quadro | ⚠️ existem, com outra forma |
-| 18 | PIN deixa de se gastar na ligação | Voltar a ligar sem o organizador | ❌ por fazer |
+| # | Entrega | Estado (2026-07-25) |
+|---|---|---|
+| 1 | Modelo de assaltos com id estável, `sequence` e `status`, regerados a cada alteração de plantel | ✅ — o id é inteiro internamente, e a API expõe-no como **string opaca** |
+| 2 | Serviço de ordem de assaltos (tabelas FIE 4–12 **ou** *round-robin*) | ✅ |
+| 3 | Presets do cronómetro na poule | ✅ — e mais: `weapon`, `rest_seconds`, `sudden_death_seconds` e `passivity_seconds`, na poule e na eliminatória |
+| 4 | Sanctum em modo token + `personal_access_tokens` polimórfica | ✅ — em `Poule` **e** em `Tournament` |
+| 5 | PIN de árbitro + geração/rotação + `throttle` | ✅ |
+| 6 | `routes/api.php` registado | ✅ — com prefixo **`v1`** |
+| 7 | Os endpoints do contrato, com o envelope de erro e os `code` do catálogo | ✅ |
+| 8 | Concorrência 409 no `score` | ✅ — com `current` no corpo |
+| 9 | *Retry* seguro | ✅ — por **`submission_id`**, não por token: a fila sobrevive a um `401` e drena com um token novo, que a regra antiga lia como outra pessoa |
+| 10 | `X-Session-Expires-At` em todas as respostas autenticadas | ✅ — e em nenhum `401` |
+| 11 | `ETag` / `If-None-Match` | ✅ — nas quatro listas |
+| 12 | Invalidação do token quando a competição fica encerrada | ✅ — e distinguível de uma sessão expirada (`poule_complete`) |
+| 13 | QR com o payload do contrato | ✅ — só os 6 dígitos, que é o que o contrato §9 manda emitir |
+| 14 | `POST .../start` nos dois quadros, com os `GET` puros | ✅ |
+| 15 | `submission_id` guardado com o resultado, e a matriz 201/200/409 | ✅ |
+| 16 | `scope` no `connect` e no `session`, mais `PouleSummary` / `TournamentSummary` | ✅ |
+| 17 | Endpoints de eliminatória com as URLs e as formas do contrato | ✅ — **só o quadro principal**; consolação arbitra-se na web |
+| 18 | PIN deixa de se gastar na ligação | ✅ |
+| 19 | `POST .../events` nos dois quadros, para a pista se ver enquanto é arbitrada | ✅ — contrato `1.5.0`, servido e fixado por teste. **Falta o lado da app** ([§7.1](#71-a-pista-ao-vivo)) |
 
-**Ordem prática:** 1–3 (modelo) → 4–6 (infraestrutura) → 7–9 e 15–18 (endpoints) → 10–14 (afinação).
-A app pode desenvolver-se por inteiro contra os mocks até 7 estar pronto.
+### O que faltava deste lado — feito a 2026-07-25
 
-> O detalhe de cada ⚠️ e ❌ — o que o servidor faz hoje, o que custa à app e a correção proposta —
-> está em **§11 do contrato**. Esta coluna é só o resumo.
+| # | O que faltava | Onde está agora |
+|---|---|---|
+| 1 | Tipos do contrato | `src/api/types.ts`, na `1.4.2` |
+| 2 | Cliente HTTP e endpoints | `src/api/client.ts` · `src/api/endpoints.ts` |
+| 3 | *Polling* com `ETag` | `src/api/queries.ts`, com o `focusManager` ligado ao `AppState` no `_layout` |
+| 4 | Token no armazenamento seguro | `src/session/secureStorage.ts` (`expo-secure-store`) |
+| 5 | Fila com `submission_id` gerado na confirmação | `src/queue/` — `submit.ts` gera-o, `store.ts` persiste-o, `drain.ts` repete-o |
+| 6 | Ecrã do quadro e transição de fase | `app/bracket.tsx` · `app/match/[id].tsx` · `phaseFor()` |
+| 7 | Classificação servida | `GET /standings` alimenta a `Classification` e as colunas da `Grid` |
+| 8 | Morte súbita e passividade vindas da API | `BoutTiming` em `src/bout/phase.ts` |
 
 ### Notas de compatibilidade que o servidor não pode partir
 
 - A poule é exposta por **UUID**, não por id numérico (a plataforma já usa UUID como chave de rota).
-- O `score` reaproveita a lógica de escrita existente (transação, linhas espelhadas, verificação de
-  bloqueio). **Não** escrever direto na base de dados a partir do controlador da API.
+- O `score` reaproveita a lógica de escrita existente (transação, verificação de bloqueio). **Não**
+  escrever direto na base de dados a partir do controlador da API. *(As linhas espelhadas por assalto
+  desapareceram: a plataforma passou a guardar uma linha por assalto.)*
 - CORS e CSRF **não** são problema: Sanctum em modo token com cliente nativo não usa cookies
   *stateful* nem `csrf-cookie`.
 - A auth web continua a ser *session-based* e **coexiste** com a API — a API não depende da sessão.
@@ -619,10 +690,14 @@ A app pode desenvolver-se por inteiro contra os mocks até 7 estar pronto.
 | **F2 — Lista** | Lista de assaltos, polling + ETag, *pull to refresh*, estados vazio/erro | F1 |
 | **F3 — Assalto** | Cronómetro [§7](#7-cronómetro), contadores, `start`, submissão, confirmação | F2 |
 | **F4 — Resiliência** | Fila offline [§8](#8-offline-e-fila-de-submissões), 409, expiração, poule bloqueada, poule completa | F3 |
-| **F5 — Real** | Ligar ao servidor real, resolver divergências de contrato, E2E, *builds* internas | F4 + servidor §13.7 |
+| **F5 — Real** ✅ | Ligar ao servidor real, resolver divergências de contrato, E2E, *builds* internas | F4 + servidor §13.7 |
 | **F6 — Polimento** | Acessibilidade, som/háptica, legibilidade em sol, ecrãs de erro, *store* | F5 |
+| **F7 — Pista ao vivo** | Enviar os eventos do assalto à medida que acontecem ([§7.1](#71-a-pista-ao-vivo)): contador `seq` por assalto, lote na falha, `API_CONTRACT_VERSION` a `'1.5.0'` | F5 + servidor §13.19 |
 
 F0–F4 correm **inteiramente contra os mocks** e não dependem do trabalho do servidor.
+
+F7 é **aditiva e independente da F6**: não enviar nada deixa a app exatamente como está hoje, e é
+por isso que não bloqueia nada.
 
 ---
 

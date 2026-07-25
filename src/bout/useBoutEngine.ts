@@ -23,7 +23,6 @@ import {
   type ClockAction,
 } from './phase';
 import {
-  PRIORITY_SECONDS,
   boutRules,
   initialBoutRules,
   type BoutRulesState,
@@ -87,17 +86,19 @@ export function useBoutEngine({
   const priorityDraw = usePriorityDraw(onPrioritySettled);
 
   const phase: BoutPhase = rules.priority ? 'priority' : resting ? 'rest' : 'period';
-  const durationSeconds = phaseDuration(phase, timing, PRIORITY_SECONDS);
+  const durationSeconds = phaseDuration(phase, timing);
 
   // Fim de tempo tem de ser percetível sem olhar (spec §7). `Vibration` é do core do RN; o som
   // fica para a F3, com o `expo-av` (ADR-002).
   const onExpire = useCallback(() => Vibration.vibrate([0, 400, 180, 400]), []);
   const timer = useTimer(durationSeconds, { onExpire });
 
-  // Não se conta passividade no intervalo: os atletas não estão em pista.
+  // Não se conta passividade no intervalo: os atletas não estão em pista. O minuto vem da API
+  // (contrato §7, `passivity_seconds`) e não daqui.
   const passivity = usePassivity({
     running: timer.state === 'running' && phase !== 'rest',
     resetToken: combatToken,
+    seconds: timing.passivitySeconds,
   });
 
   const action = nextClockAction({

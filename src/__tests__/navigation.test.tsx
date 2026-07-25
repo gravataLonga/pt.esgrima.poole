@@ -1,17 +1,20 @@
-import { fireEvent, renderRouter, screen } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 
+import { useQueueStore } from '@/queue/store';
 import { useSessionStore } from '@/session/store';
 
+import { connectPoule, connectTournament, resetApp } from './support/app';
+import { seedBracket, state as fakeState } from './support/fakeApi';
+
 /**
- * Percorre o esqueleto de ponta a ponta sobre a árvore de rotas real:
- * Ligar → Lista → Assalto → submeter → Lista.
+ * Percorre a app de ponta a ponta sobre a árvore de rotas real, contra o servidor falso:
+ * Ligar → Lista → Assalto → submeter → Lista, e as bifurcações que o contrato prevê.
  *
- * É isto que prova que o esqueleto é navegável. Substitui o clique manual no simulador.
+ * Substitui o clique manual no simulador. O que aqui se prova é a navegação e o que o árbitro vê;
+ * que as formas trocadas são mesmo as do servidor prova-se em `src/api/live.test.ts`.
  */
-describe('fluxo do esqueleto', () => {
-  beforeEach(() => {
-    useSessionStore.getState().disconnect();
-  });
+describe('ligar', () => {
+  beforeEach(() => resetApp());
 
   it('liga com um PIN de 6 dígitos e mostra a lista de assaltos', async () => {
     const router = renderRouter('./app', { initialUrl: '/connect' });
@@ -23,7 +26,7 @@ describe('fluxo do esqueleto', () => {
 
     await screen.findByText('Poule 3 — Sabre Masculino');
     expect(router.getPathname()).toBe('/poule');
-    expect(screen.getByText('3 of 15 bouts')).toBeTruthy();
+    expect(await screen.findByText('3 of 15 bouts')).toBeTruthy();
   });
 
   it('assina o ecrã de abertura com a marca', async () => {
@@ -42,11 +45,55 @@ describe('fluxo do esqueleto', () => {
     await fireEvent.press(screen.getByText('Connect'));
 
     expect(screen.getByText('The PIN has 6 digits.')).toBeTruthy();
-    expect(useSessionStore.getState().status).toBe('disconnected');
+    expect(useSessionStore.getState().phase).toBe('disconnected');
   });
 
+  it('mostra o código inválido no ecrã e fica onde está', async () => {
+    const router = renderRouter('./app', { initialUrl: '/connect' });
+    await router;
+    await screen.findByText('Connect to a poule');
+
+    await fireEvent.changeText(screen.getByLabelText('PIN'), '000000');
+    await fireEvent.press(screen.getByText('Connect'));
+
+    // O `422 pin_invalid` é erro de digitação, não fim de caminho: o ecrã mantém-se (contrato §8).
+    await screen.findByText('Wrong code. Check the six digits on the poule sheet.');
+    expect(router.getPathname()).toBe('/connect');
+    expect(useSessionStore.getState().phase).toBe('disconnected');
+  });
+
+  it('bloqueia o botão quando o servidor manda travar', async () => {
+    await renderRouter('./app', { initialUrl: '/connect' });
+    await screen.findByText('Connect to a poule');
+
+    await fireEvent.changeText(screen.getByLabelText('PIN'), '999999');
+    await fireEvent.press(screen.getByText('Connect'));
+
+    // `429 pin_throttled`: o campo fica bloqueado até à hora que o `Retry-After` disser (spec §6).
+    await screen.findByText('Too many attempts. Wait a moment before trying again.');
+    expect(screen.getByText('Connect')).toBeDisabled();
+  });
+
+  it('um código de torneio vai direto ao quadro, sem lista de assaltos', async () => {
+    const router = renderRouter('./app', { initialUrl: '/connect' });
+    await router;
+    await screen.findByText('Connect to a poule');
+
+    await fireEvent.changeText(screen.getByLabelText('PIN'), '777777');
+    await fireEvent.press(screen.getByText('Connect'));
+
+    // É o `scope` da resposta que decide o ecrã — o árbitro escreve seis dígitos e não sabe, nem
+    // tem de saber, que tipo de código lhe deram (contrato §7).
+    await screen.findByText('Direct elimination');
+    expect(router.getPathname()).toBe('/bracket');
+  });
+});
+
+describe('arbitrar um assalto', () => {
+  beforeEach(() => resetApp());
+
   it('abre o assalto seguinte, conta toques e submete', async () => {
-    useSessionStore.getState().connect('111111');
+    connectPoule();
     const router = renderRouter('./app', { initialUrl: '/poule' });
     await router;
 
@@ -56,23 +103,24 @@ describe('fluxo do esqueleto', () => {
     expect(router.getPathname()).toBe('/bout/b_01J8X004');
 
     // 5–0: cinco toques para o atleta A.
-    const addA = screen.getByLabelText('One more touch for Marta Lopes');
+    const addA = await screen.findByLabelText('One more touch for Marta Lopes');
     for (let i = 0; i < 5; i++) await fireEvent.press(addA);
 
-    // A confirmação da spec §6 é agora uma folha inferior, não um `Alert` do sistema (ADR-016).
+    // A confirmação da spec §6 é uma folha inferior, não um `Alert` do sistema (ADR-016).
     await fireEvent.press(screen.getByText('Submit result'));
     await screen.findByText('Confirm result');
     await fireEvent.press(screen.getByText('Record'));
 
-    await screen.findByText('4 of 15 bouts');
-    expect(router.getPathname()).toBe('/poule');
+    await waitFor(() => expect(router.getPathname()).toBe('/poule'));
 
-    const bout = useSessionStore.getState().bouts.find((b) => b.id === 'b_01J8X004');
+    const bout = fakeState.bouts.find((candidate) => candidate.id === 'b_01J8X004');
     expect(bout).toMatchObject({ status: 'done', score_a: 5, score_b: 0 });
+    // Registado é registado: nada fica em fila.
+    expect(useQueueStore.getState().items).toHaveLength(0);
   });
 
   it('bloqueia o submeter enquanto o resultado for um empate', async () => {
-    useSessionStore.getState().connect('111111');
+    connectPoule();
     await renderRouter('./app', { initialUrl: '/bout/b_01J8X004' });
 
     await screen.findByText('Bout 4');
@@ -81,20 +129,137 @@ describe('fluxo do esqueleto', () => {
     // o resultado empatado está nos dois números grandes logo por cima.
     expect(screen.getByText('Submit result')).toBeDisabled();
 
-    await fireEvent.press(screen.getByLabelText('One more touch for Marta Lopes'));
+    await fireEvent.press(await screen.findByLabelText('One more touch for Marta Lopes'));
     expect(screen.getByText('Submit result')).not.toBeDisabled();
   });
 
-  it('vai para o ecrã de poule completa quando o último assalto é registado', async () => {
-    useSessionStore.getState().connect('111111');
-    for (const bout of useSessionStore.getState().bouts) {
-      if (bout.status !== 'done') useSessionStore.getState().recordScore(bout.id, 5, 1);
-    }
+  it('mostra o conflito com o resultado que ganhou, e não repete', async () => {
+    connectPoule();
+    fakeState.failNextScore = 'conflict';
+
+    await renderRouter('./app', { initialUrl: '/bout/b_01J8X004' });
+    await screen.findByText('Bout 4');
+
+    await fireEvent.press(await screen.findByLabelText('One more touch for Marta Lopes'));
+    await fireEvent.press(screen.getByText('Submit result'));
+    await fireEvent.press(await screen.findByText('Record'));
+
+    // Sem opção de forçar: corrigir um resultado é trabalho da plataforma web (spec §6, ecrã 4).
+    await screen.findByText('Already recorded');
+    expect(useQueueStore.getState().items).toHaveLength(0);
+  });
+
+  it('sem rede, guarda o resultado e diz que ainda não foi enviado', async () => {
+    connectPoule();
+    fakeState.failNextScore = 'network';
+
+    const router = renderRouter('./app', { initialUrl: '/bout/b_01J8X004' });
+    await router;
+    await screen.findByText('Bout 4');
+
+    await fireEvent.press(await screen.findByLabelText('One more touch for Marta Lopes'));
+    await fireEvent.press(screen.getByText('Submit result'));
+    await fireEvent.press(await screen.findByText('Record'));
+
+    await waitFor(() => expect(router.getPathname()).toBe('/poule'));
+
+    // A app não finge que enviou (spec §8): o resultado fica na fila e o aviso está na lista.
+    const queued = useQueueStore.getState().items;
+    expect(queued).toHaveLength(1);
+    expect(queued[0]).toMatchObject({ kind: 'bout', target_id: 'b_01J8X004' });
+    expect(await screen.findByText(/waiting for the network/)).toBeTruthy();
+  });
+});
+
+describe('mudança de fase', () => {
+  beforeEach(() => resetApp());
+
+  it('a poule fechada com quadro gerado leva ao quadro sem pedir código novo', async () => {
+    seedBracket();
+    connectPoule({ locked: true, elimination: { matches_total: 3, matches_done: 0 } });
+
+    const router = renderRouter('./app', { initialUrl: '/poule' });
+    await router;
+
+    await screen.findByText('Direct elimination');
+    expect(router.getPathname()).toBe('/bracket');
+  });
+
+  it('feita a transição, a lista e o quadro alternam-se', async () => {
+    seedBracket();
+    connectPoule({ locked: true, elimination: { matches_total: 3, matches_done: 0 } });
+
+    const router = renderRouter('./app', { initialUrl: '/poule' });
+    await router;
+    await screen.findByText('Direct elimination');
+
+    await fireEvent.press(screen.getByText('Back to the bouts'));
+
+    // A transição automática acontece **uma vez** (spec §6). A lista fechada continua a ser
+    // consultável: os resultados já registados são metade do uso deste ecrã.
+    expect(router.getPathname()).toBe('/poule');
+  });
+
+  it('a poule fechada sem quadro fica em leitura, com a escrita desativada', async () => {
+    connectPoule({ locked: true, elimination: null });
+
+    const router = renderRouter('./app', { initialUrl: '/poule' });
+    await router;
+
+    await screen.findByText(
+      'Poule locked — the direct elimination table has been generated. Read-only mode.',
+    );
+    expect(router.getPathname()).toBe('/poule');
+    expect(await screen.findByText('Resume')).toBeDisabled();
+  });
+
+  it('a competição encerrada tem ecrã próprio, e não uma mensagem de erro', async () => {
+    connectPoule();
+
+    // `complete` chega sempre de um `401 poule_complete` (contrato §6). É fim, não avaria.
+    await act(async () => {
+      useSessionStore.setState({ phase: 'complete', endReason: 'poule_complete' });
+    });
 
     const router = renderRouter('./app', { initialUrl: '/poule' });
     await router;
 
     await screen.findByText('Poule complete');
     expect(router.getPathname()).toBe('/complete');
+  });
+});
+
+describe('quadro de eliminatórias', () => {
+  beforeEach(() => resetApp());
+
+  it('mostra o quadro inteiro e não deixa abrir quem ainda espera o vencedor', async () => {
+    seedBracket();
+    connectTournament();
+
+    const router = renderRouter('./app', { initialUrl: '/bracket' });
+    await router;
+
+    await screen.findByText('Round 1');
+    // A final aparece por preencher — é assim que o árbitro vê o caminho (spec §6, ecrã 5).
+    expect(screen.getByText('Round 2')).toBeTruthy();
+    expect(screen.getAllByText('Awaiting winner').length).toBeGreaterThan(0);
+
+    await fireEvent.press(screen.getAllByText('Awaiting winner')[0]!);
+    expect(router.getPathname()).toBe('/bracket');
+  });
+
+  it('abre um combate pronto no mesmo ecrã de assalto, com os presets do quadro', async () => {
+    seedBracket();
+    connectTournament();
+
+    const router = renderRouter('./app', { initialUrl: '/bracket' });
+    await router;
+
+    await fireEvent.press(await screen.findByText('Ana Silva'));
+
+    await screen.findByText('Round 1 · 1');
+    expect(router.getPathname()).toBe('/match/m_1');
+    // 15 toques, e não os 5 da poule: o alvo vem da API (contrato §7).
+    expect(screen.getByText('To 15 touches')).toBeTruthy();
   });
 });

@@ -26,29 +26,41 @@ export interface BoutTiming {
   periods: number;
   /** Descanso entre períodos, em segundos. `0` → não há descanso. */
   restSeconds: number;
+  /**
+   * Morte súbita com prioridade sorteada, em segundos. O contrato chama-lhe
+   * `sudden_death_seconds` — nome do regulamento (FIE t.41), não o do botão.
+   */
+  suddenDeathSeconds: number;
+  /** Minuto de não combatividade (FIE t.87). `0` → a app não conta passividade. */
+  passivitySeconds: number;
 }
 
-/** Normaliza os presets. `rest_seconds` é opcional no contrato (1.1.0) e pode vir a `null`. */
+/** Valores FIE, para quando o servidor não mandar o campo — todos opcionais no contrato §7. */
+const FIE_SUDDEN_DEATH_SECONDS = 60;
+const FIE_PASSIVITY_SECONDS = 60;
+
+/** Normaliza os presets do contrato §7. Os opcionais podem vir ausentes ou a `null`. */
 export function boutTiming(input: {
   duration_seconds: number;
   periods: number;
   rest_seconds?: number | null;
+  sudden_death_seconds?: number | null;
+  passivity_seconds?: number | null;
 }): BoutTiming {
   return {
     durationSeconds: Math.max(0, input.duration_seconds),
     periods: Math.max(1, input.periods),
     // Sem períodos para separar, o descanso não existe — nem que a API mande um valor.
     restSeconds: input.periods > 1 ? Math.max(0, input.rest_seconds ?? 0) : 0,
+    suddenDeathSeconds: Math.max(0, input.sudden_death_seconds ?? FIE_SUDDEN_DEATH_SECONDS),
+    // `0` é um valor com significado — "não contar" — e por isso não pode cair no `??`.
+    passivitySeconds: Math.max(0, input.passivity_seconds ?? FIE_PASSIVITY_SECONDS),
   };
 }
 
 /** Quantos segundos a fase atual conta. */
-export function phaseDuration(
-  phase: BoutPhase,
-  timing: BoutTiming,
-  prioritySeconds: number,
-): number {
-  if (phase === 'priority') return prioritySeconds;
+export function phaseDuration(phase: BoutPhase, timing: BoutTiming): number {
+  if (phase === 'priority') return timing.suddenDeathSeconds;
   if (phase === 'rest') return timing.restSeconds;
   return timing.durationSeconds;
 }

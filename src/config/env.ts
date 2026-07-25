@@ -1,9 +1,9 @@
 /**
- * Endpoint por omissão, por ambiente.
+ * Endpoint por omissão e identificação da app, por ambiente.
  *
- * Na maior parte dos casos isto não é usado: o `base_url` vem no payload do QR (contrato §9) e é
- * esse que manda. Este valor serve o caminho do PIN manual, onde não se leu QR nenhum e portanto
- * não há de onde tirar o servidor.
+ * Na maior parte dos casos o `base_url` não é usado daqui: o QR pode trazê-lo no payload
+ * (contrato §9) e é esse que manda. Este valor serve o caminho do PIN manual, onde não se leu QR
+ * nenhum e portanto não há de onde tirar o servidor.
  *
  * O fallback é **produção**, não local: uma variável em falta — build sem `.env`, ambiente mal
  * configurado — não pode apontar a app de um árbitro em pavilhão para o portátil de alguém. Falhar
@@ -12,4 +12,24 @@
  * `EXPO_PUBLIC_*` é inlined no bundle em build-time e qualquer pessoa o extrai do APK. Um URL de
  * servidor não é segredo, mas nada que o seja pode entrar por aqui.
  */
+
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
+
 export const defaultBaseUrl = process.env.EXPO_PUBLIC_BASE_URL ?? 'https://poole.esgrima.pt';
+
+export const appVersion = Constants.expoConfig?.version ?? '0.0.0';
+
+/**
+ * `X-Client` do contrato §2. Serve o registo do lado da plataforma e a triagem de um bug que só
+ * aconteça numa versão — por isso leva a versão da app e a do sistema, e mais nada. **Sem
+ * identificador de dispositivo:** a spec §9 não persiste dados pessoais, e um `X-Client` viaja em
+ * todos os pedidos.
+ */
+export const clientHeader = `poole-referee-app/${appVersion} (${Platform.OS} ${Platform.Version})`;
+
+/**
+ * O que aparece na web em "quem está a arbitrar". Não identifica ninguém — diz só que sistema está
+ * do outro lado, que é o que o organizador precisa para distinguir dois dispositivos na mesma sala.
+ */
+export const deviceName = `${Platform.OS === 'ios' ? 'iOS' : 'Android'} · Arbitragem`;

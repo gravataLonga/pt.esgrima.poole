@@ -1,11 +1,13 @@
 import { Redirect, router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
+import { useBouts, useStandings } from '@/api/queries';
 import type { Bout } from '@/api/types';
 import { Classification, Grid, boutStates, buildSheet, currentBout, onDeckBout } from '@/poule';
 import type { BoutState } from '@/poule';
+import { QueueBanner, SessionBar } from '@/session';
 import { useSessionStore } from '@/session/store';
 import {
   Badge,
@@ -29,28 +31,45 @@ type PouleView = 'bouts' | 'sheet';
 /**
  * Ecrã 2 — Lista de assaltos e folha de poule (spec §6).
  *
- * ESQUELETO: sem polling, sem ETag, sem pull to refresh — a lista vem do store em memória.
+ * Polling de 10 s com `If-None-Match` (contrato §5): um `304` não altera a lista nem a faz piscar,
+ * porque a query devolve a mesma instância dos dados. Em *background* o polling pára — quem o liga
+ * e desliga é o `focusManager` do `_layout`.
  */
 export default function PouleScreen() {
   const { t } = useTranslation();
+  const phase = useSessionStore((s) => s.phase);
   const poule = useSessionStore((s) => s.poule);
-  const bouts = useSessionStore((s) => s.bouts);
-  const status = useSessionStore((s) => s.status);
+  const bracketAnnounced = useSessionStore((s) => s.bracketAnnounced);
 
   const [view, setView] = useState<PouleView>('bouts');
 
-  // A folha percorre todos os assaltos e ordena a classificação. Recalculá-la a cada render do
-  // ecrã seria desperdício — muda só quando um resultado entra.
-  const sheet = useMemo(() => buildSheet(bouts), [bouts]);
-  const states = useMemo(() => boutStates(bouts), [bouts]);
+  const bouts = useBouts(poule?.uuid ?? null);
+  // A classificação só é pedida com a folha aberta: seria um segundo `GET` de 10 em 10 s por um
+  // ecrã que o árbitro consulta entre assaltos, não durante.
+  const standings = useStandings(poule?.uuid ?? null, view === 'sheet');
 
+  const list = useMemo(() => bouts.data?.bouts ?? [], [bouts.data]);
+
+  // A matriz percorre todos os assaltos. Recalculá-la a cada render seria desperdício — e um
+  // `304` devolve a mesma instância da lista, por isso isto não corre de 10 em 10 segundos.
+  const sheet = useMemo(() => buildSheet(list), [list]);
+  const states = useMemo(() => boutStates(list), [list]);
+
+  if (phase === 'disconnected') return <Redirect href="/connect" />;
+  if (phase === 'complete') return <Redirect href="/complete" />;
+  // A poule fechou e o quadro abriu: a app muda de fase sozinha, sem pedir código novo (spec §6).
+  // **Uma vez.** Feita a transição, a lista continua alcançável — fechada para escrita, mas os
+  // resultados já registados são metade do uso deste ecrã, e o quadro tem um botão para cá voltar.
+  if (phase === 'bracket' && !bracketAnnounced) return <Redirect href="/bracket" />;
   if (!poule) return <Redirect href="/connect" />;
-  if (status === 'complete') return <Redirect href="/complete" />;
 
-  const current = currentBout(bouts);
-  const onDeck = onDeckBout(bouts);
-  const readOnly = status === 'read_only';
+  const readOnly = phase === 'read_only';
   const showClubs = poule.tournament_name !== null;
+
+  // Só há "próximo assalto" quando a ordem tem valor regulamentar. Numa poule isolada o plantel
+  // muda a meio, a ordem é regerada e qualquer `pending` serve (contrato §7, `ordered`).
+  const current = poule.ordered ? currentBout(list) : undefined;
+  const onDeck = poule.ordered ? onDeckBout(list) : undefined;
 
   return (
     <Screen>
@@ -68,7 +87,26 @@ export default function PouleScreen() {
         </View>
       </View>
 
+      <SessionBar offline={bouts.isError} />
+      <QueueBanner />
+
       {readOnly ? <Banner message={t('poule.readOnly')} tone="warning" /> : null}
+
+      {/* Enquanto a poule e o quadro coexistem, o quadro fica a um toque. Quando a poule fecha, a
+          transição deixa de precisar deste botão — passa a ser automática. */}
+      {poule.elimination ? (
+        <View style={styles.bracketLink}>
+          <Button
+            label={t('poule.openBracket', {
+              done: poule.elimination.matches_done,
+              total: poule.elimination.matches_total,
+            })}
+            variant="secondary"
+            size="compact"
+            onPress={() => router.push('/bracket')}
+          />
+        </View>
+      ) : null}
 
       <View style={styles.switcher}>
         <SegmentedControl
@@ -82,10 +120,32 @@ export default function PouleScreen() {
         />
       </View>
 
-      {view === 'sheet' ? (
-        <ScrollView contentContainerStyle={styles.sheet} showsVerticalScrollIndicator={false}>
-          <Classification standings={sheet.standings} showClubs={showClubs} />
-          <Grid sheet={sheet} showClubs={showClubs} />
+      {bouts.isLoading ? (
+        <View style={styles.centered}>
+          <Text color={colors.textMuted}>{t('poule.loading')}</Text>
+        </View>
+      ) : bouts.isError && list.length === 0 ? (
+        <View style={styles.centered}>
+          <Text variant="title">{t('poule.error.title')}</Text>
+          <Text color={colors.textMuted} style={styles.centeredText}>
+            {t('poule.error.body')}
+          </Text>
+          <Button label={t('common.retry')} onPress={() => void bouts.refetch()} />
+        </View>
+      ) : view === 'sheet' ? (
+        <ScrollView
+          contentContainerStyle={styles.sheet}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={standings.isFetching && !standings.isLoading}
+              onRefresh={() => void standings.refetch()}
+              tintColor={colors.dark}
+            />
+          }
+        >
+          <Classification standings={standings.data?.standings ?? []} showClubs={showClubs} />
+          <Grid sheet={sheet} standings={standings.data?.standings ?? []} showClubs={showClubs} />
         </ScrollView>
       ) : (
         <>
@@ -103,10 +163,26 @@ export default function PouleScreen() {
           </Text>
 
           <FlatList
-            data={bouts}
+            data={list}
             keyExtractor={(bout) => bout.id}
             contentContainerStyle={styles.list}
             showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                // `isFetching` sem `isLoading`: o indicador é para o *pull to refresh* e para o
+                // poll de fundo, não para o primeiro carregamento, que já tem ecrã próprio.
+                refreshing={bouts.isFetching && !bouts.isLoading}
+                onRefresh={() => void bouts.refetch()}
+                tintColor={colors.dark}
+              />
+            }
+            ListEmptyComponent={
+              <View style={styles.centered}>
+                <Text color={colors.textMuted} style={styles.centeredText}>
+                  {t('poule.empty')}
+                </Text>
+              </View>
+            }
             renderItem={({ item }) => {
               const state = states[item.id] ?? 'pending';
 
@@ -276,8 +352,22 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     marginTop: spacing.sm,
   },
+  bracketLink: {
+    marginBottom: spacing.sm,
+  },
   switcher: {
     marginBottom: spacing.md,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.xl,
+  },
+  centeredText: {
+    textAlign: 'center',
+    maxWidth: 300,
   },
   sheet: {
     gap: spacing.lg,
@@ -320,6 +410,7 @@ const styles = StyleSheet.create({
   list: {
     gap: spacing.sm,
     paddingBottom: spacing.xl,
+    flexGrow: 1,
   },
   row: {
     minHeight: touch.min,

@@ -12,7 +12,20 @@
     "or": "or",
     "pinLabel": "PIN",
     "submit": "Connect",
-    "pinIncomplete": "The PIN has 6 digits."
+    "pinIncomplete": "The PIN has 6 digits.",
+    "connecting": "Connecting…",
+    "blockedUntil": "Too many attempts. Try again at {{time}}.",
+    "error": {
+      "invalid": "Wrong code. Check the six digits on the poule sheet.",
+      "finished": "This competition has already finished.",
+      "throttled": "Too many attempts. Wait a moment before trying again.",
+      "network": "No connection to the server. Check the venue network.",
+      "unknown": "Could not connect. Try again."
+    },
+    "ended": {
+      "token_expired": "The session expired after 60 minutes without activity. Connect again.",
+      "token_revoked": "Another device took over this competition."
+    }
   },
   "scan": {
     "title": "Scan QR",
@@ -48,6 +61,13 @@
       "on_deck": "On deck",
       "in_progress": "In progress",
       "done": "Recorded"
+    },
+    "loading": "Loading bouts…",
+    "empty": "No bouts in this poule yet.",
+    "openBracket": "Direct elimination table — {{done}}/{{total}}",
+    "error": {
+      "title": "Could not load the bouts",
+      "body": "The server did not answer. The app keeps trying on its own."
     }
   },
   "sheet": {
@@ -124,6 +144,22 @@
       "seconds": "Seconds",
       "apply": "Apply",
       "reset": "Reset to {{time}}"
+    },
+    "loading": "Loading the bout…",
+    "loadingHint": "Fetching the touches, the time and the periods from the server.",
+    "unknownFencer": "Fencer",
+    "locked": "Closed for scoring. Read-only mode.",
+    "confirmSending": "Recording…",
+    "conflict": {
+      "title": "Already recorded",
+      "message": "Someone else recorded this bout: {{a}}–{{b}}, at {{time}}.",
+      "messageUnknown": "Someone else recorded this bout first.",
+      "backToList": "Back to the list",
+      "stay": "Stay here",
+      "messageNoTime": "Someone else recorded this bout: {{a}}–{{b}}."
+    },
+    "error": {
+      "gone": "This bout no longer exists — a fencer was removed from the poule. The result was not saved."
     }
   },
   "timer": {
@@ -147,6 +183,39 @@
   },
   "common": {
     "cancel": "Cancel",
-    "skeletonNotice": "Skeleton — sample data, not connected to the server."
+    "retry": "Try again"
+  },
+  "bracket": {
+    "eyebrow": "Direct elimination",
+    "progress": "{{done}} of {{total}} matches",
+    "round": "Round {{round}}",
+    "matchTitle": "Round {{round}} · {{position}}",
+    "loading": "Loading the table…",
+    "empty": "The table has not been drawn yet. It appears here as soon as the organiser generates it.",
+    "locked": "Table closed. Read-only mode.",
+    "awaiting": "Awaiting winner",
+    "backToPoule": "Back to the bouts",
+    "state": {
+      "ready": "Ready",
+      "in_progress": "In progress",
+      "waiting": "Waiting"
+    }
+  },
+  "session": {
+    "offline": "No connection. The app keeps trying and nothing is lost.",
+    "expiring": "The session ends in {{minutes}} min. Generate a new code on the platform to carry on.",
+    "expired": "The session has ended."
+  },
+  "queue": {
+    "pending_one": "{{count}} result saved on this phone, waiting for the network.",
+    "pending_other": "{{count}} results saved on this phone, waiting for the network.",
+    "dismiss": "Dismiss",
+    "notice": {
+      "conflict": "{{label}} had already been recorded by someone else ({{detail}}). Your result was not applied.",
+      "gone": "{{label}} no longer exists — a fencer was removed. The result was not saved.",
+      "rejected": "{{label}} was refused by the server: {{detail}}",
+      "expired": "{{label}} waited more than 24 h and was discarded. The result never reached the server.",
+      "full": "{{label}} was not saved — the queue is full (50 results). Find a network before recording more."
+    }
   }
 }

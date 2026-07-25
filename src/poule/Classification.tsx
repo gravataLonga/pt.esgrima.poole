@@ -1,10 +1,10 @@
 import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
+import type { Standing } from '@/api/types';
 import { Text, colors, fonts, radius, spacing, type } from '@/ui';
 
 import { SHEET_METRICS, SheetEmpty, SheetPanel } from './SheetChrome';
-import type { Standing } from './sheet';
 
 export interface ClassificationProps {
   standings: Standing[];

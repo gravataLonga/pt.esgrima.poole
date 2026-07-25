@@ -139,9 +139,6 @@ export function canGiveCard(state: BoutRulesState, side: Side, kind: CardKind): 
   return kind !== 'black' || cardCount(state, side, 'black') < BLACK_CARD_LIMIT;
 }
 
-/** Duração da morte súbita, em segundos. FIE t.41: um minuto. */
-export const PRIORITY_SECONDS = 60;
-
 /** Sorteio a 50/50. Isolado aqui para o redutor não ter de conhecer `Math.random`. */
 export function drawPrioritySide(random: number = Math.random()): Side {
   return random < 0.5 ? 'a' : 'b';
