@@ -86,9 +86,8 @@ export default function ConnectScreen() {
           <View style={styles.formArea}>
             <Pressable
               accessibilityRole="button"
-              accessibilityState={{ disabled: true }}
-              disabled
-              style={styles.scanTile}
+              onPress={() => router.push('/scan')}
+              style={({ pressed }) => [styles.scanTile, pressed ? styles.scanTilePressed : null]}
             >
               <QrMark />
               <View style={styles.scanText}>
@@ -96,7 +95,7 @@ export default function ConnectScreen() {
                   {t('connect.scan')}
                 </Text>
                 <Text variant="caption" color={colors.grayDark}>
-                  {t('connect.scanUnavailable')}
+                  {t('connect.scanHint')}
                 </Text>
               </View>
             </Pressable>
@@ -128,11 +127,10 @@ export default function ConnectScreen() {
                   ))}
                 </View>
 
-                {/* `autoFocus`: escrever o PIN é a única coisa que se pode fazer aqui, por isso o
-                  teclado sobe sozinho e ninguém fica à espera que um toque faça alguma coisa.
-                  Rever na F1, quando a câmara passar a ser o caminho principal. */}
+                {/* Sem `autoFocus` desde que a câmara existe: o teclado numérico subia sozinho ao
+                  entrar e tapava o botão de ler QR, que é o caminho principal. O PIN é agora a
+                  alternativa, e quem a quer toca nas casas. */}
                 <TextInput
-                  autoFocus
                   value={pin}
                   onChangeText={(value) => setPin(value.replace(/\D/g, '').slice(0, PIN_LENGTH))}
                   keyboardType="number-pad"
@@ -303,7 +301,10 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderColor: colors.darkBorder,
     backgroundColor: colors.darkSurface,
-    opacity: 0.6,
+  },
+  /** Borda a tracejado, como uma moldura de leitura — não como "desativado". */
+  scanTilePressed: {
+    borderColor: colors.green,
   },
   scanText: {
     flex: 1,
@@ -312,7 +313,7 @@ const styles = StyleSheet.create({
   scanTitle: {
     fontSize: type.lg,
   },
-  /** Sem `opacity`, ao contrário do `scanTile`: este está vivo. */
+  /** Igual ao `scanTile`, menos o tracejado: este não é um alvo de leitura. */
   timerTile: {
     flexDirection: 'row',
     alignItems: 'center',

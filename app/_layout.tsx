@@ -49,6 +49,7 @@ export default function RootLayout() {
         >
           <Stack.Screen name="index" />
           <Stack.Screen name="connect" />
+          <Stack.Screen name="scan" />
           <Stack.Screen name="timer" />
           <Stack.Screen name="poule" />
           <Stack.Screen name="bout/[id]" />

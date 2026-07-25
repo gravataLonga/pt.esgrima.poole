@@ -6,8 +6,9 @@ a **uma** poule por QR ou PIN, conduz os assaltos com cronómetro local e regist
 Em paralelo, um **modo cronómetro** autónomo: um assalto, offline, sem atletas e sem ligação a nada
 ([ADR-021](docs/DECISIONS.md)). É para treinos e provas locais, que não têm poule na plataforma.
 
-**Estado: F0 — Andaimes.** O esqueleto navega e desenha os ecrãs com dados de exemplo. Não há rede,
-câmara, persistência nem cronómetro a contar. Ver [Onde está cada coisa](#onde-está-cada-coisa).
+**Estado: F0 — Andaimes, mais a leitura de QR da F1.** O esqueleto navega e desenha os ecrãs com dados
+de exemplo. A câmara lê QR a sério ([ADR-026](docs/DECISIONS.md)); não há rede, persistência nem
+cronómetro a contar. Ver [Onde está cada coisa](#onde-está-cada-coisa).
 
 ## Como correr
 
@@ -17,7 +18,11 @@ npm start          # depois: i (iOS), a (Android), w (web)
 ```
 
 Não é preciso servidor: o esqueleto lê a fixture de `src/fixtures/poule.ts`. Qualquer PIN de 6 dígitos
-entra.
+entra — e qualquer QR que traga seis dígitos ou o payload do contrato §9 também.
+
+A leitura de QR precisa de câmara: no simulador de iOS não há nenhuma, e o ecrã `/scan` fica preto.
+Testa-a em telemóvel. Um QR de teste gera-se em qualquer sítio a partir de `483920` ou de
+`{"v":1,"base_url":"https://poole.esgrima.pt","pin":"483920"}`.
 
 Quando a F1 trouxer os mocks MSW, passa a haver `EXPO_PUBLIC_API_MOCK=1`; quando a API real existir,
 `EXPO_PUBLIC_API_MOCK=0` contra um servidor local.
@@ -54,7 +59,8 @@ plataforma, incluindo as ligações internas que apontam para os nomes de fichei
 
 ```
 app/                    rotas (expo-router)
-  connect.tsx           §6 ecrã 1 — ligar por PIN
+  connect.tsx           §6 ecrã 1 — ligar por QR ou PIN
+  scan.tsx              leitura do QR pela câmara (ADR-026)
   poule.tsx             §6 ecrã 2 — assaltos e folha de poule
   bout/[id].tsx         §6 ecrã 3 — assalto (portrait e landscape)
   complete.tsx          §6 ecrã 5 — poule completa
@@ -66,15 +72,15 @@ src/
   session/              store zustand em memória · secureStorage (esqueleto)
   queue/                fila FIFO em memória · drain (esqueleto)
   timer/                format.ts (real) · useTimer (esqueleto)
-  qr/                   parse (esqueleto)
+  qr/                   parse.ts (real) — os fallbacks do contrato §9
   fixtures/             poule de 6 atletas, 15 assaltos
   i18n/                 en (inicial) · pt-PT
   ui/                   design system Esgrima.pt portado para RN
 ```
 
 Módulos marcados **esqueleto** lançam `por implementar` e dizem em que fase entram. O que está feito a
-sério: os tipos do contrato, a formatação do cronómetro, a fixture, o design system e as regras de
-domínio que não dependem de rede — sem empates em poule, contadores entre 0 e o `target`, a
+sério: os tipos do contrato, a leitura do QR, a formatação do cronómetro, a fixture, o design system e
+as regras de domínio que não dependem de rede — sem empates em poule, contadores entre 0 e o `target`, a
 classificação FIE da poule ([ADR-011](docs/DECISIONS.md)), e os cartões e a prioridade do assalto
 ([ADR-012](docs/DECISIONS.md)).
 
@@ -83,7 +89,7 @@ classificação FIE da poule ([ADR-011](docs/DECISIONS.md)), e os cartões e a p
 | Fase | Conteúdo                                                    | Estado    |
 | ---- | ----------------------------------------------------------- | --------- |
 | F0   | Andaimes, tipos do contrato, ecrãs com fixture              | **feito** |
-| F1   | Ligar: QR, PIN, secure-store, cliente HTTP, mocks MSW       |           |
+| F1   | Ligar: QR, PIN, secure-store, cliente HTTP, mocks MSW       | QR feito  |
 | F2   | Lista: polling + ETag, pull to refresh                      |           |
 | F3   | Assalto: cronómetro monotónico, `start`, submissão          |           |
 | F4   | Resiliência: fila offline, 409, expiração, poule bloqueada  |           |

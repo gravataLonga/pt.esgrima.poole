@@ -30,6 +30,14 @@
       "expo-screen-orientation",
       "expo-status-bar",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "A câmara serve só para ler o código QR da folha de poule.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/splash-icon.png",

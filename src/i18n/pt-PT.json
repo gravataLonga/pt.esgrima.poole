@@ -8,11 +8,26 @@
     "title": "Ligar a uma poule",
     "intro": "Lê o QR da folha de poule ou introduz o PIN de 6 dígitos.",
     "scan": "Ler QR",
-    "scanUnavailable": "Leitura de QR disponível na próxima fase.",
+    "scanHint": "Aponta a câmara à folha de poule.",
     "or": "ou",
     "pinLabel": "PIN",
     "submit": "Ligar",
     "pinIncomplete": "O PIN tem 6 dígitos."
+  },
+  "scan": {
+    "title": "Ler QR",
+    "hint": "Aponta a câmara ao código da folha de poule.",
+    "usePin": "Introduzir o PIN",
+    "retry": "Ler outra vez",
+    "permissionTitle": "A app precisa da câmara",
+    "permissionBody": "A câmara serve só para ler o código QR da folha de poule. Podes ligar-te com o PIN em vez disso.",
+    "permissionGrant": "Permitir a câmara",
+    "permissionSettings": "Abrir as Definições",
+    "error": {
+      "unrecognised": "QR não reconhecido. Confirma que é o código da folha de poule.",
+      "unsupportedVersion": "Este QR foi gerado por uma versão mais recente da plataforma. Atualiza a app.",
+      "insecure": "Este QR aponta para um servidor sem HTTPS ({{url}}). A app só liga por HTTPS."
+    }
   },
   "poule": {
     "progress": "{{done}} de {{total}} assaltos",

@@ -11,10 +11,11 @@ Documento de arranque do repositório **novo e separado** que aloja a app React 
 Complementa `docs/app-arbitragem-spec.md` (visão de produto + trabalho do lado do servidor). Onde os
 dois divergirem, **este documento manda no cliente** e o outro manda no servidor.
 
-> ⚠️ **Estado à data (2026-07-24):** a camada de API **ainda não existe** na plataforma — nem Sanctum,
-> nem `routes/api.php`, nem os endpoints. O contrato descreve o que está *por implementar*. O
-> desenvolvimento da app arranca contra o **mock server** de [§10](#10-mock-server--desbloquear-a-app),
-> não contra produção.
+> ⚠️ **Estado à data (2026-07-25):** a plataforma **já tem** Sanctum, `routes/api.php` e uma API de
+> arbitragem a correr — mas ela **não é a do contrato**: URLs diferentes, sem `code` nos erros, sem
+> `ETag`, sem `/start` e sem chave de idempotência. **Está decidido que é o servidor que se alinha**,
+> e a lista de trabalho está em **§11 do contrato**. Até estar feito, o desenvolvimento da app corre
+> contra o **mock server** de [§10](#10-mock-server--desbloquear-a-app), não contra produção.
 
 ---
 
@@ -49,7 +50,7 @@ Esgrima. Não é preciso saber esgrima para trabalhar no repo, mas é preciso sa
 | **Atleta** (*fencer* / `player`) | Participante numa poule. Tem `nome`, `clube` (opcional) e um **número** (1..n) que é a posição na folha de poule. |
 | **Toques** | Pontos. Cada assalto de poule vai até ao `touch_cap` (por omissão **5**) ou até esgotar o tempo (por omissão **3 min**). |
 | **Torneio** (*tournament*) | Agrupa várias poules e, depois, o quadro de eliminatórias. Uma poule pode existir isolada ou dentro de um torneio. |
-| **Eliminatória** (*direct elimination*) | Quadro a eliminar depois das poules. **Fora do âmbito da app.** |
+| **Eliminatória** (*direct elimination*) | Quadro a eliminar depois das poules. **Dentro do âmbito da app** desde o contrato `1.4.0`: a app arbitra o quadro da poule e o do torneio, com a mesma sessão. Gerar o quadro é da web. |
 | **Árbitro** | Quem a app serve. Conduz os assaltos de **uma** poule, cronometra e regista o resultado. |
 
 Regras que **condicionam diretamente o cliente** (não são detalhe de servidor):
@@ -57,8 +58,10 @@ Regras que **condicionam diretamente o cliente** (não são detalhe de servidor)
 1. **Não há empates em poule.** A plataforma rejeita `a == b` com 422. O botão de submeter tem de
    estar desativado enquanto os dois resultados forem iguais.
 2. **Nenhum resultado excede o `touch_cap`** da poule (validação servidor: `max:touch_cap`).
-3. **Uma poule fica bloqueada** assim que o quadro de eliminatórias do seu torneio é gerado. A partir
-   daí toda a escrita devolve 422 — a app entra em modo leitura e diz-o ao árbitro.
+3. **Uma poule fica bloqueada** assim que o quadro de eliminatórias é gerado a partir dela. A partir
+   daí toda a escrita **sobre assaltos de poule** devolve 422 — mas a sessão **não** acaba: é esse o
+   momento em que o quadro passa a aceitar resultados, e a app muda de fase sem voltar a ligar. Só é
+   modo leitura se também não houver quadro para arbitrar.
 4. **Atletas podem ser removidos** da poule na web enquanto a app está ligada. A lista de assaltos
    pode encolher entre *polls*; a app nunca assume que a lista que tem em memória é a atual.
 5. **A classificação** é calculada no servidor (V/M → indicador → toques dados). A app **não calcula
@@ -74,7 +77,10 @@ assaltos pré-gerados com `sequence` e `status`.
 
 - O `id` de um assalto é uma **string opaca**. A app **nunca** a interpreta, decompõe, ordena ou
   constrói. Só a devolve tal e qual ao servidor.
-- A ordem de disputa vem do campo `sequence` (inteiro, 1..N) — a app **não reordena** a lista.
+- A ordem de disputa vem do campo `sequence` (inteiro, 1..N) — a app **não reordena** a lista. O
+  `sequence` só é obrigatório quando `poule.ordered` é `true` (poule de torneio); numa poule isolada
+  o plantel muda a meio, a ordem é regerada e o `sequence` desloca-se. **Nunca** usar `sequence`
+  para identificar um assalto — para isso serve o `id`, que é estável nos dois modos.
 - A app **não conhece** `given`/`received` nem linhas espelhadas. Só conhece `score_a` / `score_b`.
 
 > Se o servidor mudar de representação interna, o contrato mantém-se e a app não muda. Essa é a razão
@@ -88,25 +94,39 @@ A app é um **companion**: apoia a plataforma web, não a substitui.
 
 ### Dentro do âmbito
 
-- Ligar a uma poule por **scan de QR** ou **PIN manual**.
+- Ligar a uma **competição** — poule ou torneio — por **scan de QR** ou **PIN manual**. O árbitro
+  escreve seis dígitos; é o `scope` da resposta que diz à app o que abrir.
 - Listar os assaltos da poule pela ordem definida, com estado.
+- **Arbitrar o quadro de eliminatórias**, da poule e do torneio: mesma sessão, mesmo ecrã de assalto,
+  presets do quadro (15 toques, 3 períodos, descanso entre eles) vindos da API. Quando o quadro da
+  poule é gerado, a poule fecha e a app muda de fase sem voltar a ligar.
 - Conduzir um assalto: **cronómetro local**, contadores de toques, submissão do resultado.
 - Sinalizar à plataforma que um assalto **começou** (alimenta o "joga agora" na web).
 - Tratar concorrência (409), expiração de sessão, poule bloqueada e falta de rede.
+- **Modo cronómetro autónomo** (`/timer`): um assalto sem poule, sem rede e sem atletas — tempo,
+  toques, cartões e prioridade, sem nada para submeter. Serve treinos e provas locais, e é a única
+  parte da app que não espera pela API. Não toca na sessão: `app/timer.tsx` **não importa**
+  `@/session/store`, e essa ausência é verificada por teste.
 
 ### Fora do âmbito (v1)
 
 - Autenticação de utilizadores (não há contas — a sessão pertence à poule).
 - Criar/editar poules, atletas ou torneios.
-- Quadro de eliminatórias.
+- **Gerar** o quadro de eliminatórias, semear atletas, decidir emparelhamentos — a app lê o quadro que
+  a web produziu e regista resultados nele. Arbitrá-lo **está** dentro do âmbito.
 - Cartões (amarelo/vermelho/preto), penalizações, prioridade/*minuto de ouro*.
 - Classificações e folha de poule.
-- Arbitrar **mais do que uma poule** em simultâneo no mesmo dispositivo.
+- Arbitrar **mais do que uma competição** em simultâneo no mesmo dispositivo.
 - Modo espectador / público.
 
 > **Cartões e prioridade ficam de fora conscientemente.** São regra FIE real e vão ser pedidos mais
-> cedo ou mais tarde; o ecrã de assalto deve deixar espaço de layout para eles, mas v1 não os
-> implementa nem a API os suporta.
+> cedo ou mais tarde; o ecrã de assalto deve deixar espaço de layout para eles, mas a v1 não os
+> implementa. **A API já os aceita**, no campo opcional `events` do `score` — o caminho de dados está
+> aberto para quando a app os recolher, sem alteração de contrato.
+>
+> Quando os implementar: **o regulamento é da app, não do servidor.** A plataforma não converte um
+> cartão vermelho num toque nem arbitra morte súbita — recebe o resultado que o árbitro registou e a
+> linha temporal que a app lhe der, e grava.
 
 ---
 
@@ -118,10 +138,10 @@ Herdadas de `docs/app-arbitragem-spec.md`:
 |---|---|
 | App | React Native, companion |
 | Auth | Sanctum modo *token*; o token pertence ao model `Poule` (tabela polimórfica), **sem utilizadores** |
-| Conexão | **Uma por poule**; um novo *connect* invalida o token anterior |
+| Conexão | **Uma por competição**; um novo *connect* invalida o token anterior |
 | Cronómetro | **Local**; presets (tempo/toques/períodos) vêm da API |
 | Concorrência | Primeiro a submeter ganha; o segundo recebe **409** |
-| Token | Expira em **60 min deslizantes**; auto-invalida quando a poule fica completa |
+| Token | Expira em **60 min deslizantes**; auto-invalida quando a competição fica encerrada — assaltos feitos **e** quadro decidido |
 
 Decisões **novas**, fechadas ao escrever esta spec (o documento de produto não as cobria). As sete
 primeiras estão formalizadas no [contrato de API](app-arbitragem-api-contract.md):
@@ -129,14 +149,16 @@ primeiras estão formalizadas no [contrato de API](app-arbitragem-api-contract.m
 | Tema | Decisão | Porquê |
 |---|---|---|
 | Versionamento | Prefixo `/api/v1/` | Permite v2 sem partir apps instaladas. |
-| Formato do PIN | 6 dígitos, único entre PINs ativos | Digitável à mão em pavilhão com QR ilegível. |
-| Payload do QR | JSON `v1` com `base_url` + `pin` | Suporta *self-hosting* e ambientes de teste sem recompilar a app. |
+| Formato do PIN | 6 dígitos, único entre PINs ativos, **de utilização múltipla** | Digitável à mão em pavilhão com QR ilegível. Múltipla utilização porque o árbitro que perde a sessão — bateria, reinstalação — tem de voltar a ligar-se sozinho; cortar acesso faz-se rodando o PIN, que mata também os tokens. |
+| Payload do QR | **Só os 6 dígitos.** O JSON `{v, base_url, pin}` fica especificado como formato reservado | Ler o QR e escrever o PIN passam a ser o mesmo caminho. O `base_url` no QR entra quando houver *self-hosting* a justificá-lo; o cliente já o aceita, para a migração não ser coordenada. |
 | Atualizações | **Polling com ETag**, não WebSockets | A plataforma não tem *broadcasting*; polling resolve com custo quase zero. |
-| Re-submissão | Mesma sessão + mesmo resultado → **200**, não 409 | Sem isto, um *retry* por *timeout* dá 409 falso ("outra pessoa") ao próprio autor. |
+| Re-submissão | **`submission_id`** (UUID v4 do cliente) no `score`; mesma submissão → **200**, não 409 | Sem chave de idempotência, um *retry* por *timeout* dá 409 falso ("outra pessoa") ao próprio autor. A chave é da submissão, não da sessão: sobrevive a uma reconexão com a fila cheia. |
 | Início do assalto | `POST /bouts/{id}/start` | O widget "quem joga agora" da web precisa de `in_progress`; sem endpoint nunca sai de `pending`. |
 | Id de assalto | String **opaca** | Isola a app da migração do modelo de assaltos, ainda por fechar do lado do servidor. |
 | Fila offline | Persistente, FIFO, só para submissões de resultado | Rede de pavilhão cai. Perder um resultado é inaceitável; perder um `start` não é. |
-| Idioma | **en** como idioma inicial; pt-PT fica no repo, sem troca na interface na v1 | Um idioma só na v1 mantém a copy num sítio. A troca de idioma entra como funcionalidade depois, sem refactor. |
+| Eliminatórias | **Dentro do âmbito**: mesma sessão, mesmo ecrã de assalto, `scope` a distinguir poule de torneio | O árbitro que fez a poule é o que arbitra o quadro a seguir, e o ecrã de assalto não precisa de saber em que fase está. |
+| Idioma | **en** como idioma inicial; `pt-PT` fica no repo, sem troca na interface na v1 | Um idioma só na v1 mantém a *copy* num sítio. A troca entra como funcionalidade depois, sem refactor. |
+| Orientação | Portrait fixo, **exceto no ecrã de assalto** | Encostado à pista, o telemóvel deitado dá dígitos maiores e uma coluna de resultado para cada polegar. |
 
 ---
 
@@ -165,10 +187,9 @@ primeiras estão formalizadas no [contrato de API](app-arbitragem-api-contract.m
 ### Alvos
 
 - **iOS 15+**, **Android 8+ (API 26)**.
-- Telemóvel, **portrait** — exceto o **ecrã de assalto**, que aceita também *landscape*. Encostado à
-  pista, o telemóvel deitado é o que dá dígitos maiores e as duas colunas de resultado, uma para cada
-  polegar. O bloqueio é feito em código, não em `app.json`: portrait fixo no arranque, levantado
-  enquanto o ecrã de assalto estiver montado. Tablet funciona mas não é otimizado.
+- Telemóvel, **portrait** — exceto o **ecrã de assalto** (e o modo cronómetro autónomo), que aceita
+  também *landscape*. O bloqueio é feito em código, não em `app.json`: portrait fixo no arranque,
+  levantado enquanto o ecrã de assalto estiver montado. Tablet funciona mas não é otimizado.
 - Sem *tablet split-view*. Nenhum outro ecrã roda.
 
 ### Convenções
@@ -200,8 +221,8 @@ Regras de trabalho:
 | | |
 |---|---|
 | Base | `{base_url}/api/v1`, HTTPS, JSON, sem cookies |
-| Auth | `Authorization: Bearer <token>` — token de **âmbito de uma poule**, 60 min deslizantes, sem *refresh* |
-| Endpoints | `POST /connect` · `GET /poules/{uuid}/bouts` · `GET /bouts/{id}` · `POST /bouts/{id}/start` · `POST /bouts/{id}/score` · `GET/DELETE /session` |
+| Auth | `Authorization: Bearer <token>` — token de **âmbito de uma competição** (`scope: poule` \| `tournament`), 60 min deslizantes, sem *refresh* |
+| Endpoints | `POST /connect` · `GET /poules/{uuid}/bouts` · `.../standings` · `.../elimination` · `GET /tournaments/{uuid}/elimination` · `GET /bouts/{id}` e `/elimination/{id}` · `POST .../start` e `.../score` · `GET/DELETE /session` |
 | Erros | `{ code, message, errors? }` — a app só faz lógica sobre `code`, nunca sobre `message` |
 | Sincronização | Polling de 10 s com `If-None-Match`/`ETag`; sem *push* |
 
@@ -212,30 +233,44 @@ Regras de trabalho:
 ### Estados da sessão
 
 ```
-        ┌────────────┐
-        │ DISCONNECTED│◄──────────────┐ 401 / logout / QR novo
-        └──────┬──────┘               │
-               │ connect ok           │
-        ┌──────▼──────┐               │
-        │  CONNECTED  ├───────────────┘
-        └──────┬──────┘
-               │ poule.locked = true      ┌──────────────┐
-               ├─────────────────────────►│  READ_ONLY   │
-               │ último assalto done      └──────────────┘
-               └─────────────────────────►┌──────────────┐
-                                          │   COMPLETE   │
-                                          └──────────────┘
+        ┌─────────────┐
+        │ DISCONNECTED│◄───────────────────────┐ 401 / logout / código novo
+        └──────┬──────┘                        │
+               │ connect ok                    │
+       ┌───────┴────────┐                      │
+ scope=poule      scope=tournament             │
+       │                │                      │
+ ┌─────▼──────┐   ┌─────▼──────┐               │
+ │   POULE    │   │  BRACKET   ├───────────────┘
+ └─────┬──────┘   └─────┬──────┘
+       │ poule.locked = true, e há quadro
+       ├────────────────►│
+       │
+       │ locked sem quadro         ┌──────────────┐
+       ├──────────────────────────►│  READ_ONLY   │
+       │                           └──────────────┘
+       │ competição encerrada      ┌──────────────┐
+       └──────────────────────────►│   COMPLETE   │
+                                   └──────────────┘
 ```
 
-`READ_ONLY` e `COMPLETE` continuam a mostrar a lista de assaltos; só a escrita está fechada.
+`POULE` e `BRACKET` são **fases da mesma sessão**, não sessões diferentes: a transição acontece
+sozinha quando um *poll* traz `locked: true` com `elimination` preenchido, e não pede código novo.
+
+`READ_ONLY` e `COMPLETE` continuam a mostrar o que havia; só a escrita está fechada. `COMPLETE` é
+sempre precedido de um `401 poule_complete`, que só chega quando a competição está encerrada para
+sempre — assaltos feitos **e** quadro decidido.
 
 ### Ecrãs
 
 **1. Ligar** (`/connect`)
 - Câmara em ecrã cheio com moldura de leitura; permissão pedida no primeiro uso, com explicação e
   caminho para as Definições se for negada.
-- Botão "Introduzir PIN" → teclado numérico, 6 dígitos.
-- Zona "avançado": URL do servidor.
+- Botão "Introduzir PIN" → teclado numérico, 6 dígitos, com casas desenhadas e *caret* próprio.
+- Terceira via: **"Só cronómetro"** → `/timer`, o assalto sem poule do [§2](#2-âmbito-da-app).
+- **Sem campo de URL do servidor.** O `base_url` vem do QR ou do valor por omissão; um campo de texto
+  livre à frente de quem só quer escrever 6 dígitos é ruído, e editável por engano. Apontar a app a
+  outro servidor à mão é assunto de um ecrã de definições, se algum dia for preciso.
 - Estados: a ligar / PIN inválido / bloqueado até HH:MM / sem rede.
 - Fallbacks de leitura do QR: ver o contrato, §9.
 
@@ -246,7 +281,10 @@ Regras de trabalho:
   - `pending` — neutro, tocável.
   - `in_progress` — destacado.
   - `done` — resultado `5–3`, esbatido, tocável só para consulta.
-- **Destaque do próximo**: primeiro `pending` por `sequence` fica no topo visual com botão "Começar".
+- **Destaque do próximo**, só quando `poule.ordered` é `true`: primeiro `pending` por `sequence` fica
+  no topo visual com botão "Começar". Com `ordered: false` (poule isolada) não há "próximo" — a lista
+  é plana e qualquer `pending` é tocável, porque a ordem não tem valor regulamentar e desloca-se
+  sempre que o plantel muda.
 - *Pull to refresh*. Polling de 10 s.
 - Banner permanente quando `READ_ONLY` ou offline com fila pendente.
 
@@ -266,15 +304,28 @@ Regras de trabalho:
 - Ações: **Voltar à lista** (primária) · **Ver assalto**.
 - Sem opção de forçar. Corrigir é trabalho da plataforma web.
 
-**5. Poule completa** (`/complete`)
-- *"Poule completa — 15 de 15 assaltos."* Sessão terminada. Botão "Ligar a outra poule".
+**5. Quadro de eliminatórias** (`/bracket`)
+- Ronda a ronda, cada combate: `Nome (clube)` vs `Nome (clube)`, estado, resultado se já houver.
+- **Combates com `ready: false` aparecem mas não abrem** — o lugar ainda espera o vencedor da ronda
+  anterior. A app mostra-os por preencher em vez de os esconder: é assim que o árbitro vê o caminho.
+- Abrir um combate leva ao **mesmo ecrã de assalto**, com os presets do quadro (15 toques,
+  3 períodos, descanso entre eles). Nada na condução do assalto muda por ser eliminatória.
+- Chega-se aqui por duas vias: `scope: "tournament"` no *connect*, ou a poule fechar com quadro
+  gerado. Com uma poule ligada, a lista de assaltos e o quadro coexistem e alternam-se.
+- Registar um resultado **faz subir o vencedor** — do lado do servidor. A app descobre o quadro novo
+  no *poll* seguinte; não o recalcula.
+
+**6. Competição completa** (`/complete`)
+- *"Competição completa."* Sessão terminada. Botão "Ligar a outra competição".
 
 ### Navegação
 
 ```
 Ligar ──► Lista ──► Assalto ──► (submeter) ──► Lista
                         └─────► Conflito ────► Lista
-Lista ──► Completa ──► Ligar
+Ligar ──► Quadro ─► Combate ─► (submeter) ──► Quadro
+Lista ──(poule fechada, há quadro)──► Quadro
+Lista/Quadro ──► Completa ──► Ligar
 qualquer ──401──► Ligar
 ```
 
@@ -294,7 +345,12 @@ O cronómetro é **local e autoritário**. O servidor não cronometra e não é 
 - Atingir `target` toques **não** para o cronómetro automaticamente — só o destaca. Quem decide é o
   árbitro.
 - `periods > 1`: mostra `Período 1/3`; ao esgotar um período, para e espera confirmação manual para
-  o seguinte. (Preparado, mas irrelevante em poule, onde `periods = 1`.)
+  o seguinte. (Preparado, mas raro em poule, onde `periods` é `1` por omissão.)
+- **Não há descanso entre períodos numa poule** — por isso o contrato não envia tempo de descanso.
+  Esgotado o último período, passa-se diretamente a **morte súbita**: mais um período de
+  `sudden_death_seconds` (`60` por omissão, **vindo da API** como todos os outros tempos — não
+  *hardcoded*), prioridade sorteada, quem toca primeiro ganha. A regra é conduzida pela app; o
+  servidor não a conhece. Na linha temporal, a morte súbita é `period = periods + 1`.
 - `expo-keep-awake` ativo enquanto o cronómetro corre; desativado ao sair do ecrã.
 
 ### Precisão
@@ -325,13 +381,18 @@ Rede de pavilhão cai. **Perder um resultado registado é inaceitável.**
 
 ### O que entra na fila
 
-**Só** `POST /bouts/{id}/score`. Tudo o resto (`start`, `GET`) falha em silêncio ou tenta de novo mais
-tarde — nada disso é dado do árbitro.
+**Só** os registos de resultado — `POST /bouts/{id}/score` e `POST /elimination/{id}/score`. Tudo o
+resto (`start`, `GET`) falha em silêncio ou tenta de novo mais tarde — nada disso é dado do árbitro.
 
 ### Comportamento
 
 1. Falha de rede ou 5xx → a submissão vai para uma fila **persistente FIFO** (MMKV), com
-   `{ bout_id, a, b, poule_uuid, queued_at }`.
+   `{ submission_id, kind: 'bout'|'match', target_id, a, b, competition_uuid, queued_at }`.
+
+   O **`submission_id` é gerado quando o árbitro confirma o resultado**, não quando o item é enviado,
+   e é o mesmo em todas as tentativas. Gerá-lo no envio anulava a idempotência: cada *retry* seria
+   uma submissão nova aos olhos do servidor, que é exatamente o falso `409` que a chave existe para
+   evitar (contrato §4).
 2. A app confirma ao árbitro: *"Resultado guardado. Vai ser enviado quando houver rede."* — não
    finge que enviou.
 3. O assalto aparece na lista como **"por enviar"** (estado local, distinto de `done`).
@@ -343,6 +404,10 @@ tarde — nada disso é dado do árbitro.
    - `201`/`200` → remove da fila, atualiza a lista.
    - `409` → remove da fila e **notifica**: *"O assalto Nº2 vs Nº3 já tinha sido registado por outra
      pessoa (4–5). O teu registo não foi aplicado."*
+   - `404` → remove da fila, **notifica** e faz *refetch* da lista: *"O assalto Nº2 vs Nº3 já não
+     existe — um dos atletas foi removido da poule. O resultado não foi guardado."* Acontece quando
+     um atleta é removido na web enquanto o resultado esperava por rede; sem esta regra a app ou
+     tenta para sempre, ou deita o resultado fora em silêncio.
    - `422` → remove da fila e reporta como erro (não vai passar a valer com o tempo).
    - `401` → **para de drenar e mantém a fila**. Volta a ligar-se → retoma.
 
@@ -367,8 +432,10 @@ tarde — nada disso é dado do árbitro.
   um domínio único obrigatório.
 - **Sem cookies, sem CSRF.** Sanctum em modo token com cliente nativo não usa sessão *stateful* nem
   `csrf-cookie`. O cliente HTTP não guarda cookies.
-- **Âmbito mínimo:** o token só permite ler e pontuar **a poule que o emitiu**. Um `403
-  poule_scope_mismatch` indica *bug* — reportar, não contornar.
+- **Âmbito mínimo:** o token só permite ler e pontuar **a competição que o emitiu** — uma poule (com
+  o quadro dela) ou um torneio (só o quadro dele). Um `403 poule_scope_mismatch` — ou o `404` que o
+  servidor devolve em vez dele, para não revelar que ids existem — indica *bug*: reportar, não
+  contornar.
 - **Sem dados pessoais persistidos** além de nomes de atletas em cache volátil. Sem analytics de
   utilizador na v1.
 - Ao terminar sessão (manual, 401 ou poule completa): apagar token e cache; **manter a fila** de
@@ -412,7 +479,10 @@ poole-referee-app/
 │   ├── connect.tsx           # §6 ecrã 1
 │   ├── poule.tsx             # §6 ecrã 2
 │   ├── bout/[id].tsx         # §6 ecrã 3
-│   └── complete.tsx          # §6 ecrã 5
+│   ├── bracket.tsx           # §6 ecrã 5 — quadro de eliminatórias
+│   ├── match/[id].tsx        # combate do quadro; reusa o ecrã de assalto
+│   ├── timer.tsx             # §2 modo cronómetro autónomo
+│   └── complete.tsx          # §6 ecrã 6
 ├── src/
 │   ├── api/
 │   │   ├── client.ts         # fetch único: headers, envelope de erro, retry, ETag
@@ -429,6 +499,7 @@ poole-referee-app/
 │   │   ├── useTimer.ts       # cronómetro monotónico §7
 │   │   └── feedback.ts       # som + háptica
 │   ├── qr/parse.ts           # payload do QR, com fallbacks
+│   ├── bout/                 # regras FIE locais: cartões, prioridade, fases, passividade
 │   ├── i18n/en.json          # idioma inicial; pt-PT.json ao lado
 │   ├── mocks/handlers.ts     # §10
 │   └── ui/                   # componentes partilhados
@@ -462,17 +533,22 @@ servidor local, como gerar *build* de teste, e onde está o contrato.
 - Connect com *throttle* → campo bloqueado até `Retry-After`.
 - Submeter → 201 → lista atualizada e progresso incrementado.
 - Submeter → 409 → modal de conflito com o resultado atual, sem *retry*.
-- Submeter → *timeout* → *retry* → 200 (mesmo token, mesmo resultado) → **sem** falso conflito.
-- 401 a meio → volta ao ecrã de ligar, **fila preservada**.
-- Poule `locked` → escrita desativada, banner presente.
-- Último assalto → 201 → ecrã de poule completa.
+- Submeter → *timeout* → *retry* com o **mesmo `submission_id`** → 200 → **sem** falso conflito.
+- 401 a meio com fila pendente → reconectar → drenar **com token novo** → 200, **não** 409. É o
+  cenário que a chave de idempotência existe para cobrir, e o que a regra antiga por token falhava.
+- Poule `locked` **com** quadro → app passa ao quadro sem voltar a ligar.
+- Poule `locked` **sem** quadro → escrita desativada, banner presente.
+- Connect com `scope: "tournament"` → vai direto ao quadro, sem lista de assaltos.
+- Combate com `ready: false` → não abre; depois de o anterior ser registado, abre.
+- Último combate do quadro → 201 → `401 poule_complete` no pedido seguinte → ecrã de completa.
 - ETag → 304 não altera a lista nem pisca a UI.
 
 ### E2E (Maestro)
 
 1. Scan de QR → lista → começar assalto → cronómetro → toques → submeter → volta à lista com `done`.
 2. Modo avião a meio de uma submissão → resultado guardado → rede volta → enviado automaticamente.
-3. Dois dispositivos na mesma poule → o segundo recebe `token_revoked`.
+3. Dois dispositivos na mesma competição → o segundo recebe `token_revoked`.
+4. Poule até ao fim → organizador gera o quadro → a app passa ao quadro e arbitra um combate.
 
 ### Critérios de aceitação da v1
 
@@ -482,7 +558,10 @@ servidor local, como gerar *build* de teste, e onde está o contrato.
 - [ ] 409 apresentado com o resultado vencedor e sem forma de forçar.
 - [ ] Perder rede a meio **não perde** nenhum resultado registado.
 - [ ] Sessão expirada devolve ao ecrã de ligar com a razão escrita, sem *crash* e sem perder a fila.
-- [ ] Poule bloqueada e poule completa têm ecrã próprio, não uma mensagem de erro.
+- [ ] Poule bloqueada e competição completa têm ecrã próprio, não uma mensagem de erro.
+- [ ] **Quadro de eliminatórias arbitrado de ponta a ponta**, da poule e do torneio, com o vencedor a
+      subir de ronda entre *polls*.
+- [ ] **A transição poule → quadro acontece sozinha**, sem pedir código novo.
 - [ ] Token nunca aparece em logs nem em *crash reports* (verificado à mão).
 - [ ] Cronómetro legível a 2 m e com desvio ≤ 100 ms em 3 min.
 - [ ] Tudo em `en`, sem strings *hardcoded* em componentes.
@@ -493,24 +572,32 @@ servidor local, como gerar *build* de teste, e onde está o contrato.
 
 A app está bloqueada em tudo o que se segue. Ordem de dependência, não de importância:
 
-| # | Entrega | Bloqueia |
-|---|---|---|
-| 1 | Modelo de assaltos com **id estável**, `sequence` e `status`, pré-gerados na criação da poule | Tudo. É o alicerce. |
-| 2 | Serviço de ordem de assaltos (tabelas FIE 4–12 **ou** *round-robin*) | `sequence` |
-| 3 | Colunas de preset `duration_seconds` e `periods` na poule (hoje só existe `touch_cap`) | Cronómetro |
-| 4 | Sanctum em modo token + `personal_access_tokens` polimórfica + `HasApiTokens` no model `Poule` | Auth |
-| 5 | Campo PIN de árbitro na poule + geração/rotação + `throttle` | `/connect` |
-| 6 | Registar `api:` no `withRouting()` do `bootstrap/app.php` + criar `routes/api.php` | Todos os endpoints |
-| 7 | Os endpoints do contrato, com o envelope de erro e os `code` do catálogo | — |
-| 8 | **Concorrência 409** no `score` (hoje a plataforma faz *overwrite* silencioso — é lógica nova) | Conflitos |
-| 9 | Regra de *retry* seguro: mesmo token + mesmo resultado → **200**, não 409 | Fila offline |
-| 10 | `X-Session-Expires-At` em todas as respostas autenticadas | Aviso de expiração |
-| 11 | `ETag` / `If-None-Match` em `GET /poules/{uuid}/bouts` | Polling barato |
-| 12 | Invalidação automática do token quando a poule fica completa | Ecrã de conclusão |
-| 13 | Geração do QR na web com o payload do contrato (a plataforma já tem `chillerlan/php-qrcode`) | Emparelhamento |
+| # | Entrega | Bloqueia | Estado (2026-07-25) |
+|---|---|---|---|
+| 1 | Modelo de assaltos com **id estável**, `sequence` e `status`, gerados e regerados a cada alteração de plantel | Tudo. É o alicerce. | ✅ feito — id inteiro, não opaco |
+| 2 | Serviço de ordem de assaltos (tabelas FIE 4–12 **ou** *round-robin*) | `sequence` | ✅ feito |
+| 3 | Colunas de preset `duration_seconds` e `periods` na poule (hoje só existe `touch_cap`) | Cronómetro | ✅ feito (falta `sudden_death_seconds`) |
+| 4 | Sanctum em modo token + `personal_access_tokens` polimórfica + `HasApiTokens` no model `Poule` | Auth | ✅ feito |
+| 5 | Campo PIN de árbitro na poule + geração/rotação + `throttle` | `/connect` | ✅ feito — PIN de **uso único** |
+| 6 | Registar `api:` no `withRouting()` do `bootstrap/app.php` + criar `routes/api.php` | Todos os endpoints | ✅ feito — **sem prefixo `v1`** |
+| 7 | Os endpoints do contrato, com o envelope de erro e os `code` do catálogo | — | ⚠️ URLs e formas diferentes; **sem `code`** |
+| 8 | **Concorrência 409** no `score` (hoje a plataforma faz *overwrite* silencioso — é lógica nova) | Conflitos | ✅ feito (sem `current` no corpo) |
+| 9 | Regra de *retry* seguro: mesmo token + mesmo resultado → **200**, não 409 | Fila offline | ❌ por fazer — **bloqueia a fila** |
+| 10 | `X-Session-Expires-At` em todas as respostas autenticadas | Aviso de expiração | ❌ por fazer |
+| 11 | `ETag` / `If-None-Match` em `GET /poules/{uuid}/bouts` | Polling barato | ❌ por fazer |
+| 12 | Invalidação automática do token quando a competição fica encerrada | Ecrã de conclusão | ✅ feito |
+| 13 | Geração do QR na web com o payload do contrato (a plataforma já tem `chillerlan/php-qrcode`) | Emparelhamento | ⚠️ QR só com os 6 dígitos |
+| 14 | `POST /bouts/{id}/start` e `POST /elimination/{id}/start` — hoje é o `GET` do detalhe que muda o estado | "Joga agora" sem efeitos laterais | ❌ por fazer |
+| 15 | `submission_id` guardado com o resultado (assalto e combate), e a matriz 201/200/409 | **Fila offline** | ❌ por fazer |
+| 16 | `scope` no `connect` e no `session`, mais `PouleSummary` / `TournamentSummary` | Saber o que abrir | ❌ por fazer |
+| 17 | Endpoints de eliminatória com as URLs e as formas do contrato | Arbitrar o quadro | ⚠️ existem, com outra forma |
+| 18 | PIN deixa de se gastar na ligação | Voltar a ligar sem o organizador | ❌ por fazer |
 
-**Ordem prática:** 1–3 (modelo) → 4–6 (infraestrutura) → 7–9 (endpoints) → 10–13 (afinação).
+**Ordem prática:** 1–3 (modelo) → 4–6 (infraestrutura) → 7–9 e 15–18 (endpoints) → 10–14 (afinação).
 A app pode desenvolver-se por inteiro contra os mocks até 7 estar pronto.
+
+> O detalhe de cada ⚠️ e ❌ — o que o servidor faz hoje, o que custa à app e a correção proposta —
+> está em **§11 do contrato**. Esta coluna é só o resumo.
 
 ### Notas de compatibilidade que o servidor não pode partir
 
@@ -549,7 +636,7 @@ F0–F4 correm **inteiramente contra os mocks** e não dependem do trabalho do s
 | Atleta / esgrimista | *fencer* | Na base de dados da plataforma é `player` dentro de uma poule e `athlete` ao nível do torneio |
 | Indicador | *indicator* | Toques dados menos recebidos; critério de desempate |
 | V/M | — | Vitórias a dividir por assaltos disputados; primeiro critério de classificação |
-| Eliminatória | *direct elimination* | Quadro a eliminar. Fora do âmbito da app |
+| Eliminatória | *direct elimination* | Quadro a eliminar. Arbitrável pela app desde o contrato `1.4.0` |
 | Pista | *piste* | Onde se joga. A app não a modela na v1 |
 
 ---

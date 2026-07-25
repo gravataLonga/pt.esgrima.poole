@@ -377,6 +377,10 @@ alteração está só do lado da app. **Tem de ser copiada para `docs/app-arbitr
 na plataforma** e implementada lá, senão os dois lados divergem — que é precisamente o que o §1
 chama *bug*.
 
+**Atualização (2026-07-25):** espelhado. As duas cópias voltaram a ser byte a byte iguais na `1.3.0`
+([ADR-025](#adr-025--as-duas-cópias-do-contrato-divergiram-e-o-servidor-também)). Implementação do
+lado do servidor: continua por fazer.
+
 ---
 
 ## ADR-018 — O sorteio de prioridade mostra-se, não se explica
@@ -484,6 +488,8 @@ HTTP, fila e expiração de sessão. Verificado em `timer-screen.test.tsx`: a se
 - **Está fora do âmbito da `CLIENT-SPEC.md` §2**, que assume sempre-ligado e exclui o modo
   espectador. A spec é cópia byte a byte do documento da plataforma e não se altera aqui — quem for
   dono desse documento do lado Laravel tem de espelhar esta decisão lá.
+  **Feito a 2026-07-25:** o modo entrou na §2 das duas cópias, com a regra do `@/session/store` a
+  acompanhá-lo ([ADR-025](#adr-025--as-duas-cópias-do-contrato-divergiram-e-o-servidor-também)).
 
 ## ADR-022 — `ScoreColumn` recebe um rótulo, não um `Fencer`
 
@@ -599,3 +605,193 @@ Cartões e passividade também continuam fora — só os seus *tempos* entraram,
 - **Por fazer, e é o mesmo pendente do [ADR-017](#adr-017--rest_seconds-é-aditivo-no-contrato-110):**
   copiar o `docs/API-CONTRACT.md` para `docs/app-arbitragem-api-contract.md` na plataforma. São agora
   **duas** versões por espelhar, `1.1.0` e `1.2.0`.
+
+**Atualização (2026-07-25) — espelhado, com duas correções:**
+
+- O `priority_seconds` **chama-se `sudden_death_seconds`** na `1.3.0`. A plataforma já tinha proposto
+  esse nome para o mesmo tempo, e o nome do regulamento ganha ao nome do botão. Não existem dois
+  campos; a app renomeia ao tipar.
+- O `standings` entrou na `CLIENT-SPEC.md` §5 e §13, que deixaram de estar desatualizadas.
+
+Ver [ADR-025](#adr-025--as-duas-cópias-do-contrato-divergiram-e-o-servidor-também).
+
+---
+
+## ADR-025 — As duas cópias do contrato divergiram, e o servidor também
+
+**Data:** 2026-07-25 · **Estado:** aceite
+
+O `API-CONTRACT.md` devia viver byte a byte igual nos dois repositórios (§1). Não vivia. Cada lado
+editou a sua cópia sem ver a outra:
+
+| Lado | O que acrescentou sozinho |
+|---|---|
+| App | `1.1.0` (`rest_seconds`), `1.2.0` (`weapon`, `priority_seconds`, `passivity_seconds`, `GET /standings`) |
+| Plataforma | `ordered` e a regra de estabilidade do `sequence`, `events` no `score`, `sudden_death_seconds`, `410 pin_expired` removido, `X-Session-Expires-At` fora do `401` |
+
+E, entretanto, **a plataforma implementou uma API** (`78afee4`) que não é nenhuma das duas: `/api`
+sem `v1`, recursos no singular, erros sem `code`, `score` aninhado, sem `ETag`, sem `/start`, sem a
+regra de *retry* seguro — e, por cima, quatro *endpoints* de eliminatórias que o contrato não conhece.
+
+**Decisão:** três coisas, por esta ordem.
+
+1. **`1.3.0` é a união das duas cópias**, não a escolha de uma. Conflitos resolvidos: o minuto de
+   morte súbita fica `sudden_death_seconds` (nome da plataforma — nenhum dos dois lados o tinha
+   implementado, por isso a escolha não parte nada), o `rest_seconds` fica apesar de ser irrelevante
+   com `periods: 1`, porque ganha uso quando a app arbitrar eliminatórias.
+2. **O contrato ganhou uma §11 com o estado real.** O que a plataforma serve hoje, campo a campo, com
+   a consequência para a app e a correção proposta. Treze pontos bloqueiam a ligação; quatro são
+   casos em que a implementação tem razão e foi o contrato que se corrigiu.
+3. **As duas cópias voltaram a ser iguais**, contrato e `CLIENT-SPEC.md`, com um `cp` verificado por
+   `diff`.
+
+**Porquê a §11 em vez de reescrever o contrato para o que existe:** o contrato é o alvo, não o
+relatório. Reescrevê-lo para o código apagava a lista do que falta — e é essa lista que diz à app o
+que pode assumir. A §11 mantém as duas verdades separadas e visíveis.
+
+**O que continua por decidir, e é do dono do produto:**
+
+- A app v1 arbitra eliminatórias? A API já as serve, para poule e para torneio.
+- O PIN de uso único fica? Está implementado e tem razão de segurança, mas custa uma ida ao
+  organizador sempre que um telemóvel morre.
+- O QR passa a levar `base_url`, ou o *self-hosting* deixa de se fazer por QR?
+
+**Regra derivada:** um `cp` entre repositórios não é parte do trabalho — é o trabalho. Uma alteração
+ao contrato que fique num só lado volta a produzir exatamente isto.
+
+**`API_CONTRACT_VERSION` continua em `'1.0.0'`** ([ADR-024](#adr-024--contrato-120-arma-tempos-de-regulamento-e-classificação-servida)):
+é a versão *em vigor*, e o que os dois lados garantem hoje é menos do que a `1.0.0`, não mais.
+
+---
+
+## ADR-026 — A leitura de QR é uma rota, e o parser não conhece a câmara
+
+**Data:** 2026-07-25 · **Estado:** aceite
+
+A F1 traz a câmara. Duas perguntas ficaram por responder no esqueleto: **onde** vive o visor, e **o
+que** faz a app com um código que lê.
+
+**Decisão 1 — rota própria (`/scan`), não uma camada dentro de `/connect`.** A câmara tem ciclo de
+vida: montada quando se lê, largada quando se sai. Como camada ficaria montada por baixo do
+formulário de PIN — sensor ligado enquanto ninguém lê nada, e o teclado numérico do PIN a disputar
+espaço com o visor. O ecrã de ligar só ganhou o `router.push('/scan')`.
+
+**Decisão 2 — um QR válido *é* a ligação.** O resultado não volta ao ecrã anterior para lá ser
+"submetido": `/scan` liga e segue para `/poule`. Devolver o PIN ao formulário obrigaria o árbitro a
+confirmar aquilo que a leitura já confirmou.
+
+**Decisão 3 — `parseQr` é pura e não conhece o store.** Recebe uma string, devolve um resultado
+discriminado. É o que permite cobrir o contrato §9 inteiro — os três *fallbacks*, a versão futura, a
+recusa de `http://` — em testes sem câmara nem ecrã. O ecrã só traduz o resultado em mensagem.
+
+**Decisão 4 — a leitura tranca-se ao primeiro código.** `onBarcodeScanned` dispara **a cada frame**
+enquanto o código estiver enquadrado, não uma vez por código. Sem tranca, um QR válido chamava
+`connect()` e `router.replace()` dezenas de vezes antes de a rota seguinte montar. São duas trancas
+sobrepostas, porque uma só não chega: um `ref` lido dentro do *handler*, que apanha os frames que
+chegam antes do próximo render, e `onBarcodeScanned={undefined}` enquanto há erro no ecrã, que
+impede o mesmo código mau de se reler por trás do banner.
+
+**Decisão 5 — `insecure_base_url` é um resultado à parte**, fora dos três *fallbacks* do contrato.
+O §9 manda recusar `http://` e é isso que acontece; o que se acrescenta é a razão. Quem aponta a app
+a um servidor de teste em `http://` acerta no QR e no PIN, e "QR não reconhecido" mandava-o procurar
+o erro no sítio errado.
+
+**Sobre a barra final:** o contrato diz `base_url` **sem** barra final, mas recusar o QR por causa
+dela punia o árbitro por um erro do servidor. Normaliza-se na leitura — `{base_url}/api/v1` tem de
+dar uma barra só.
+
+**Permissões:** o plugin do `expo-camera` entra com `microphonePermission: false` e
+`recordAudioAndroid: false`. Por omissão pede as duas, e uma app que lê QR a pedir microfone é um
+pedido que não se sabe justificar em revisão de loja. Verificado por `expo config --type introspect`:
+`NSCameraUsageDescription` presente, `NSMicrophoneUsageDescription` ausente, e `CAMERA` como única
+permissão Android.
+
+**Consequência para a F1:** o QR que a plataforma gera **hoje** traz só os seis dígitos, não o JSON
+do §9 ([ADR-025](#adr-025--as-duas-cópias-do-contrato-divergiram-e-o-servidor-também)). O caminho que
+corre na prática é portanto o *fallback* 2, com o `base_url` por omissão do store. O caminho do JSON
+está implementado e testado à espera de que a plataforma o gere — é uma linha no `RefereeQrService`.
+
+---
+
+## ADR-026 — Contrato 1.4.0: as decisões que estavam em aberto
+
+**Data:** 2026-07-25 · **Estado:** aceite · **Fecha o que o [ADR-025](#adr-025--as-duas-cópias-do-contrato-divergiram-e-o-servidor-também) deixou em aberto**
+
+O ADR-025 arrumou os documentos e deixou três perguntas por responder e uma escolha técnica por
+fazer. Foram todas respondidas, e a direção geral também: **é o servidor que se alinha pelo
+contrato** — prefixo `/api/v1`, recursos no plural, `code` no envelope de erro, `ETag`, `/start`,
+`PouleSummary`. Nada disto é negociado por endpoint; o contrato manda.
+
+### 1. A app arbitra eliminatórias
+
+Sim. Entra como fase da **mesma sessão**, não como aplicação nova: um token de poule alcança os
+assaltos da poule **e** o quadro dela; um token de torneio alcança o quadro do torneio. Quando o
+quadro é gerado a poule fecha (`locked: true`) e o quadro abre — a app muda de fase sem pedir código
+novo ao árbitro.
+
+O ecrã de assalto é o mesmo. O que muda são os presets, e esses vêm da API: 15 toques, 3 períodos, e
+é aqui que o `rest_seconds` do [ADR-017](#adr-017--rest_seconds-é-aditivo-no-contrato-110) deixa de
+ser decorativo — em quadro há mesmo descanso entre períodos.
+
+**O que a app não faz:** gerar o quadro, semear, decidir quem sobe. O vencedor sobe do lado do
+servidor, na transação do resultado; a app descobre-o no *poll* seguinte. E **não nomeia rondas** —
+"quartos-de-final" depende do tamanho do quadro e do regulamento da prova, é decisão da plataforma,
+não aritmética do cliente.
+
+### 2. O PIN volta a ser de utilização múltipla
+
+O servidor tinha-o feito de uso único, com um argumento real: o QR é projetado, e quem o fotografa
+pode ligar-se mais tarde e ficar com o *scoring*.
+
+**Decisão: múltipla utilização.** O caso que o uso único protege é raro; o que ele estraga é comum —
+telemóvel sem bateria, app reinstalada, sessão perdida a meio de uma poule — e deixa o árbitro parado
+à espera do organizador. Quem quiser cortar acesso roda o PIN, que é um clique e mata também os
+tokens já emitidos. A segurança que se perde recupera-se com uma ação explícita; a autonomia que se
+perdia não se recuperava de todo.
+
+### 3. O QR leva só o PIN
+
+O JSON `{v, base_url, pin}` fica **especificado como formato reservado** e não é emitido. Ler o QR e
+escrever os seis dígitos passam a ser o mesmo caminho, com a mesma validação.
+
+**O `parseQr` continua a aceitar os dois.** Custa umas linhas e evita uma migração coordenada: no dia
+em que a plataforma emitir o formato novo, as apps já instaladas entendem-no. É o inverso do que
+parece — o *parser* tolerante é que torna a decisão reversível.
+
+### 4. A idempotência é `submission_id`, não o token
+
+A regra antiga do contrato era "mesmo token + mesmo resultado → 200". **Tem um buraco que a fila
+desta app atravessa em condições normais:** a sessão expira com submissões por enviar (§8 manda
+preservar a fila), o árbitro volta a ligar, a fila drena **com um token novo** — e o servidor vê
+outro token a registar o mesmo assalto. `409` falso, exatamente sobre o resultado que a fila estava a
+proteger.
+
+**Decisão:** o `score` leva um `submission_id` **obrigatório**, UUID v4 gerado pelo cliente. Mesma
+submissão → `200`; submissão diferente sobre um assalto já pontuado → `409`.
+
+**Onde é gerado importa mais do que parece:** no momento em que o árbitro **confirma** o resultado, e
+guardado com o item na fila. Gerá-lo no envio anulava tudo — cada *retry* seria uma submissão nova
+aos olhos do servidor, que é precisamente o falso conflito que a chave existe para evitar. Está
+escrito na `CLIENT-SPEC.md` §8 e tem de ter teste.
+
+**Porquê não `Idempotency-Key`:** é a mesma ideia a exigir um armazenamento de chave→resposta com TTL,
+para repetir uma resposta que aqui se deriva do estado do assalto. Uma coluna resolve.
+
+**Consequência aceite:** o `scored_by_me` continua a derivar do token, por isso **reinicia numa
+reconexão**. Um resultado que o árbitro registou antes de voltar a ligar passa a aparecer como sendo
+de outra pessoa. É cosmético — serve o ecrã de lista, não decide escritas — e fica dito para não ser
+lido como bug.
+
+### O que isto obriga do lado da app
+
+- `src/api/types.ts` ganha `EliminationMatch`, `TournamentSummary`, `scope`, `submission_id`, o
+  `number` *nullable* e o `PouleSummary.elimination`. **Continua a esperar pelo servidor** — a regra
+  do §1 não muda por a decisão estar tomada.
+- A fila passa a guardar `submission_id` e o tipo de alvo (`bout` \| `match`).
+- Ecrãs novos: `/bracket` e `/match/[id]`, este último a reusar o `useBoutEngine` como o `/timer` já
+  faz ([ADR-021](#adr-021--modo-cronómetro-autónomo-sem-sessão)). Duplicar a condução do assalto seria
+  duplicar regra FIE.
+- A máquina de estados ganha `POULE → BRACKET`, disparada por um *poll*, não por uma ação.
+
+**`API_CONTRACT_VERSION` continua em `'1.0.0'`** até a plataforma servir isto. Sobe direta a
+`'1.4.0'`: as intermédias nunca existiram em código.

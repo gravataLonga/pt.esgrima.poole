@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import type { Bout, PouleSummary } from '@/api/types';
+import { defaultBaseUrl } from '@/config/env';
 import { bouts as fixtureBouts, poule as fixturePoule } from '@/fixtures/poule';
 
 /** Estados da sessão — spec §6. */
@@ -36,7 +37,7 @@ const initial = {
 export const useSessionStore = create<SessionState>((set) => ({
   ...initial,
 
-  connect: (_pin, baseUrl = 'https://poole.esgrima.pt') =>
+  connect: (_pin, baseUrl = defaultBaseUrl) =>
     set({
       status: fixturePoule.locked ? 'read_only' : 'connected',
       baseUrl,
