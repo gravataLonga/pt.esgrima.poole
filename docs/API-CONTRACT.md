@@ -1,14 +1,14 @@
 # API de Arbitragem — Contrato
 
-**Versão do contrato: `2.1.0`** · Estado: **`2.0.x` servida e consumida; `2.1.0` especificada, por implementar** · 2026-07-26
+**Versão do contrato: `2.1.0`** · Estado: **servida pela plataforma; a app consome a `2.0.0` e emite a `2.1.0` na F9** · 2026-07-26
 
 Fronteira partilhada entre a **plataforma** (`poole.esgrima.pt`, Laravel 12) e a **app de arbitragem**
 (React Native, repositório separado). Este ficheiro é a **única fonte de verdade** do que os dois
 lados trocam entre si.
 
-> 🆕 **`2.1.0` — o assalto passa a ter horas, e não só cronómetro.** MINOR **aditivo**, e
-> **especificado antes de existir**: nada disto está implementado em nenhum dos dois lados, e uma
-> app na `2.0.0` continua correta contra um servidor na `2.1.0` sem trocar uma linha.
+> 🆕 **`2.1.0` — o assalto passa a ter horas, e não só cronómetro.** MINOR **aditivo**. **A
+> plataforma já a serve** (2026-07-26); a app emite-a na **F9**, e até lá continua na `2.0.0` — que
+> é correta contra este servidor sem trocar uma linha, que é o que "aditivo" quer dizer.
 >
 > Até aqui a linha temporal dizia *em que altura do período* caiu um toque e mais nada. Não dizia a
 > que horas o combate começou, a que horas se entrou no terceiro período, a que horas o tempo voltou
@@ -1447,28 +1447,60 @@ contador `seq` por assalto. Era a **F7** da `app-arbitragem-client-spec.md` §14
 | `GET` dos eventos de um assalto | A app guarda a linha temporal em memória enquanto o assalto dura e mostra-a de lá. Entra como MINOR aditivo quando fizer falta ler o que já subiu — ver [Linha temporal por ler](#linha-temporal-por-ler--o-get-que-não-existe) |
 | Sincronização de relógio | O `at` da `2.1.0` é o relógio do telemóvel, e assume-se como tal. Corrigi-lo custaria uma troca de horas em todos os pedidos para acertar o desvio do dispositivo de quem está a arbitrar, e **nenhuma decisão do servidor depende do `at`** |
 
-### E. A `2.1.0` — especificada, por implementar
+### E. A `2.1.0` — servida pela plataforma; a app é que falta
 
-**Escrita a 2026-07-26, e ainda não existe em lado nenhum.** O contrato é que vai primeiro, que é a
-regra da [§1](#como-usar-este-documento); esta secção é o que falta para os dois lados o cumprirem.
+**Escrita e implementada no servidor a 2026-07-26.** O contrato foi primeiro, que é a regra da
+[§1](#como-usar-este-documento), e o servidor seguiu no mesmo dia.
 
-Enquanto não for feito, o que corre em produção é a `2.0.0`, e continua correto: os campos e os tipos
-novos são todos opcionais, e ninguém os manda.
+Enquanto a app não emitir nada disto, continua tudo correto: os campos e os tipos novos são todos
+opcionais, e uma app na `2.0.0` fala com este servidor exatamente como falava antes.
 
-**Servidor** — plano detalhado na **secção F** de `docs/app-arbitragem-todo.md`, que é onde vive o
-trabalho por fazer (o `app-arbitragem-plano-servidor.md` é histórico):
+**Servidor — ✅ feito.** Registo em `docs/app-arbitragem-todo.md` §F.
 
-| # | O quê |
-|---|---|
-| E1 | `App\Enums\BoutEventType` ganha os oito casos novos, com `label()` e `tone()`, e todos entram em `timeline()` — os marcos são da história do assalto, não do painel da poule |
-| E2 | `LiveEventsRequest` e `ScoreRequest` aceitam `at`, `elapsed_ms`, `remaining_ms` e `phase`; o `ScoreRequest` passa a aceitar também `score_a`/`score_b`. O teto do `score` sobe a 300 |
-| E3 | `BoutEventRecorder` grava os campos novos no `data`. Nenhuma coluna nova: o `data` já é JSON e é para isto que serve |
-| E4 | **`liveScore()` passa a ler o último evento *com placar*, e não o último evento.** Hoje lê o de `sequence` mais alta e devolve `null` se ele não trouxer placar — com os marcos novos, um `clock_start` a seguir a um toque apagaria o placar ao vivo da web. É uma correção, e é o único ponto da `2.1.0` que parte alguma coisa que hoje funciona |
-| E5 | `RefereePanelPresenter::describeEvent()` expõe os campos novos, e o `boutTimeline.js` mostra-os na gaveta do assalto: hora do marco, tempo desde o início, o que faltava |
+| # | O quê | Onde |
+|---|---|---|
+| E1 | Os oito casos novos em `BoutEventType`, com `label()` e `tone()`, **todos em `timeline()`** — os marcos são da história do assalto, e o painel da poule filtra-os como já filtrava os toques | `app/Enums/BoutEventType.php` |
+| E2 | `at`, `elapsed_ms`, `remaining_ms` e `phase` aceites nos dois caminhos, mais `score_a`/`score_b` no lote do `score`. Teto a 300. **As regras passaram a viver num sítio só**, como o contrato — um *trait* partilhado pelas duas *requests* | `Concerns/DescribesBoutEvents.php` |
+| E3 | Os campos gravados no `data`. **Sem migração:** o `data` já é JSON. As chaves nulas deixaram de ser escritas — um evento que não diz nada não é uma linha cheia de `null`, e todos os leitores já perguntavam com `isset()` | `BoutEventRecorder::describe()` |
+| E4 | `liveScore()` passa a ler o **último evento com placar** | `BoutEventRecorder.php` |
+| E5 | `describeEvent()` expõe `at_wall`, `phase`, `elapsed_ms` e `remaining_ms`; a gaveta do assalto mostra a hora do dispositivo, o tempo desde o início e o que faltava | `RefereePanelPresenter.php` · `resources/js/boutTimeline.js` |
 
-**App** — ver `docs/app-arbitragem-client-spec.md` §7.1 e a fase **F9**. O motor do assalto
-(`useBoutEngine`) já conhece todos estes momentos: as fases, as transições de período, o sorteio da
-prioridade e o cronómetro que arranca e pára. O que falta é emiti-los.
+> ### 🔴 A **E4** não era um risco da `2.1.0` — era um bug já em produção
+>
+> Estava escrito neste documento como "o único ponto que parte alguma coisa que hoje funciona", à
+> conta dos marcos novos. Ao escrever o teste de regressão **antes** da implementação, apareceu que
+> não era preciso nenhum marco para o disparar: o `score_a`/`score_b` do `POST .../events` **sempre
+> foi opcional** ([Os campos](#os-campos)), e um `period_end` enviado sem placar — que é o caso
+> normal, porque um fim de período não muda o resultado — já apagava o placar ao vivo do painel do
+> organizador e da página pública do evento.
+>
+> Ou seja: qualquer app que envie `period_end` sem placar deixa a web em branco a meio do assalto, e
+> isso é verdade desde a `1.5.0`. A `2.1.0` não o introduziu — tornou-o inevitável, e por isso
+> encontrado.
+>
+> **A correção é a mesma.** O último evento **com placar** é o placar; o mais recente pode não ter
+> nada a dizer sobre ele. Filtrado em PHP e não em SQL, porque um `null` de JSON e uma chave em falta
+> não são a mesma coisa para todos os *drivers*, e o conjunto é pequeno: o contrato limita um assalto
+> a 300 eventos e o índice único de `(subject_type, subject_id, sequence)` é o que a consulta lê.
+
+**App — em curso (F9).** Ver `docs/app-arbitragem-client-spec.md` §7.2. O motor do assalto
+(`useBoutEngine`) já conhecia todos estes momentos: as fases, as transições de período, o sorteio da
+prioridade e o cronómetro que arranca e pára. O que faltava era emiti-los.
+
+> **A app degrada-se sozinha contra um servidor anterior, e isso apaga uma aresta deste documento.**
+> Estava escrito aqui e na `client-spec` que a F9 podia ser escrita antes da plataforma mas não
+> **entregue** antes: um `type` desconhecido faz o servidor recusar o lote **inteiro** com `422`, e o
+> emissor da app desistia do assalto — perdendo com os marcos também os toques, que esse servidor
+> aceitava bem.
+>
+> Resolveu-se do lado do cliente, que é onde tinha de ser: **ao primeiro `422`, o emissor tira os
+> marcos do lote e continua a espelhar o resto**, uma vez e para o resto do assalto. Uma instalação
+> anterior à `2.1.0` passa a custar os marcos e mais nada.
+>
+> **O que isto quer dizer para este contrato:** os tipos da `2.1.0` não são um mínimo exigido ao
+> servidor, e nenhuma das duas partes precisa de saber em que versão a outra está. É o que "MINOR
+> aditivo" já prometia na [§1](#versionamento) para os *campos* — a regra de tolerância —, agora
+> valendo também para os *tipos*, que não a tinham porque um conjunto fechado é validado.
 
 ---
 

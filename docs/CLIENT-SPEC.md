@@ -38,12 +38,13 @@ dois divergirem, **este documento manda no cliente** e o outro manda no servidor
 > próprio. O porquê está no **ADR-032** e o plano executado em **`PLANO-2.0.0.md`**, os dois no
 > repositório da app.
 
-> ⏳ **Os marcos do combate (contrato `2.1.0`) estão especificados e por fazer.** O que a app envia
-> hoje diz *em que altura do período* caiu um toque; não diz a que horas o combate começou, a que
-> horas se entrou no terceiro período, a que horas o tempo voltou a correr, nem a que horas se foi a
-> morte súbita. A **F9** acrescenta oito tipos de evento e quatro campos, todos opcionais, sem mudar
-> um pixel do ecrã — [§7.2](#72-os-marcos-do-combate--contrato-210). **Depende do servidor
-> (§13.20):** um `type` que ele não conheça devolve `422` e o emissor desiste do assalto inteiro.
+> ⏳ **Os marcos do combate (contrato `2.1.0`): a plataforma já os aceita, a app ainda não os
+> envia.** O que a app envia hoje diz *em que altura do período* caiu um toque; não diz a que horas o
+> combate começou, a que horas se entrou no terceiro período, a que horas o tempo voltou a correr,
+> nem a que horas se foi a morte súbita. A **F9** acrescenta oito tipos de evento e quatro campos,
+> todos opcionais, sem mudar um pixel do ecrã — [§7.2](#72-os-marcos-do-combate--contrato-210). A
+> plataforma aceita-os desde 2026-07-26, e contra uma instalação anterior a app **baixa sozinha para
+> a `1.5.0`** em vez de perder o assalto, portanto a ordem de entrega deixou de importar.
 
 ---
 
@@ -517,6 +518,22 @@ a emitir marcos ou não.
 > lote enche — a linha temporal fica com um buraco e o placar que a web mostra continua a ser o do
 > evento mais recente, que é a regra que já lá está.
 
+#### Um servidor que não conheça os marcos perde os marcos, e mais nada
+
+O `useLiveEvents` desiste definitivamente num 4xx, que é a regra da [§7.1](#71-a-pista-ao-vivo) e
+está certa para o que ela protege: insistir a cada toque num erro que não passa com o tempo só gasta
+o limite de pedidos. Mas há um 4xx que **não** é do assalto — é da versão do outro lado. Uma
+instalação anterior à `2.1.0` recusa o lote **inteiro** com `422` por causa de um `type` que não
+conhece, e desistir aí custava também os toques, que ela aceitava bem.
+
+**Ao primeiro `422`, o emissor tira os marcos e continua.** Baixa uma vez para a linha temporal da
+`1.5.0`, para o resto do assalto, e não volta a tentar — a versão do servidor não muda a meio. Os
+marcos que já estavam em espera saem do lote; os que o motor emitir a seguir são ignorados à entrada.
+
+O motor **não sabe disto**, e é deliberado: o `log` do assalto continua a receber tudo. A folha do
+histórico é do árbitro e não tem teto de servidor nenhum — o que a plataforma não aceita, o árbitro
+continua a poder consultar.
+
 ---
 
 ## 8. Offline e fila de submissões
@@ -751,8 +768,8 @@ servidor local, como gerar *build* de teste, e onde está o contrato.
 
 ## 13. Dependências no servidor (o que a plataforma tem de entregar)
 
-**1 a 19 entregues (2026-07-25); a 20 é da `2.1.0` e está por fazer.** A tabela fica como registo do
-que estava em falta e do que a plataforma passou a servir; o levantamento vivo está em **§11 do
+**Todas entregues** — 1 a 19 a 2026-07-25, a 20 a 2026-07-26. A tabela fica como registo do que
+estava em falta e do que a plataforma passou a servir; o levantamento vivo está em **§11 do
 contrato**.
 
 | # | Entrega | Estado (2026-07-25) |
@@ -776,7 +793,7 @@ contrato**.
 | 17 | Endpoints de eliminatória com as URLs e as formas do contrato | ✅ — **só o quadro principal**; consolação arbitra-se na web |
 | 18 | PIN deixa de se gastar na ligação | ✅ |
 | 19 | `POST .../events` nos dois quadros, para a pista se ver enquanto é arbitrada | ✅ — contrato `1.5.0`, servido e fixado por teste. **Consumido pela app** ([§7.1](#71-a-pista-ao-vivo)) |
-| 20 | Os oito tipos de marco e os quatro campos novos aceites nos dois `events` e no `events` do `score` | ⏳ — contrato `2.1.0`, §11.E. **Bloqueia a F9:** um `type` que o servidor não conheça devolve `422`, e o `useLiveEvents` desiste do assalto inteiro |
+| 20 | Os oito tipos de marco e os quatro campos novos aceites nos dois `events` e no `events` do `score` | ✅ — contrato `2.1.0`, servido desde 2026-07-26 e fixado por teste (§11.E). **Não é um mínimo exigido:** contra uma instalação anterior a app baixa para a `1.5.0` sozinha ([§7.2](#um-servidor-que-não-conheça-os-marcos-perde-os-marcos-e-mais-nada)) |
 
 ### O que faltava deste lado — feito a 2026-07-25
 
@@ -822,10 +839,15 @@ contrato**.
 F0–F4 correm **inteiramente contra os mocks** e não dependem do trabalho do servidor.
 
 F7 é **aditiva e independente da F6**: não enviar nada deixa a app exatamente como está hoje, e é
-por isso que não bloqueia nada. **F9 é aditiva pela mesma razão** e não muda um pixel do ecrã: um
-servidor que ainda não conheça os tipos novos recusa-os com `422` e o `useLiveEvents` desiste, o que
-deixa a app como estava. Por isso a F9 pode ser feita antes de a plataforma estar pronta — mas
-**não** entregue antes, ou os eventos de pista deixam de subir junto com os marcos recusados.
+por isso que não bloqueia nada. **F9 é aditiva pela mesma razão** e não muda um pixel do ecrã.
+
+**A F9 deixou de depender da ordem de entrega, e não por o servidor ter chegado primeiro.** Estava
+escrito aqui que ela podia ser escrita antes da plataforma mas não entregue antes, porque um servidor
+que não conhecesse os `type` novos recusava o lote inteiro com `422` e o `useLiveEvents` desistia do
+assalto — perdendo com os marcos também os toques, que esse servidor aceitava bem. A F9 resolveu isso
+no emissor: **ao primeiro `422`, tira os marcos do lote e continua a espelhar o resto**. Uma
+instalação anterior à `2.1.0` passa a custar os marcos e mais nada, que é exatamente o que ela sabia
+fazer antes deles existirem.
 
 ---
 

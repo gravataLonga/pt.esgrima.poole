@@ -1339,7 +1339,7 @@ mostrador que **é** o botão grande deste ecrã.
 
 ## ADR-035 — Contrato 2.1.0: o assalto passa a ter horas, e não só cronómetro
 
-**Data:** 2026-07-26 · **Estado:** aceite · **Especificado; nenhum dos dois lados o implementa ainda — é a F9**
+**Data:** 2026-07-26 · **Estado:** aceite · **A plataforma serve-o desde 2026-07-26; o lado da app é a F9**
 
 O [ADR-029](#adr-029--contrato-150-a-pista-passa-a-ver-se-enquanto-está-a-ser-arbitrada) pôs o placar
 a subir na web enquanto o assalto decorre. O que ele não pôs foi o **relógio**.
@@ -1408,11 +1408,45 @@ Nem um pixel. Um árbitro não deve conseguir dizer se a app está a emitir marc
 *fire-and-forget*, continua tudo fora da fila offline, e falhar continua a não subir ao ecrã — as
 três regras do ADR-029 valem sem exceção.
 
-### A F9 não se entrega antes do servidor
+### A ordem de entrega era uma dependência, e passou a não ser
 
-Pode-se **escrever** antes; não se pode **entregar** antes. Um `type` que o servidor não conheça
-devolve `422 validation_failed`, e o `useLiveEvents` trata um 4xx como desistência definitiva
-(ADR-030) — desistiria do assalto inteiro, perdendo com os marcos também os toques que hoje sobem.
+Este ADR dizia que a F9 se podia **escrever** antes da plataforma mas não **entregar** antes. Um
+`type` que o servidor não conheça devolve `422 validation_failed`, e o `useLiveEvents` trata um 4xx
+como desistência definitiva (ADR-030) — desistiria do assalto inteiro, perdendo com os marcos também
+os toques, que esse servidor aceitava bem.
 
-É a dependência **§13.20** da `CLIENT-SPEC.md`, e o trabalho do lado de lá é a secção **F** do
-`app-arbitragem-todo.md` da plataforma.
+**Resolveu-se no emissor, e é melhor do que esperar pela ordem certa.** Ao primeiro `422`, o
+`useLiveEvents` tira os marcos do lote e continua a espelhar o resto: uma vez, para o resto do
+assalto, e sem voltar a tentar, porque a versão do outro lado não muda a meio. Uma instalação
+anterior à `2.1.0` passa a custar os marcos e mais nada.
+
+Vale mais do que a regra que substitui porque não depende de uma janela: serve **qualquer** servidor
+anterior, hoje e daqui a dois anos, e não só o intervalo entre as duas entregas. A plataforma
+aceita-os desde 2026-07-26 de qualquer maneira — o registo do lado de lá é a secção **F** do
+`app-arbitragem-todo.md`.
+
+**A exceção à regra do ADR-030 é estreita de propósito.** Desistir num 4xx continua certo para tudo o
+resto: uma poule fechada, uma sessão morta, um id que já não existe são erros que não passam com o
+tempo, e insistir a cada toque só gasta o limite de pedidos. O `422` dos marcos é o único 4xx que não
+é do assalto — é da versão do outro lado —, e por isso é o único que tem uma segunda tentativa mais
+pobre em vez de nenhuma.
+
+**O motor não sabe de nada disto.** O `log` do assalto continua a receber tudo: a folha do histórico
+é do árbitro e não tem teto de servidor nenhum. O que a plataforma recusa, ele continua a poder
+consultar.
+
+### O que a implementação do servidor mostrou, e que muda o que a app pode assumir
+
+**Um evento sem placar já apagava o placar ao vivo da web.** O `score_a`/`score_b` do
+`POST .../events` sempre foi opcional, e o servidor lia o placar do evento **mais recente** — não do
+mais recente **com placar**. Um `period_end` enviado sem placar, que é o caso normal, deixava a
+página pública e o painel do organizador em branco a meio do assalto.
+
+É um bug do servidor, e está corrigido lá. **Esta app nunca o disparou**, e por acaso: o
+`useBoutEngine` põe `score_a`/`score_b` em tudo o que emite — no toque, no cartão, no `period_end` e
+no `priority`, que não precisava deles. Foi essa generosidade que escondeu o problema durante meses.
+
+O que fica dito, para a F9: **os marcos não vão ter placar**, e isso passa a ser normal em vez de
+acidental. Um `clock_start` não sabe o resultado nem tem de saber. A regra a não esquecer é a
+inversa da que se poderia tirar daqui — não "manda sempre o placar por precaução", mas "o placar
+pertence aos eventos que o mudam", e o servidor é que tem de aguentar os outros.
