@@ -21,7 +21,10 @@ export interface ScoreSubmission {
   b: number;
   events?: BoutEvent[];
   competitionUuid: string;
-  /** "Nº2 vs Nº3" — o que o aviso da fila mostra quando a lista já não estiver à mão. */
+  /**
+   * O que o aviso da fila mostra quando a lista já não estiver à mão — o título do assalto, tal
+   * como aparece no cabeçalho. **Nunca nomes de atletas:** isto vai a disco (spec §9).
+   */
   label: string;
 }
 

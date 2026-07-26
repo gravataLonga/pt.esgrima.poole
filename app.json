@@ -8,8 +8,11 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "pt.esgrima.poole.referee"
+      "supportsTablet": false,
+      "bundleIdentifier": "pt.esgrima.poole.referee",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "pt.esgrima.poole.referee",
@@ -32,7 +35,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "A câmara serve só para ler o código QR da folha de poule.",
+          "cameraPermission": "The camera is only used to read the QR code on the poule sheet.",
           "microphonePermission": false,
           "recordAudioAndroid": false
         }
@@ -50,7 +53,12 @@
         }
       ],
       "expo-asset",
-      "expo-secure-store"
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

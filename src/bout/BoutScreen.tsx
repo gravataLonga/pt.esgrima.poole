@@ -1,3 +1,4 @@
+import { useKeepAwake } from 'expo-keep-awake';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
@@ -186,6 +187,10 @@ function Refereeing({
   // render remontava os campos dez vezes por segundo com o cronómetro a correr.
   const [timeSnapshotMs, setTimeSnapshotMs] = useState(0);
 
+  // O ecrã não adormece enquanto se arbitra. Entre o fim de um período e o início do seguinte
+  // passam-se minutos sem ninguém tocar no telemóvel, e o bloqueio a meio de um assalto custa o
+  // tempo de o desbloquear — com uma mão, encostado à pista. Solta-se ao desmontar o ecrã.
+  useKeepAwake();
   useAllowLandscape();
   const landscape = useIsLandscape();
 
@@ -245,7 +250,10 @@ function Refereeing({
       a: rules.a,
       b: rules.b,
       competitionUuid: assignment.competitionUuid,
-      label: `${nameOf('a')} vs ${nameOf('b')}`,
+      // O título do assalto, **não os nomes**. Este rótulo vai a disco com a fila e pode lá ficar
+      // 24 h; a spec §9 não persiste dados pessoais. E é o mesmo texto que o árbitro tinha no
+      // cabeçalho enquanto arbitrava, por isso identifica o assalto tão bem como os dois nomes.
+      label: assignment.title,
     });
 
     setSubmitting(false);

@@ -188,7 +188,10 @@ describe('arbitrar um assalto', () => {
     // A app não finge que enviou (spec §8): o resultado fica na fila e o aviso está na lista.
     const queued = useQueueStore.getState().items;
     expect(queued).toHaveLength(1);
-    expect(queued[0]).toMatchObject({ kind: 'bout', target_id: 'b_01J8X004' });
+    // O rótulo é o título do assalto — o que o aviso da fila mostra dali a horas, já sem lista
+    // carregada — e **não** os nomes dos dois atletas: isto vai a disco (spec §9).
+    expect(queued[0]).toMatchObject({ kind: 'bout', target_id: 'b_01J8X004', label: 'Bout 4' });
+    expect(JSON.stringify(queued)).not.toMatch(/Marta Lopes|Ana Silva/);
     expect(await screen.findByText(/waiting for the network/)).toBeTruthy();
   });
 });

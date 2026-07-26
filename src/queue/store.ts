@@ -44,7 +44,10 @@ export interface QueuedScore {
   competition_uuid: string;
   /** ISO-8601 UTC. */
   queued_at: string;
-  /** Para o ecrã dizer de que assalto se trata sem ter a lista carregada. */
+  /**
+   * Para o ecrã dizer de que assalto se trata sem ter a lista carregada. **Sem nomes de atletas:**
+   * a fila é a única coisa desta app que persiste em claro, e a spec §9 não guarda dados pessoais.
+   */
   label: string;
 }
 

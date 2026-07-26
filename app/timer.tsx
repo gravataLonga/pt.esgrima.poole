@@ -1,3 +1,4 @@
+import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
@@ -59,6 +60,9 @@ export default function TimerScreen() {
   // render remontava os campos dez vezes por segundo com o cronómetro a correr.
   const [timeSnapshotMs, setTimeSnapshotMs] = useState(0);
 
+  // Como no ecrã de assalto: aqui não há sequer lista para onde voltar depois de o telemóvel
+  // bloquear, e o assalto perdia-se.
+  useKeepAwake();
   useAllowLandscape();
   const landscape = useIsLandscape();
 

@@ -91,6 +91,9 @@ plataforma, incluindo as ligações internas que apontam para os nomes de fichei
 
 [`docs/DECISIONS.md`](docs/DECISIONS.md) — decisões técnicas tomadas neste repositório.
 
+[`docs/APP-STORE.md`](docs/APP-STORE.md) — o que é preciso para submeter à App Store: URLs, poule de
+demonstração, e as chaves de `app.json` que lá estão por causa da revisão da Apple.
+
 `src/api/types.ts` é tipado diretamente a partir do contrato e não contém mais nada.
 
 ## Onde está cada coisa
