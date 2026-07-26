@@ -32,4 +32,4 @@ export const clientHeader = `poole-referee-app/${appVersion} (${Platform.OS} ${P
  * O que aparece na web em "quem está a arbitrar". Não identifica ninguém — diz só que sistema está
  * do outro lado, que é o que o organizador precisa para distinguir dois dispositivos na mesma sala.
  */
-export const deviceName = `${Platform.OS === 'ios' ? 'iOS' : 'Android'} · Arbitragem`;
+export const deviceName = `${Platform.OS === 'ios' ? 'iOS' : 'Android'} · Poole Referee`;

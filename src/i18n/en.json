@@ -1,10 +1,10 @@
 {
   "app": {
-    "name": "Refereeing"
+    "name": "Poole Referee"
   },
   "connect": {
     "logoLabel": "Esgrima.pt",
-    "eyebrow": "Refereeing",
+    "eyebrow": "Poole Referee",
     "title": "Connect to your piste",
     "intro": "Scan the QR code for your piste — a poule sheet or a match card — or enter the 6-digit PIN.",
     "scan": "Scan QR",

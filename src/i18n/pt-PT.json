@@ -1,10 +1,10 @@
 {
   "app": {
-    "name": "Arbitragem"
+    "name": "Poole Referee"
   },
   "connect": {
     "logoLabel": "Esgrima.pt",
-    "eyebrow": "Arbitragem",
+    "eyebrow": "Poole Referee",
     "title": "Ligar à sua pista",
     "intro": "Lê o QR da tua pista — folha de poule ou cartão do combate — ou introduz o PIN de 6 dígitos.",
     "scan": "Ler QR",
