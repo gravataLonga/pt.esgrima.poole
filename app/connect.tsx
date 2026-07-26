@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useConnect } from '@/session/useConnect';
 import { useSessionStore } from '@/session/store';
-import { Banner, Button, Screen, Text, colors, fonts, radius, spacing, type } from '@/ui';
+import { Banner, Button, Screen, Sheet, Text, colors, fonts, radius, spacing, type } from '@/ui';
 
 const PIN_LENGTH = 6;
 
@@ -32,6 +32,7 @@ export default function ConnectScreen() {
 
   const [pin, setPin] = useState('');
   const [focused, setFocused] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   /**
    * O campo real é invisível e está por cima das casas. Contar com o toque a cair-lhe em cima
@@ -81,13 +82,29 @@ export default function ConnectScreen() {
                 letras por baixo de uma máscara, e isso não se reproduz com Views. É PNG e não SVG
                 para não trazer o `react-native-svg` — uma dependência nativa por uma imagem
                 (ADR-002). As densidades @2x/@3x estão ao lado; o Metro escolhe a certa. */}
-            <Image
-              source={require('../assets/logo.png')}
-              style={styles.logo}
-              resizeMode="contain"
-              accessibilityRole="image"
-              accessibilityLabel={t('connect.logoLabel')}
-            />
+            <View style={styles.brandRow}>
+              <Image
+                source={require('../assets/logo.png')}
+                style={styles.logo}
+                resizeMode="contain"
+                accessibilityRole="image"
+                accessibilityLabel={t('connect.logoLabel')}
+              />
+
+              {/* O ecrã pede seis dígitos e nunca diz de onde vêm. Quem chega com a folha na mão
+                  não precisa disto, e por isso o "?" não pede nada: fica no canto, à altura do
+                  wordmark, onde só é procurado por quem lhe falta a resposta. */}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('connect.help.title')}
+                onPress={() => setHelpOpen(true)}
+                // O alvo desenhado tem 32 pt; o `hitSlop` leva-o aos 44 pt das HIG sem o engordar.
+                hitSlop={6}
+                style={({ pressed }) => [styles.helpMark, pressed ? styles.helpMarkPressed : null]}
+              >
+                <Text style={styles.helpGlyph}>?</Text>
+              </Pressable>
+            </View>
 
             <Text variant="label" color={colors.green} style={styles.eyebrow}>
               {t('connect.eyebrow')}
@@ -211,6 +228,32 @@ export default function ConnectScreen() {
 
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Fora do ScrollView: o `Modal` não desenha nada no sítio onde está, mas o
+          `contentContainerStyle` tem `gap` e um filho de altura zero abriria na mesma um vão. */}
+      <Sheet
+        visible={helpOpen}
+        title={t('connect.help.title')}
+        onClose={() => setHelpOpen(false)}
+        actions={<Button label={t('connect.help.dismiss')} onPress={() => setHelpOpen(false)} />}
+      >
+        <View style={styles.helpBody}>
+          {[t('connect.help.step1'), t('connect.help.step2'), t('connect.help.step3')].map(
+            (step, index) => (
+              <View key={step} style={styles.helpStep}>
+                <Text style={styles.helpStepNumber}>{index + 1}</Text>
+                <Text color={colors.textMuted} style={styles.helpStepText}>
+                  {step}
+                </Text>
+              </View>
+            ),
+          )}
+
+          <Text variant="caption" color={colors.textMuted}>
+            {t('connect.help.reuse')}
+          </Text>
+        </View>
+      </Sheet>
     </Screen>
   );
 }
@@ -332,6 +375,47 @@ const styles = StyleSheet.create({
   },
   intro: {
     maxWidth: 320,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  /** Contorno de hairline e não borda verde: é auxílio, não é um caminho do ecrã. */
+  helpMark: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.darkBorder,
+  },
+  helpMarkPressed: {
+    borderColor: colors.green,
+  },
+  helpGlyph: {
+    fontFamily: fonts.montserrat,
+    fontSize: type.base,
+    color: colors.textMutedOnDark,
+  },
+  helpBody: {
+    gap: spacing.sm,
+  },
+  helpStep: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  /** Largura fixa para os números alinharem o texto à esquerda uns dos outros. */
+  helpStepNumber: {
+    width: 16,
+    fontFamily: fonts.montserrat,
+    fontSize: type.base,
+    color: colors.dark,
+  },
+  helpStepText: {
+    flex: 1,
   },
   scanTile: {
     flexDirection: 'row',

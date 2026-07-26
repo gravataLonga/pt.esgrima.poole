@@ -37,6 +37,26 @@ describe('ligar', () => {
     expect(screen.getByLabelText('Esgrima.pt')).toBeTruthy();
   });
 
+  it('explica onde está o código da pista, e fecha a folha', async () => {
+    await renderRouter('./app', { initialUrl: '/connect' });
+    await screen.findByText('Connect to your piste');
+
+    // Fechada, o conteúdo não está montado — o `Modal` só o desenha quando é visível.
+    expect(screen.queryByText('Where is the code?')).toBeNull();
+
+    // O alvo é um "?" sem texto: o rótulo é a única forma de lhe chegar, no teste e no VoiceOver.
+    await fireEvent.press(screen.getByLabelText('Where is the code?'));
+
+    await screen.findByText('Where is the code?');
+    expect(screen.getByText('The QR is on the poule sheet or the match card.')).toBeTruthy();
+
+    await fireEvent.press(screen.getByText('Got it'));
+
+    await waitFor(() => expect(screen.queryByText('Where is the code?')).toBeNull());
+    // A folha é explicação e não caminho: fecha-a e o ecrã fica exatamente onde estava.
+    expect(useSessionStore.getState().phase).toBe('disconnected');
+  });
+
   it('não deixa ligar com o PIN incompleto', async () => {
     await renderRouter('./app', { initialUrl: '/connect' });
     await screen.findByText('Connect to your piste');

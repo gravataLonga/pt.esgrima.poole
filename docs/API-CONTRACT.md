@@ -1,10 +1,22 @@
 # API de Arbitragem — Contrato
 
-**Versão do contrato: `2.0.1`** · Estado: **servido pela plataforma e consumido pela app** · 2026-07-25
+**Versão do contrato: `2.1.0`** · Estado: **`2.0.x` servida e consumida; `2.1.0` especificada, por implementar** · 2026-07-26
 
 Fronteira partilhada entre a **plataforma** (`poole.esgrima.pt`, Laravel 12) e a **app de arbitragem**
 (React Native, repositório separado). Este ficheiro é a **única fonte de verdade** do que os dois
 lados trocam entre si.
+
+> 🆕 **`2.1.0` — o assalto passa a ter horas, e não só cronómetro.** MINOR **aditivo**, e
+> **especificado antes de existir**: nada disto está implementado em nenhum dos dois lados, e uma
+> app na `2.0.0` continua correta contra um servidor na `2.1.0` sem trocar uma linha.
+>
+> Até aqui a linha temporal dizia *em que altura do período* caiu um toque e mais nada. Não dizia a
+> que horas o combate começou, a que horas se entrou no terceiro período, a que horas o tempo voltou
+> a correr, nem a que horas se foi a morte súbita — e sem isso um assalto não se reconstitui, só se
+> resume. A `2.1.0` acrescenta **oito tipos de evento** para os marcos do combate e **quatro campos**
+> a todos eles: a hora de parede (`at`), o tempo desde o início do combate (`elapsed_ms`), o tempo
+> que faltava da fase (`remaining_ms`) e a fase em que se estava (`phase`). Tudo opcional.
+> Ver [Eventos do assalto](#eventos-do-assalto--o-vocabulário-partilhado).
 
 > ✅ **`2.0.0` foi *breaking*, e os dois lados já lá estão.** O código deixou de ser da competição e
 > passou a ser **da pista**: uma poule continua a ter o seu, e **cada combate de eliminatória passa
@@ -440,6 +452,169 @@ coisa que o árbitro precisa de ler para saber onde está.
 
 ---
 
+### Eventos do assalto — o vocabulário partilhado
+
+Um evento é **uma coisa que aconteceu na pista, no instante em que aconteceu**. O mesmo objeto serve
+os quatro sítios que o transportam, e por isso é definido aqui uma vez só:
+
+| Onde | Diferença |
+|---|---|
+| [`POST /bouts/{bout}/events`](#post-boutsboutevents) | leva `seq` — enviado em direto |
+| [`POST /elimination/{match}/events`](#post-eliminationmatchevents) | idem |
+| `events` do [`POST /bouts/{bout}/score`](#linha-temporal-do-assalto--events-opcional) | sem `seq` — enviado em lote no fim |
+| `events` do [`POST /elimination/{match}/score`](#post-eliminationmatchscore) | idem |
+
+**Descritivos, nunca autoritários.** O resultado é o `a`/`b` do `score` e mais nada. O servidor
+guarda os eventos como vieram, **não** recalcula o resultado a partir deles e **não** rejeita uma
+submissão porque as duas coisas não batem certo — rejeitar faria uma submissão em fila falhar para
+sempre sobre um assalto que o árbitro já deu por resolvido.
+
+#### Os tipos
+
+Conjunto **fechado**. Um `type` fora desta lista devolve `422 validation_failed`.
+
+**Grupo A — o que acontece em pista.** Existiam desde a `1.5.0`.
+
+| `type` | `side` | O que é |
+|---|---|---|
+| `touch` | **sim** | Um toque atribuído a um atleta |
+| `double` | não | Toque duplo — vale aos dois |
+| `card_yellow` | **sim** | Advertência |
+| `card_red` | **sim** | Cartão vermelho. Em regra FIE concede um toque, que o `score_a`/`score_b` já reflete |
+| `card_black` | **sim** | Exclusão |
+| `priority` | **sim** | A prioridade da morte súbita, **e a quem calhou** (FIE t.41). É este evento que responde a "quem ganhava se ninguém tocasse" |
+
+**Grupo B — os marcos do combate.** Novos na `2.1.0`. Nenhum deles leva `side`: não são de um atleta,
+são do assalto.
+
+| `type` | Quando a app o emite |
+|---|---|
+| `bout_start` | O combate começou — o **primeiro** arranque do cronómetro. É o `at` deste evento que responde a "a que horas começou", e é dele que todos os `elapsed_ms` se contam |
+| `period_start` | Entrou-se num período. **Também no primeiro**, a seguir ao `bout_start` — é o que faz com que "a que horas entrou no terceiro período" se responda sempre da mesma maneira, e não de duas |
+| `period_end` | O período acabou. Já existia na `1.5.0`, com o mesmo significado |
+| `rest_start` | Entrou-se no descanso entre períodos, por o período ter esgotado **ou** por decisão do árbitro a meio dele. O `remaining_ms` diz qual dos dois foi |
+| `rest_end` | Saiu-se do descanso, esgotado ou dispensado. O `remaining_ms` diz quanto se dispensou |
+| `sudden_death_start` | Entrou-se na morte súbita. Vem **antes** do `priority`, que é o sorteio |
+| `clock_start` | O tempo começou a correr. Emitido a cada arranque, não só no primeiro |
+| `clock_stop` | O tempo parou — o "halt". Emitido a cada paragem |
+| `bout_end` | O combate acabou. Leva o **resultado final** em `score_a`/`score_b` |
+
+> **Porquê `clock_stop` se ninguém o pediu.** Porque um `clock_start` sozinho não responde à pergunta
+> que o justifica. Saber a que horas o tempo voltou a correr no terceiro período só vale se também se
+> souber quando parou — sem o par, um combate de três minutos que demorou vinte não se distingue de
+> um que demorou quatro, e é precisamente essa diferença que uma reclamação discute. São o mesmo
+> evento visto dos dois lados e entram juntos.
+
+> **`period_start` no primeiro período é redundante e entra na mesma.** Um leitor que queira as horas
+> de cada período não devia ter de escrever "o primeiro é o `bout_start`, os outros são o
+> `period_start`". Um caso especial numa linha temporal é um caso especial em todo o código que a
+> leia.
+
+#### Os campos
+
+```json
+{
+  "seq": 14,
+  "type": "touch",
+  "side": "a",
+  "phase": "period",
+  "period": 2,
+  "at_ms": 29400,
+  "elapsed_ms": 214800,
+  "remaining_ms": 150600,
+  "at": "2026-07-26T14:22:31.412Z",
+  "score_a": 7,
+  "score_b": 5
+}
+```
+
+| Campo | Tipo | Desde | Notas |
+|---|---|---|---|
+| `seq` | int ≥ 1 | `1.5.0` | **Só no envio em direto**, e obrigatório aí. Contador do próprio assalto, a partir de 1. É a idempotência toda — ver [`POST .../events`](#post-boutsboutevents). Ausente no lote do `score`, que não o tem nem precisa |
+| `type` | string | `1.5.0` | Do conjunto fechado acima |
+| `side` | `"a"` \| `"b"` \| ausente | `1.5.0` | O atleta a que o evento diz respeito. Ausente sempre que não se aplica — em `double` e em todo o **grupo B** |
+| `period` | int ≥ 1 | `1.5.0` | **Obrigatório.** O período a que o evento pertence. A morte súbita é `periods + 1`. Um evento de descanso leva o período que **acabou de terminar** — o descanso não tem número próprio |
+| `at_ms` | int ≥ 0 | `1.5.0` | **Obrigatório.** Milissegundos decorridos **dentro da fase**, pelo cronómetro local. Não é hora de parede |
+| `phase` | `"period"` \| `"rest"` \| `"sudden_death"` | **`2.1.0`** | Opcional. Que segmento o `at_ms` e o `remaining_ms` estão a medir. Ausente → `sudden_death` se `period > periods`, `period` nos outros casos |
+| `elapsed_ms` | int ≥ 0 | **`2.1.0`** | Opcional. Milissegundos desde o `bout_start`, **de parede**: contam os descansos, as paragens e as discussões. É o "aos 29 s do combate" |
+| `remaining_ms` | int ≥ 0 | **`2.1.0`** | Opcional. Milissegundos que faltavam **da fase em curso** no instante do evento |
+| `at` | string \| ausente | **`2.1.0`** | Opcional. ISO-8601 **UTC**, com milissegundos. A hora de parede em que o evento aconteceu, pelo relógio do dispositivo |
+| `score_a`, `score_b` | int ≥ 0 | `1.5.0` em direto, **`2.1.0`** em lote | Opcionais. O placar **depois** do evento. Vem contado pela app e **não** é recalculado |
+
+> **`at_ms` e `elapsed_ms` respondem a duas perguntas diferentes, e as duas fazem falta.** O `at_ms`
+> é tempo de esgrima: "o toque caiu a 29 s do fim do segundo período" é o que decide se um assalto foi
+> ganho no último segundo. O `elapsed_ms` é tempo de relógio: "o combate ia em 3 min 34 s" é o que
+> diz a um organizador que a pista está atrasada. O primeiro pára quando o árbitro dá halt; o segundo
+> nunca pára. Nenhum se deriva do outro sem reconstruir todas as paragens.
+
+> **O `remaining_ms` é o que responde ao descanso.** Um `rest_start` com `remaining_ms: 0` é um
+> descanso que veio de o período ter esgotado; um `rest_start` com `remaining_ms: 85000` é o árbitro
+> a parar o combate com um minuto e meio por esgrimir — material partido, assistência médica, um
+> atleta fora da pista. E um `rest_end` com `remaining_ms: 36000` é um minuto de descanso dispensado
+> aos 24 s. A mesma pergunta em todos os eventos, com um campo só e sem casos especiais.
+
+```json
+{ "type": "rest_start", "period": 1, "phase": "period", "at_ms": 95000,  "remaining_ms": 85000 }
+{ "type": "rest_end",   "period": 1, "phase": "rest",   "at_ms": 24000,  "remaining_ms": 36000 }
+```
+
+#### O `at` é o relógio do telemóvel, e o contrato diz isso em vez de fingir que não
+
+O `at` vem do dispositivo do árbitro, e um dispositivo pode ter a hora errada. O servidor:
+
+- **guarda-o como veio.** Não o corrige, não o rejeita por estar no futuro, não o compara com nada;
+- **continua a guardar o seu próprio `created_at`**, que é a hora a que o evento *chegou* — e essa é
+  do servidor, não do telemóvel;
+- **mostra o `at` quando existe e o `created_at` quando não existe.** Um evento que passou dez
+  minutos numa fila de rede tem um `created_at` que não diz nada sobre quando aconteceu; é para isso
+  que o `at` serve.
+
+Não há sincronização de relógio neste contrato, e não vai haver: custaria uma troca de horas em todos
+os pedidos para corrigir um desvio que, na prática, é o do telemóvel de quem está a arbitrar.
+**Nenhuma decisão do servidor depende do `at`** — nem validação, nem ordenação, nem resultado. Ordena-se
+pelo `seq` dentro do assalto, que é o único relógio de que a plataforma precisa.
+
+#### Um combate inteiro, do princípio ao fim
+
+Poule a 5 toques, um período de 3 min. O árbitro chama, corre o tempo, cai um toque aos 29 s:
+
+```json
+{ "seq": 1, "type": "bout_start",   "period": 1, "at_ms": 0,     "elapsed_ms": 0,     "remaining_ms": 180000, "at": "2026-07-26T14:18:02.000Z", "score_a": 0, "score_b": 0 }
+{ "seq": 2, "type": "period_start", "period": 1, "at_ms": 0,     "elapsed_ms": 0,     "remaining_ms": 180000, "at": "2026-07-26T14:18:02.000Z", "score_a": 0, "score_b": 0 }
+{ "seq": 3, "type": "clock_start",  "period": 1, "at_ms": 0,     "elapsed_ms": 4000,  "remaining_ms": 180000, "at": "2026-07-26T14:18:06.000Z" }
+{ "seq": 4, "type": "clock_stop",   "period": 1, "at_ms": 29000, "elapsed_ms": 33000, "remaining_ms": 151000, "at": "2026-07-26T14:18:35.000Z" }
+{ "seq": 5, "type": "touch",        "period": 1, "at_ms": 29000, "elapsed_ms": 33400, "remaining_ms": 151000, "at": "2026-07-26T14:18:35.400Z", "side": "a", "score_a": 1, "score_b": 0 }
+```
+
+E o fim de um combate de quadro que foi a morte súbita, empatado a 14:
+
+```json
+{ "seq": 61, "type": "period_end",         "period": 3, "at_ms": 180000, "remaining_ms": 0,     "at": "2026-07-26T14:41:12.000Z", "score_a": 14, "score_b": 14 }
+{ "seq": 62, "type": "sudden_death_start", "period": 4, "phase": "sudden_death", "at_ms": 0, "remaining_ms": 60000, "at": "2026-07-26T14:41:20.000Z", "score_a": 14, "score_b": 14 }
+{ "seq": 63, "type": "priority",           "period": 4, "phase": "sudden_death", "at_ms": 0, "remaining_ms": 60000, "at": "2026-07-26T14:41:24.000Z", "side": "b" }
+{ "seq": 64, "type": "touch",              "period": 4, "phase": "sudden_death", "at_ms": 41200, "remaining_ms": 18800, "at": "2026-07-26T14:42:09.000Z", "side": "a", "score_a": 15, "score_b": 14 }
+{ "seq": 65, "type": "bout_end",           "period": 4, "phase": "sudden_death", "at_ms": 41200, "remaining_ms": 18800, "at": "2026-07-26T14:42:10.000Z", "score_a": 15, "score_b": 14 }
+```
+
+**O `bout_end` não substitui o `score`.** O que fica registado como resultado continua a ser o `a`/`b`
+do `POST .../score`, com o `submission_id` e a matriz de idempotência da [§4](#4-idempotência-e-retry).
+O `bout_end` é a última linha da história, não o registo dela — e um combate cujo `score` nunca chegou
+por a rede ter caído tem `bout_end` sem resultado, que é exatamente a situação que interessa ver.
+
+#### Tolerância — o que uma app pode não enviar
+
+**Nada disto é obrigatório.** Os únicos campos que o são já o eram: `type`, `period`, `at_ms`, e o
+`seq` no envio em direto.
+
+- Uma app que não emita **nenhum** evento do grupo B fica com a linha temporal da `1.5.0`, e é
+  correta.
+- Uma app que não preencha `at`, `elapsed_ms`, `remaining_ms` ou `phase` continua a ser aceite. A
+  plataforma mostra o que tem e omite o resto — não inventa, e não recusa.
+- O servidor **não verifica coerência** entre eventos: não exige um `period_start` antes de um
+  `touch`, não exige que os `elapsed_ms` cresçam, não exige um `bout_end` no fim. Uma linha temporal
+  com buracos é o que uma rede de pavilhão produz, e recusá-la seria perder também o que chegou.
+
+
 ### `POST /connect`
 
 Troca um PIN por um token com âmbito de uma pista — uma poule ou um combate de eliminatória,
@@ -664,21 +839,19 @@ não se espera pela resposta, não se mostra erro ao árbitro. O cronómetro e o
 ```json
 {
   "events": [
-    { "seq": 1, "type": "touch",  "side": "a", "period": 1, "at_ms": 12400, "score_a": 1, "score_b": 0 },
-    { "seq": 2, "type": "double",              "period": 1, "at_ms": 30100, "score_a": 2, "score_b": 1 }
+    { "seq": 1, "type": "bout_start",            "period": 1, "at_ms": 0,     "at": "2026-07-26T14:18:02.000Z" },
+    { "seq": 2, "type": "touch",  "side": "a",   "period": 1, "at_ms": 12400, "elapsed_ms": 16400, "remaining_ms": 167600, "score_a": 1, "score_b": 0 },
+    { "seq": 3, "type": "double",                "period": 1, "at_ms": 30100, "elapsed_ms": 41000, "remaining_ms": 149900, "score_a": 2, "score_b": 1 }
   ]
 }
 ```
 
+**A forma de cada evento é a de [Eventos do assalto](#eventos-do-assalto--o-vocabulário-partilhado)**,
+com o `seq` obrigatório. Só o invólucro é próprio deste endpoint:
+
 | Campo | Tipo | Notas |
 |---|---|---|
 | `events` | array | 1 a **50** por pedido. Um lote, não um evento: um telemóvel que perdeu a rede trinta segundos tem três toques para recuperar e não deve precisar de três idas ao servidor. |
-| `seq` | int ≥ 1 | **Contador do próprio assalto**, atribuído pela app a partir de 1. É a idempotência toda — ver abaixo. |
-| `type` | string | O mesmo conjunto fechado do `events` do `score`: `touch` · `double` · `card_yellow` · `card_red` · `card_black` · `priority` · `period_end`. |
-| `side` | `"a"` \| `"b"` \| ausente | O atleta a que o evento diz respeito. Ausente quando não se aplica (ex.: `double`). |
-| `period` | int ≥ 1 | Período em que ocorreu. A morte súbita é `periods + 1`. |
-| `at_ms` | int ≥ 0 | Milissegundos decorridos **dentro do período**, pelo cronómetro local. |
-| `score_a`, `score_b` | int ≥ 0, opcionais | O placar **depois** do evento. É o que a web mostra enquanto o assalto decorre. |
 
 **A idempotência é o `seq`, e só o `seq`.** Um toque é enviado no instante em que cai, por cima de
 uma rede de pavilhão que falha, portanto o mesmo toque chega duas vezes tantas vezes como não chega.
@@ -738,10 +911,10 @@ GET /bouts/{bout}/events        → 200 { "events": [ … ], "count": n }
 GET /elimination/{match}/events → idem
 ```
 
-Devolveria os mesmos objetos que o `POST` aceita (`seq`, `type`, `side`, `period`, `at_ms`,
-`score_a`, `score_b`), por ordem de `seq`, com o mesmo alcance de sessão do resto do [§7](#7-fluxo-de-arbitragem)
-— o token da pista alcança **o seu** assalto e mais nenhum. Paginação não faz falta: o próprio
-`POST` já limita o assalto a **200 eventos**.
+Devolveria os mesmos objetos que o `POST` aceita — os de
+[Eventos do assalto](#eventos-do-assalto--o-vocabulário-partilhado) —, por ordem de `seq`, com o mesmo
+alcance de sessão do resto do [§7](#7-endpoints): o token da pista alcança **o seu** assalto e mais
+nenhum. Paginação não faz falta: o próprio `POST` já limita o assalto a **300 eventos**.
 
 Enquanto não existir, a regra é a que está escrita acima: **o que a app não guardou, perdeu-se para
 a app** — e nunca para a plataforma, que é quem tem de os ter.
@@ -793,20 +966,18 @@ sem o campo e tudo funciona igual.
 {
   "a": 5, "b": 3,
   "events": [
-    { "type": "touch",       "side": "a", "period": 1, "at_ms": 12400 },
-    { "type": "double",                   "period": 1, "at_ms": 30100 },
-    { "type": "card_yellow", "side": "b", "period": 1, "at_ms": 45000 },
-    { "type": "priority",    "side": "a", "period": 2, "at_ms": 0 }
+    { "type": "bout_start",               "period": 1, "at_ms": 0,     "at": "2026-07-26T14:18:02.000Z" },
+    { "type": "touch",       "side": "a", "period": 1, "at_ms": 12400, "elapsed_ms": 16400 },
+    { "type": "double",                   "period": 1, "at_ms": 30100, "elapsed_ms": 41000 },
+    { "type": "card_yellow", "side": "b", "period": 1, "at_ms": 45000, "elapsed_ms": 58200 },
+    { "type": "priority",    "side": "a", "period": 2, "at_ms": 0,     "phase": "sudden_death" },
+    { "type": "bout_end",                 "period": 2, "at_ms": 12000, "score_a": 5, "score_b": 3 }
   ]
 }
 ```
 
-| Campo | Tipo | Notas |
-|---|---|---|
-| `type` | string | Conjunto fechado: `touch` · `double` · `card_yellow` · `card_red` · `card_black` · `priority` · `period_end`. Um `type` fora da lista devolve `422 validation_failed`. |
-| `side` | `"a"` \| `"b"` \| ausente | O atleta a que o evento diz respeito. Ausente quando não se aplica (ex.: `double`). |
-| `period` | int ≥ 1 | Período em que ocorreu. **A morte súbita é `periods + 1`** — não tem tipo próprio; o evento `priority` diz a quem calhou. |
-| `at_ms` | int ≥ 0 | Milissegundos **decorridos dentro do período**, medidos pelo cronómetro local. Não é relógio de parede: o que interessa é em que altura do assalto o toque caiu. |
+**A forma de cada evento é a de [Eventos do assalto](#eventos-do-assalto--o-vocabulário-partilhado)**,
+sem o `seq` — este lote chega de uma vez e não tem nada de que se defender.
 
 Regras:
 
@@ -814,7 +985,15 @@ Regras:
   temporal como veio e **não** recalcula o resultado a partir dela nem rejeita a submissão se as duas
   coisas não baterem certo. Rejeitar faria uma submissão em fila falhar para sempre num assalto que o
   árbitro já deu por resolvido — e quem manda é o número que ele registou.
-- **Máximo de 200 eventos** por assalto. Acima disso, `422 validation_failed`.
+- **Máximo de 300 eventos** por assalto. Acima disso, `422 validation_failed`.
+
+  > **Eram 200 até à `2.1.0`, e 200 era a conta dos toques.** Um combate de quadro a 15, disputado até
+  > ao fim, dá ~30 toques, ~10 cartões, 3 `period_start` e 3 `period_end`, 2 descansos com os seus
+  > fins, morte súbita com prioridade, e um `clock_start`/`clock_stop` por cada halt: **~115**. O
+  > teto tem de ficar acima do pior caso real com folga, e não muito mais — é ele que impede um
+  > cliente com um ciclo mal fechado de escrever um milhão de linhas. **Levantar um máximo não é
+  > *breaking*:** nenhum cliente correto reparava que ele subiu.
+
 - Os eventos são gravados na mesma transação do resultado. Um `409` não grava nada; um *retry* que
   devolve `200` **não** duplica eventos.
 - `periods_used` não é um campo: deriva-se do maior `period` da lista.
@@ -1151,6 +1330,7 @@ passar a emitir o formato 2 em vez do 1.
 
 | Versão | Data | Alterações |
 |---|---|---|
+| `2.1.0` | 2026-07-26 | **MINOR, aditivo — um assalto passa a reconstituir-se, e não só a resumir-se.** A linha temporal da `1.5.0` dizia em que altura do período caiu um toque; não dizia a que horas o combate começou, a que horas se entrou no terceiro período, a que horas o tempo voltou a correr depois de um halt, nem a que horas se foi a morte súbita. **(1) Oito tipos de evento novos**, os marcos do combate: `bout_start`, `period_start`, `rest_start`, `rest_end`, `sudden_death_start`, `clock_start`, `clock_stop` e `bout_end` — a juntar ao `period_end`, que já existia. **(2) Quatro campos novos** em todos os eventos, todos opcionais: `at` (hora de parede ISO-8601 UTC, do relógio do dispositivo), `elapsed_ms` (desde o `bout_start`, contando paragens e descansos), `remaining_ms` (o que faltava da fase) e `phase` (`period` \| `rest` \| `sudden_death`). **(3) `score_a`/`score_b` passam a poder vir também no lote do `score`**, que até aqui só os aceitava em direto — as duas formas do evento passam a ser a mesma, menos o `seq`. **(4) O teto por assalto sobe de 200 para 300 eventos**, porque 200 era a conta dos toques e os marcos acrescentam ~85 a um combate de quadro. **(5) A definição do evento passou a viver num sítio só** — [Eventos do assalto](#eventos-do-assalto--o-vocabulário-partilhado) —, em vez de duplicada entre o `events` do `score` e o `POST .../events`, que era como as duas cópias podiam divergir. **Nada é obrigatório e nada entra no resultado:** uma app na `2.0.0` continua correta contra um servidor na `2.1.0`, e um servidor na `2.0.0` ignora estes campos como ignora qualquer outro que não conheça. **Especificado antes de implementado**, dos dois lados — ver [§11 E](#e-a-210--especificada-por-implementar). |
 | `2.0.1` | 2026-07-25 | **PATCH, redação — a app migrou, e este documento passa a dizê-lo.** Nada mudou no que os dois lados trocam. (1) A [§11 C](#c-o-lado-da-app--feito) deixou de ser uma lista de trabalho por fazer e passou a ser o registo do que foi feito, com três pontos novos — **C9**, **C10** e **C11** — que a lista original não previa e que só apareceram ao implementá-la: o detalhe do combate precisou de *polling* próprio (era a lista do quadro que revalidava por ele, e é assim que um `ready: false` se destranca sozinho); a chave da fila de submissões passou a aceitar o `id` de um combate, porque um `MatchDetail` não tem `uuid`; e um resultado que fica em fila **só pode ser entregue pelo token da pista que o gerou**, que é uma consequência operacional de o código ter descido ao combate e que a app passou a dizer ao árbitro em vez de a esconder. (2) O aviso de topo e o cabeçalho da §11 deixam de dizer que a app tem de migrar. (3) A caixa da [§12](#12-levantamento-de-campo--a-app-ligada-ao-servidor-a-sério) regista que o `live.test.ts` foi refeito. (4) Fica escrito, no C7, que mostrar o `message` do `410` põe pt-PT numa interface em `en`, e que a saída limpa é um `reason` estável — alteração **MINOR**, quando fizer falta. |
 | `2.0.0` | 2026-07-25 | **MAJOR — o código deixou de ser da competição e passou a ser da pista.** Um quadro corre em várias pistas ao mesmo tempo; um código só para o quadro inteiro dava a cada árbitro todos os combates e, porque um código segura um dispositivo de cada vez, o segundo a ligar-se tirava a sessão ao primeiro. **(1) Cada combate de eliminatória tem o seu PIN**, e o `scope` da sessão passa a `poule` \| `match`. **(2) `scope: "tournament"` e o `TournamentSummary` desaparecem** — um torneio nunca foi arbitrável como um todo e agora não tem por onde. **(3) `GET /poules/{poule}/elimination` e `GET /tournaments/{tournament}/elimination` saem da API**: uma sessão vê um combate, não um quadro; o quadro desenha-se na web. **(4) O `connect` e o `session` devolvem `match`** (o `MatchDetail`, que é o detalhe do combate) no lugar de `tournament`, com `competition_name` novo a dizer em que prova o árbitro está. **(5) Um token de poule deixa de alcançar o quadro dessa poule.** **(6) `PouleSummary.elimination` passa a apontar o quadro *para onde os atletas foram*** — o da poule quando ela corre sozinha, o do torneio quando é uma pool — e é informativo, não navegável: era aqui que uma pool de torneio ficava `locked` com `elimination: null` e a app encalhava num ecrã sem saída. **(7) O `message` do `410 competition_finished` passa a dizer qual dos casos é e para onde ir.** **(8) `422 poule_locked` sai do `POST /elimination/{match}/start`.** **Sem `/api/v2`:** não há app instalada e o `/api/v1` nunca serviu produção, portanto não há versão antiga para coexistir; a regra da §1 vale para a próxima. |
 | `1.5.0` | 2026-07-25 | **MINOR, aditivo — a pista passa a ver-se enquanto está a ser arbitrada.** `POST /bouts/{bout}/events` e `POST /elimination/{match}/events`: a app envia o toque, o duplo, o cartão e a prioridade **no momento em que acontecem**, com um contador `seq` por assalto que é a idempotência toda. Até aqui a plataforma só sabia do assalto no fim, e uma poule a meio parecia uma poule que ninguém tinha começado; agora o placar sobe toque a toque no painel do organizador, na gaveta do assalto e na página pública do evento. **Nada disto é obrigatório e nada disto entra no resultado** — quem não enviar continua a funcionar exatamente como antes. Consequência: uma app que envie em direto tem o `events` do `score` **ignorado**, porque são os mesmos toques contados duas vezes. |
@@ -1169,7 +1349,8 @@ passar a emitir o formato 2 em vez do 1.
 
 **Levantado a 2026-07-25 contra o código da plataforma** (branch `test`). O servidor serve a `2.0.0`
 por inteiro e **a app consome-a** — o que mudou do lado dela está em
-[C](#c-o-lado-da-app--feito).
+[C](#c-o-lado-da-app--feito). A `2.1.0` foi escrita a 2026-07-26 e **ainda não existe em nenhum dos
+dois lados**: o que falta está em [E](#e-a-210--especificada-por-implementar).
 
 ### A. O que a plataforma serve
 
@@ -1264,6 +1445,30 @@ contador `seq` por assalto. Era a **F7** da `app-arbitragem-client-spec.md` §14
 | `round_name` | A app não nomeia rondas e o servidor ainda não as nomeia por ela. Entra como MINOR quando fizer falta no ecrã |
 | Vitória por prioridade | Não é representável (`a == b` é recusado). Reabrir implica `allow_draw` mais um campo de vencedor, e é **MAJOR** |
 | `GET` dos eventos de um assalto | A app guarda a linha temporal em memória enquanto o assalto dura e mostra-a de lá. Entra como MINOR aditivo quando fizer falta ler o que já subiu — ver [Linha temporal por ler](#linha-temporal-por-ler--o-get-que-não-existe) |
+| Sincronização de relógio | O `at` da `2.1.0` é o relógio do telemóvel, e assume-se como tal. Corrigi-lo custaria uma troca de horas em todos os pedidos para acertar o desvio do dispositivo de quem está a arbitrar, e **nenhuma decisão do servidor depende do `at`** |
+
+### E. A `2.1.0` — especificada, por implementar
+
+**Escrita a 2026-07-26, e ainda não existe em lado nenhum.** O contrato é que vai primeiro, que é a
+regra da [§1](#como-usar-este-documento); esta secção é o que falta para os dois lados o cumprirem.
+
+Enquanto não for feito, o que corre em produção é a `2.0.0`, e continua correto: os campos e os tipos
+novos são todos opcionais, e ninguém os manda.
+
+**Servidor** — plano detalhado na **secção F** de `docs/app-arbitragem-todo.md`, que é onde vive o
+trabalho por fazer (o `app-arbitragem-plano-servidor.md` é histórico):
+
+| # | O quê |
+|---|---|
+| E1 | `App\Enums\BoutEventType` ganha os oito casos novos, com `label()` e `tone()`, e todos entram em `timeline()` — os marcos são da história do assalto, não do painel da poule |
+| E2 | `LiveEventsRequest` e `ScoreRequest` aceitam `at`, `elapsed_ms`, `remaining_ms` e `phase`; o `ScoreRequest` passa a aceitar também `score_a`/`score_b`. O teto do `score` sobe a 300 |
+| E3 | `BoutEventRecorder` grava os campos novos no `data`. Nenhuma coluna nova: o `data` já é JSON e é para isto que serve |
+| E4 | **`liveScore()` passa a ler o último evento *com placar*, e não o último evento.** Hoje lê o de `sequence` mais alta e devolve `null` se ele não trouxer placar — com os marcos novos, um `clock_start` a seguir a um toque apagaria o placar ao vivo da web. É uma correção, e é o único ponto da `2.1.0` que parte alguma coisa que hoje funciona |
+| E5 | `RefereePanelPresenter::describeEvent()` expõe os campos novos, e o `boutTimeline.js` mostra-os na gaveta do assalto: hora do marco, tempo desde o início, o que faltava |
+
+**App** — ver `docs/app-arbitragem-client-spec.md` §7.1 e a fase **F9**. O motor do assalto
+(`useBoutEngine`) já conhece todos estes momentos: as fases, as transições de período, o sorteio da
+prioridade e o cronómetro que arranca e pára. O que falta é emiti-los.
 
 ---
 

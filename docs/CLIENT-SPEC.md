@@ -38,6 +38,13 @@ dois divergirem, **este documento manda no cliente** e o outro manda no servidor
 > próprio. O porquê está no **ADR-032** e o plano executado em **`PLANO-2.0.0.md`**, os dois no
 > repositório da app.
 
+> ⏳ **Os marcos do combate (contrato `2.1.0`) estão especificados e por fazer.** O que a app envia
+> hoje diz *em que altura do período* caiu um toque; não diz a que horas o combate começou, a que
+> horas se entrou no terceiro período, a que horas o tempo voltou a correr, nem a que horas se foi a
+> morte súbita. A **F9** acrescenta oito tipos de evento e quatro campos, todos opcionais, sem mudar
+> um pixel do ecrã — [§7.2](#72-os-marcos-do-combate--contrato-210). **Depende do servidor
+> (§13.20):** um `type` que ele não conheça devolve `422` e o emissor desiste do assalto inteiro.
+
 ---
 
 ## Índice
@@ -48,7 +55,7 @@ dois divergirem, **este documento manda no cliente** e o outro manda no servidor
 4. [Tecnologia](#4-tecnologia)
 5. [Contrato de API](#5-contrato-de-api)
 6. [Máquina de estados e ecrãs](#6-máquina-de-estados-e-ecrãs)
-7. [Cronómetro](#7-cronómetro) · [7.1 A pista ao vivo](#71-a-pista-ao-vivo)
+7. [Cronómetro](#7-cronómetro) · [7.1 A pista ao vivo](#71-a-pista-ao-vivo) · [7.2 Os marcos do combate](#72-os-marcos-do-combate--contrato-210)
 8. [Offline e fila de submissões](#8-offline-e-fila-de-submissões)
 9. [Segurança](#9-segurança)
 10. [Mock server](#10-mock-server--desbloquear-a-app)
@@ -461,6 +468,55 @@ seguidos são dois eventos. **Retirar um toque também não**: não há `type` p
 corrigido viaja no evento seguinte, que é a regra do placar mandar (ADR-029). Um assalto de poule
 fechada não espelha nada: a escrita está travada dos dois lados.
 
+### 7.2 Os marcos do combate — contrato `2.1.0`
+
+Contrato `2.1.0`, **por implementar**. A [§7.1](#71-a-pista-ao-vivo) põe o placar a subir na web; isto
+põe lá o **relógio**. A pergunta que a `1.5.0` não responde é a mais simples de todas: *a que horas é
+que este combate começou?*
+
+**O motor já sabe tudo isto.** O `useBoutEngine` conduz as fases (`period` · `rest` · `priority`),
+muda de período, sorteia a prioridade e é dono do cronómetro que arranca e pára. Nenhum destes
+momentos é informação nova — são todos transições que já acontecem lá dentro e que hoje não saem do
+telemóvel. O trabalho é **emitir**, não descobrir.
+
+O que a app passa a emitir, além do grupo A:
+
+| Evento | De onde sai, no motor |
+|---|---|
+| `bout_start` | O primeiro `running` do `timer` — o mesmo instante que já dispara o `POST .../start` |
+| `period_start` | O `setPeriod` do `onAction`, e o período 1 no arranque |
+| `rest_start` | `setResting(true)`, venha do `action.kind === 'rest'` ou do `startRest` do árbitro |
+| `rest_end` | `setResting(false)`, ao passar ao período seguinte |
+| `sudden_death_start` | `onPrioritySettled`, **antes** do `priority` que já se emite |
+| `clock_start` · `clock_stop` | O `timer.toggle()`, dos dois lados — incluindo o `registerCombat`, que dá halt antes de cada toque e cada cartão |
+| `bout_end` | A confirmação do resultado, com o placar final. **Antes** de o `score` ir para a fila |
+
+E os quatro campos novos, em todos os eventos:
+
+- **`at`** — `new Date().toISOString()` no instante do evento. É a única coisa deste ficheiro que usa
+  hora de parede, e o contrato assume-a como do dispositivo: não há sincronização e nenhuma decisão do
+  servidor depende dela.
+- **`elapsed_ms`** — desde o `bout_start`, pelo relógio **monotónico** da [precisão](#precisão) e não
+  pelo `Date`. Conta paragens e descansos: é tempo de relógio, não tempo de esgrima.
+- **`remaining_ms`** — `timer.remainingNowMs()`, que é o que já alimenta o `at_ms`.
+- **`phase`** — a `BoutPhase` do motor, traduzida: `priority` → `sudden_death`.
+
+**Continua tudo *fire-and-forget*, e continua tudo opcional.** As três regras da §7.1 valem sem uma
+exceção: o contador é a idempotência, na falha junta-se ao lote seguinte, e falhar nunca sobe ao ecrã.
+**O ecrã não muda por causa disto** — nem um pixel. Um árbitro não deve conseguir dizer se a app está
+a emitir marcos ou não.
+
+> **O `clock_stop` de um toque duplica-se com o `touch`, e é para duplicar.** O `registerCombat` dá
+> halt e a seguir vem o toque, portanto quase todos os `clock_stop` têm um evento de pista a um passo
+> deles. Não se filtram: um halt sem toque a seguir — material partido, um atleta que sai da pista —
+> é exatamente o que só o `clock_stop` conta, e não há forma de saber qual é qual no instante em que
+> se emite.
+
+> **O teto do lote não muda: 50 por pedido, 300 por assalto.** Os marcos acrescentam ~85 eventos a um
+> combate de quadro disputado até ao fim, e o `useLiveEvents` já deita fora os mais velhos quando o
+> lote enche — a linha temporal fica com um buraco e o placar que a web mostra continua a ser o do
+> evento mais recente, que é a regra que já lá está.
+
 ---
 
 ## 8. Offline e fila de submissões
@@ -695,8 +751,9 @@ servidor local, como gerar *build* de teste, e onde está o contrato.
 
 ## 13. Dependências no servidor (o que a plataforma tem de entregar)
 
-**Todas entregues (2026-07-25).** A tabela fica como registo do que estava em falta e do que a
-plataforma passou a servir; o levantamento vivo está em **§11 do contrato**.
+**1 a 19 entregues (2026-07-25); a 20 é da `2.1.0` e está por fazer.** A tabela fica como registo do
+que estava em falta e do que a plataforma passou a servir; o levantamento vivo está em **§11 do
+contrato**.
 
 | # | Entrega | Estado (2026-07-25) |
 |---|---|---|
@@ -719,6 +776,7 @@ plataforma passou a servir; o levantamento vivo está em **§11 do contrato**.
 | 17 | Endpoints de eliminatória com as URLs e as formas do contrato | ✅ — **só o quadro principal**; consolação arbitra-se na web |
 | 18 | PIN deixa de se gastar na ligação | ✅ |
 | 19 | `POST .../events` nos dois quadros, para a pista se ver enquanto é arbitrada | ✅ — contrato `1.5.0`, servido e fixado por teste. **Consumido pela app** ([§7.1](#71-a-pista-ao-vivo)) |
+| 20 | Os oito tipos de marco e os quatro campos novos aceites nos dois `events` e no `events` do `score` | ⏳ — contrato `2.1.0`, §11.E. **Bloqueia a F9:** um `type` que o servidor não conheça devolve `422`, e o `useLiveEvents` desiste do assalto inteiro |
 
 ### O que faltava deste lado — feito a 2026-07-25
 
@@ -759,11 +817,15 @@ plataforma passou a servir; o levantamento vivo está em **§11 do contrato**.
 | **F6 — Polimento** | Acessibilidade, som/háptica, legibilidade em sol, ecrãs de erro, *store* | F5 |
 | **F7 — Pista ao vivo** ✅ | Enviar os eventos do assalto à medida que acontecem ([§7.1](#71-a-pista-ao-vivo)): contador `seq` por assalto, lote na falha | F5 + servidor §13.19 |
 | **F8 — O código é da pista** ✅ | Contrato `2.0.0`: `scope: poule \| match`, o ecrã de quadro apagado, o combate como raiz de sessão, poule fechada em leitura, `API_CONTRACT_VERSION` a `'2.0.0'` | F7 + servidor §11.A15 do contrato |
+| **F9 — Os marcos do combate** | Contrato `2.1.0` ([§7.2](#72-os-marcos-do-combate--contrato-210)): emitir os oito marcos e os quatro campos novos, `API_CONTRACT_VERSION` a `'2.1.0'` | F8 + servidor §11.E do contrato |
 
 F0–F4 correm **inteiramente contra os mocks** e não dependem do trabalho do servidor.
 
 F7 é **aditiva e independente da F6**: não enviar nada deixa a app exatamente como está hoje, e é
-por isso que não bloqueia nada.
+por isso que não bloqueia nada. **F9 é aditiva pela mesma razão** e não muda um pixel do ecrã: um
+servidor que ainda não conheça os tipos novos recusa-os com `422` e o `useLiveEvents` desiste, o que
+deixa a app como estava. Por isso a F9 pode ser feita antes de a plataforma estar pronta — mas
+**não** entregue antes, ou os eventos de pista deixam de subir junto com os marcos recusados.
 
 ---
 

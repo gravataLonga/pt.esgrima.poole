@@ -1334,3 +1334,85 @@ maiúsculas — é a do marcador, e é a mesma no "Novo assalto" do modo cronóm
 O `± 10 s` passou a `small` (36 pt) com `hitSlop` a devolver os 48 pt de alvo: acertar o tempo é
 trabalho miúdo, e três botões à altura de HIG somavam mais peso do que importância por baixo do
 mostrador que **é** o botão grande deste ecrã.
+
+---
+
+## ADR-035 — Contrato 2.1.0: o assalto passa a ter horas, e não só cronómetro
+
+**Data:** 2026-07-26 · **Estado:** aceite · **Especificado; nenhum dos dois lados o implementa ainda — é a F9**
+
+O [ADR-029](#adr-029--contrato-150-a-pista-passa-a-ver-se-enquanto-está-a-ser-arbitrada) pôs o placar
+a subir na web enquanto o assalto decorre. O que ele não pôs foi o **relógio**.
+
+O que a app envia hoje diz que um toque caiu aos 29 s do primeiro período. Não diz a que horas o
+combate começou, a que horas se entrou no terceiro período, a que horas o tempo voltou a correr
+depois de um halt, a que horas se foi a morte súbita, nem quanto faltava quando o árbitro mandou
+descansar. Um assalto assim **resume-se**, mas não se **reconstitui** — e reconstituí-lo é a única
+coisa que uma reclamação pede.
+
+**Decisão:** contrato `2.1.0`, MINOR aditivo. Oito tipos de evento novos — `bout_start`,
+`period_start`, `rest_start`, `rest_end`, `sudden_death_start`, `clock_start`, `clock_stop`,
+`bout_end` — e quatro campos em todos os eventos: `at` (hora de parede), `elapsed_ms` (desde o
+início do combate), `remaining_ms` (o que faltava da fase) e `phase`. **Todos opcionais.**
+
+### O motor já sabia; o que faltava era dizê-lo
+
+Nenhum destes momentos é informação nova. O `useBoutEngine` já conduz as fases, já muda de período,
+já sorteia a prioridade e já é dono do cronómetro que arranca e pára — o `emit()` existe desde o
+[ADR-030](#adr-030--a-pista-ao-vivo-do-lado-da-app-o-que-se-decidiu-ao-enviá-la) e passa a ser
+chamado em mais oito sítios.
+
+É por isso que esta é a adição barata que parece: não se descobre nada, **exporta-se**. O que se
+paga é o volume — um combate de quadro passa de ~40 eventos para ~115.
+
+### `at_ms` fica como está, e o `elapsed_ms` entra ao lado
+
+A tentação era redefinir o `at_ms` para "desde o início do combate", que é como o pedido foi
+formulado. Seria *breaking*, e seria pior: são duas perguntas diferentes.
+
+- **`at_ms` é tempo de esgrima.** "O toque caiu a 29 s do fim do segundo período" é o que decide se
+  um assalto foi ganho no último segundo. Pára quando o árbitro dá halt.
+- **`elapsed_ms` é tempo de relógio.** "O combate ia em 3 min 34 s" é o que diz a um organizador que
+  a pista está atrasada. Nunca pára.
+
+Nenhum se deriva do outro sem reconstruir todas as paragens — que é precisamente o que o
+`clock_start`/`clock_stop` passa a permitir, e só depois de existirem.
+
+O `elapsed_ms` mede-se pelo relógio **monotónico** da `CLIENT-SPEC.md` §7, não pelo `Date`: é uma
+duração, e uma duração medida com hora de parede muda de valor se o telemóvel acertar a hora a meio.
+
+### O `at` é o relógio do telemóvel, e assume-se
+
+Não há sincronização de relógio neste contrato e não vai haver. Custaria uma troca de horas em todos
+os pedidos para corrigir o desvio do dispositivo de quem está a arbitrar, e **nenhuma decisão do
+servidor depende do `at`**: não valida, não ordena, não entra no resultado. Ordena-se pelo `seq`
+dentro do assalto, que é o único relógio de que a plataforma precisa.
+
+O servidor continua a guardar o seu `created_at` — a hora a que o evento *chegou*. São coisas
+diferentes, e um evento que passou dez minutos numa fila de rede prova porquê.
+
+### O `clock_stop` não estava no pedido e entra na mesma
+
+Foi pedido saber a que horas o tempo **começou** a correr. Um `clock_start` sozinho não responde:
+sem o par, um combate de três minutos que demorou vinte não se distingue de um que demorou quatro — e
+é essa diferença que uma reclamação discute. São o mesmo evento visto dos dois lados.
+
+Quase todos os `clock_stop` vão ter um `touch` ou um cartão a um passo, porque o `registerCombat` dá
+halt antes de os aplicar. **Não se filtram:** um halt sem nada a seguir — material partido, um atleta
+que sai da pista — é exatamente o que só ele conta, e no instante em que se emite não há como saber
+qual é qual.
+
+### O ecrã não muda, e é um requisito
+
+Nem um pixel. Um árbitro não deve conseguir dizer se a app está a emitir marcos ou não. Continua tudo
+*fire-and-forget*, continua tudo fora da fila offline, e falhar continua a não subir ao ecrã — as
+três regras do ADR-029 valem sem exceção.
+
+### A F9 não se entrega antes do servidor
+
+Pode-se **escrever** antes; não se pode **entregar** antes. Um `type` que o servidor não conheça
+devolve `422 validation_failed`, e o `useLiveEvents` trata um 4xx como desistência definitiva
+(ADR-030) — desistiria do assalto inteiro, perdendo com os marcos também os toques que hoje sobem.
+
+É a dependência **§13.20** da `CLIENT-SPEC.md`, e o trabalho do lado de lá é a secção **F** do
+`app-arbitragem-todo.md` da plataforma.
