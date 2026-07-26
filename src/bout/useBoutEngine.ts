@@ -49,6 +49,16 @@ export interface UseBoutEngineOptions {
   onEvent?: (event: LiveEventDraft) => void;
 }
 
+/**
+ * Um acontecimento do assalto, tal como ele sobe para a plataforma — mesmos `type`, mesmo `period`,
+ * mesmo placar depois. O `at` é local e serve para ordenar a lista sem depender do relógio de
+ * ninguém.
+ */
+export interface BoutLogEntry extends LiveEventDraft {
+  /** Ordem de chegada, a partir de `1`. É o `seq` que subiria, mesmo sem servidor para onde subir. */
+  seq: number;
+}
+
 export interface BoutEngine {
   rules: BoutRulesState;
   phase: BoutPhase;
@@ -60,12 +70,22 @@ export interface BoutEngine {
   /** Relógio de passividade, ou `null` nas fases em que não se conta. */
   passivityMs: number | null;
   priorityDraw: PriorityDraw;
+  /**
+   * O que já aconteceu no assalto, por ordem de chegada. Mantido **sempre**, com servidor ou sem
+   * ele: é o que o árbitro consulta quando duvida de um cartão, e não há endpoint que o devolva.
+   */
+  log: BoutLogEntry[];
   /** O passo seguinte do assalto, ou `null` se não houver. */
   action: ClockAction | null;
   onAction: () => void;
+  /** Entrar em descanso por decisão do árbitro. `null` quando esta fase não o admite. */
+  startRest: (() => void) | null;
+  /** Mudar de período à mão, para trás ou para a frente. `null` num assalto de um período só. */
+  goToPeriod: ((period: number) => void) | null;
   setScore: (side: Side) => (value: number) => void;
   giveCard: (side: Side) => (kind: CardKind) => void;
-  undoCard: () => void;
+  /** Sem argumentos anula o último cartão; com eles, o último daquele atleta e daquele tipo. */
+  undoCard: (side?: Side, kind?: CardKind) => void;
   /** Volta ao princípio: 0–0, sem cartões, sem prioridade, primeiro período, tempo cheio. */
   reset: () => void;
 }
@@ -104,6 +124,22 @@ export function useBoutEngine({
   const [resting, setResting] = useState(false);
   // Conta os sinais de combate — toque ou cartão. Cada incremento reinicia o minuto de passividade.
   const [combatToken, setCombatToken] = useState(0);
+  const [log, setLog] = useState<BoutLogEntry[]>([]);
+
+  /**
+   * Guarda o acontecimento e, havendo para onde, manda-o.
+   *
+   * A ordem importa: o registo local **não** depende de haver emissor. No modo cronómetro não há
+   * servidor nenhum e a linha temporal tem de existir na mesma; num assalto ligado, o emissor pode
+   * desistir a meio (`useLiveEvents`) sem que o árbitro perca o que se passou.
+   */
+  const emit = useCallback(
+    (draft: LiveEventDraft) => {
+      setLog((entries) => [...entries, { ...draft, seq: entries.length + 1 }]);
+      onEvent?.(draft);
+    },
+    [onEvent],
+  );
 
   const phase: BoutPhase = rules.priority ? 'priority' : resting ? 'rest' : 'period';
   const durationSeconds = phaseDuration(phase, timing);
@@ -121,7 +157,7 @@ export function useBoutEngine({
   const onPrioritySettled = (side: Side) => {
     dispatch({ type: 'drawPriority', side });
     // O sorteio abre a morte súbita: é o período a seguir ao último, ao segundo zero dele.
-    onEvent?.({
+    emit({
       type: 'priority',
       side,
       period: timing.periods + 1,
@@ -142,14 +178,14 @@ export function useBoutEngine({
     // acaba o assalto — quem o resolve é a prioridade já sorteada.
     if (phase !== 'period') return;
 
-    onEvent?.({
+    emit({
       type: 'period_end',
       period,
       at_ms: Math.round(durationSeconds * 1000),
       score_a: rules.a,
       score_b: rules.b,
     });
-  }, [durationSeconds, onEvent, period, phase, rules.a, rules.b]);
+  }, [durationSeconds, emit, period, phase, rules.a, rules.b]);
 
   const timer = useTimer(durationSeconds, { onExpire });
 
@@ -189,6 +225,37 @@ export function useBoutEngine({
   };
 
   /**
+   * Descansar por decisão do árbitro, e não só quando o tempo acaba.
+   *
+   * O `action` só oferece o descanso no instante em que o período esgota, e na pista isso não
+   * chega: o intervalo pode ser preciso a meio — assistência médica, material partido, um atleta
+   * que sai da pista. Só existe onde existe intervalo (`restSeconds > 0`), nunca no último período
+   * e nunca na morte súbita, que não tem intervalo por definição.
+   */
+  const canRest = phase === 'period' && timing.restSeconds > 0 && period < timing.periods;
+  const startRest = canRest ? () => setResting(true) : null;
+
+  /**
+   * Mudar de período à mão, nos dois sentidos.
+   *
+   * Existe pela mesma razão que o `± 10 s`: o árbitro é a autoridade e a app não pode ser mais
+   * teimosa do que ele — um período mal contado corrigia-se, até aqui, saindo do assalto. Recomeça
+   * sempre no tempo cheio, porque um período que começa a meio não é um período.
+   *
+   * **Não vai à linha temporal.** O conjunto de `type` do contrato §7 é fechado, e um período
+   * corrigido não é um acontecimento da pista — é uma correção de quem a arbitra.
+   */
+  const goToPeriod =
+    timing.periods > 1
+      ? (next: number) => {
+          const clamped = Math.min(Math.max(1, next), timing.periods);
+          setResting(false);
+          setPeriod(clamped);
+          timer.reset();
+        }
+      : null;
+
+  /**
    * Um toque ou um cartão é sempre precedido de "halt": param o cronómetro, e reiniciam o minuto
    * de passividade (ADR-020). Fica aqui e não no redutor porque mexe no cronómetro, que é um hook.
    */
@@ -209,7 +276,7 @@ export function useBoutEngine({
     dispatch(action);
 
     if (!changed(rules, next)) return;
-    onEvent?.({ type, side, period: eventPeriod, at_ms: at, score_a: next.a, score_b: next.b });
+    emit({ type, side, period: eventPeriod, at_ms: at, score_a: next.a, score_b: next.b });
   };
 
   const setScore = (side: Side) => (value: number) => {
@@ -231,12 +298,13 @@ export function useBoutEngine({
     apply({ type: 'card', side, kind }, CARD_EVENT[kind], side);
   };
 
-  const undoCard = () => dispatch({ type: 'undoCard' });
+  const undoCard = (side?: Side, kind?: CardKind) => dispatch({ type: 'undoCard', side, kind });
 
   const reset = () => {
     dispatch({ type: 'reset' });
     setPeriod(1);
     setResting(false);
+    setLog([]);
     // Conta como acontecimento: o relógio de passividade do assalto anterior não transita.
     setCombatToken((token) => token + 1);
     timer.reset();
@@ -250,8 +318,11 @@ export function useBoutEngine({
     timer,
     passivityMs: phase === 'rest' ? null : passivity.remainingMs,
     priorityDraw,
+    log,
     action,
     onAction,
+    startRest,
+    goToPeriod,
     setScore,
     giveCard,
     undoCard,

@@ -39,7 +39,12 @@ export interface BoutRulesState {
 export type BoutAction =
   | { type: 'touch'; side: Side; delta: 1 | -1 }
   | { type: 'card'; side: Side; kind: CardKind }
-  | { type: 'undoCard' }
+  /**
+   * Anula um cartão. Sem argumentos é o último dado, seja de quem for; com `side` e `kind` é o
+   * último **daquele atleta e daquele tipo** — que é o que o ecrã pede quando se anula carregando
+   * no próprio cartão, e não num botão à parte que não sabe em que coluna se está.
+   */
+  | { type: 'undoCard'; side?: Side; kind?: CardKind }
   /** Sorteio de prioridade. O lado sorteado entra como argumento para o redutor ficar puro. */
   | { type: 'drawPriority'; side: Side }
   /** Assalto novo com os mesmos presets. Só o modo cronómetro o usa — ali encadeiam-se assaltos. */
@@ -52,6 +57,17 @@ export function initialBoutRules(target: number, a = 0, b = 0): BoutRulesState {
 const other = (side: Side): Side => (side === 'a' ? 'b' : 'a');
 
 const clamp = (value: number, target: number): number => Math.min(target, Math.max(0, value));
+
+/** O índice do último cartão que serve o filtro. `-1` se não houver nenhum. */
+function lastCardIndex(cards: CardEntry[], side?: Side, kind?: CardKind): number {
+  for (let index = cards.length - 1; index >= 0; index -= 1) {
+    const card = cards[index];
+    if (!card) continue;
+    if ((!side || card.side === side) && (!kind || card.kind === kind)) return index;
+  }
+
+  return -1;
+}
 
 export function boutRules(state: BoutRulesState, action: BoutAction): BoutRulesState {
   switch (action.type) {
@@ -80,15 +96,18 @@ export function boutRules(state: BoutRulesState, action: BoutAction): BoutRulesS
     }
 
     case 'undoCard': {
-      const last = state.cards.at(-1);
-      if (!last) return state;
+      const index = lastCardIndex(state.cards, action.side, action.kind);
+      const card = state.cards[index];
+      if (!card) return state;
 
-      const opponent = other(last.side);
+      const opponent = other(card.side);
 
       return {
         ...state,
-        [opponent]: last.awardedTouch ? state[opponent] - 1 : state[opponent],
-        cards: state.cards.slice(0, -1),
+        // `max(0, …)` porque o toque dado pelo vermelho pode já ter sido retirado à mão pelo `−`:
+        // devolver um toque que já não está lá deixava o placar negativo.
+        [opponent]: card.awardedTouch ? Math.max(0, state[opponent] - 1) : state[opponent],
+        cards: [...state.cards.slice(0, index), ...state.cards.slice(index + 1)],
       };
     }
 

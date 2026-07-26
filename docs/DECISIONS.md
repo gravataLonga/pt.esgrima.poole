@@ -1192,3 +1192,145 @@ Uma constante em `en` no lugar disso deixa o árbitro parado à espera do organi
 evento que claramente não terminou. **A frase certa na língua errada desbloqueia-o; a frase errada
 na língua certa não.** A saída limpa é um `reason` traduzível vindo do servidor, e isso é uma
 alteração MINOR do contrato — que se faz alterando o documento primeiro.
+
+## ADR-033 — O mostrador passou a ser um painel, e os algarismos passaram a ser pontos
+
+**Data:** 2026-07-26 · **Estado:** aceite
+
+O cronómetro e os resultados deixaram de ser texto grande e passaram a **algarismos de pontos sobre
+painel preto**, à maneira do marcador da FIE. É a única mudança da app que é puramente de aparência
+— e a razão de a fazer é que a aparência, aqui, é função: um mostrador que se parece com o aparelho
+que está ao lado da pista lê-se sem se aprender.
+
+### Sete segmentos, não uma matriz de pontos
+
+A tentação era desenhar uma matriz 5×7 e escrever nela. Não é o que os marcadores fazem: cada traço
+do algarismo é uma **corrente de LEDs**, e a silhueta continua a ser a dos sete segmentos de sempre.
+Uma matriz dá letras de consola; sete segmentos dão um mostrador. A `dotGlyphs` guarda os sete
+segmentos, cada um com os seus extremos — é a sobreposição nos cantos que fecha o contorno do `0` e
+dá ao `1` uma coluna contínua em vez de dois troços soltos.
+
+Só se desenham os pontos **acesos**. Num painel preto os apagados não se veem, e não os desenhar
+baixa o mostrador de umas 200 `View`s para menos de 70 — o que interessa porque o cronómetro
+re-renderiza a 20 Hz. Cada algarismo é memorizado à parte: na maior parte dos ciclos muda um só.
+
+### O tamanho vem da caixa, não de uma constante
+
+O `DotDisplay` mede-se por `onLayout` e tira daí o tamanho do ponto. Tem de ser: o mesmo componente
+serve o cronómetro em retrato, o mesmo cronómetro apertado em landscape e o resultado dentro da
+coluna. E reserva sempre a largura do formato mais comprido — sem isso, os algarismos mudavam de
+tamanho ao cruzar os 10 s e ao passar de 9 para 10 toques. Num mostrador, dígitos que encolhem
+sozinhos leem-se como avaria.
+
+### Os pontos não são texto, e isso tem um preço
+
+O que estava escrito num `<Text>` passou a ser um monte de `View`s. **Nenhum leitor de ecrã as
+reconstrói**, e nenhum teste as encontra por texto: o valor vive agora no `accessibilityLabel` do
+mostrador, e as asserções do cronómetro passaram de `getByText` a `getByLabelText`. É a troca
+inteira desta decisão — o ecrã ficou mais legível para quem vê e continua igual para quem ouve,
+mas só porque o rótulo é obrigatório na API do componente.
+
+A vírgula dos décimos ficou um ponto em baixo, como em qualquer mostrador de segmentos: a 5 pontos
+de largura não há forma de desenhar a cauda sem ela parecer sujidade. O `0:09,9` continua inteiro,
+com vírgula, no rótulo.
+
+### O fundo do painel não muda com a fase
+
+Em cartão branco, cada fase tinha o seu fundo — cinzento no descanso, laranja claro na morte súbita.
+Um painel não faz isso; aparelho nenhum muda de cor de fundo. Quem diz a fase passou a ser a borda
+e a cor dos algarismos: verde a contar, laranja nos últimos dez segundos, vermelho esgotado, branco
+esbatido no descanso — porque aí o tempo que corre não é o do assalto.
+
+Nos resultados, a cor do lado deixou de estar confinada à faixa do nome e passou também aos
+algarismos: verde de um lado, vermelho do outro, como as lâmpadas do aparelho. Com a poule ligada
+não há lado nenhum e o painel acende a branco. O limite de toques, que antes pintava o número de
+verde, passou a acender a **borda** do painel — com os algarismos já verdes de um dos lados, pintá-
+los de verde não dizia nada.
+
+Todos os pares novos entraram na `contrast.test.ts`. Os algarismos são medidos pela régua do texto
+grande e não pelos 3:1 do não textual: para o sistema são `View`s, mas para quem olha são números.
+
+## ADR-034 — O ecrã de assalto passou a falar a língua do painel
+
+**Data:** 2026-07-26 · **Estado:** aceite
+
+O [ADR-033](#adr-033--o-mostrador-passou-a-ser-um-painel-e-os-algarismos-passaram-a-ser-pontos)
+trouxe painéis pretos para o meio de um ecrã desenhado à volta de texto e botões verdes. O que se
+seguiu foi a conta de o fazer: metade dos controlos deste ecrã tinham sido desenhados para o ecrã
+anterior, e viam-se.
+
+### A borda a correr passou a pulsar
+
+Verde fixo dizia "a correr" tão bem como dizia "parado com uma borda verde": a 2 m, uma cor estática
+não tem estado. Agora respira, e é a única coisa do ecrã que se mexe sozinha quando o tempo anda.
+Anima-se `opacity` numa camada por cima da borda, e não a `borderColor` da borda: cor animada obriga
+a largar o *native driver* e a passar cada fotograma pela ponte JS, ao lado de um cronómetro que já
+re-renderiza a 20 Hz.
+
+### O descanso e os períodos deixaram de depender do cronómetro
+
+O passo seguinte (`nextClockAction`) continua a ser um só, e continua a aparecer quando o tempo
+acaba — mas passou a haver **descanso a pedido** e **períodos com galhos para os dois lados**. A
+razão é a mesma do `± 10 s`: o árbitro é a autoridade, e a app não pode ser mais teimosa do que ele.
+Um intervalo pode ser preciso a meio de um período — assistência, material partido — e um período
+mal contado corrigia-se, até aqui, saindo do assalto e perdendo-o.
+
+Os galhos ficam **dentro do painel**, aos lados dos pontos que já diziam em que período se está: os
+pontos são a leitura, os galhos são a escrita da mesma coisa. Mudar de período recomeça sempre no
+tempo cheio — um período que começa a meio não é um período — e **não entra na linha temporal**: o
+conjunto de `type` do contrato §7 é fechado, e uma correção de quem arbitra não é um acontecimento
+da pista.
+
+### O painel do resultado é o botão de marcar
+
+Como o mostrador é o botão de arrancar (spec §7). Dois botões `+`/`−` de igual peso por baixo do
+resultado diziam que tirar um toque é tão frequente como dar um, e não é: dão-se cinco a quinze por
+assalto, tira-se um de tempos a tempos e por engano. O `+` desapareceu para dentro do painel — alvo
+de meia coluna, que se acerta sem olhar — e o `−` ficou numa tira baixa por baixo dos cartões.
+
+O aceso ao toque foi tentado e recusado: aclarar o fundo do painel punha os algarismos vermelhos a
+**1.95:1** contra o fundo novo, e o número que se está a mudar deixava de se ler no instante em que
+se lhe toca. Esmorece, como o mostrador.
+
+A borda verde de limite de toques deu lugar a uma **lâmpada ao canto**. Uma borda de 2 pt a toda a
+volta de um painel preto era um berro para dizer o que uma lâmpada acesa diz melhor — e é assim que
+o aparelho o diz.
+
+### Anular um cartão mudou de sítio, e de significado
+
+O botão "Anular último cartão" era de largura inteira, só existia depois do primeiro cartão — e ao
+aparecer empurrava o resto do ecrã para baixo. Pior: com dois atletas, anulava o **último cartão do
+assalto** e não o daquela coluna, que é o que quem carrega naquela coluna espera.
+
+Agora anula-se **premindo o próprio cartão sem largar**, e o redutor ganhou o alvo: `undoCard` com
+`side` e `kind` tira o mais recente daquele atleta e daquele tipo; sem argumentos continua a tirar o
+último, que é o que os testes de sempre exercem. O preto esgotado deixou de ser `disabled` e passou
+a ser só **anunciado** como esgotado: `disabled` fechava também a pressão longa, e ela é a única
+saída de um preto dado por engano.
+
+O preço é ser uma ação escondida. Vive no `accessibilityHint`, e é a troca aceite: um gesto que se
+descobre uma vez, contra uma linha permanente no ecrã para uma ação que acontece uma vez em dez
+assaltos.
+
+### A linha temporal passou a ver-se — e é local
+
+A app envia os eventos desde a `1.5.0` e nunca os mostrou. Agora o motor guarda-os (`engine.log`) e
+há uma folha que os lê, do mais recente para o mais antigo, com o tempo **decorrido dentro da fase**
+— que é como o árbitro o viu no mostrador, e não uma hora do relógio que ninguém olhou.
+
+**É local, e tem de ser**: o contrato só tem `POST .../events`. Não existe `GET`, e por isso não há
+de onde reler o que já subiu. Ficou escrito no contrato dos dois lados
+([`API-CONTRACT.md`](API-CONTRACT.md), secção *Linha temporal por ler*) o que a ausência custa e
+qual seria a adição MINOR que a resolve. O registo local **não depende de haver emissor**: no modo
+cronómetro não há servidor nenhum, e a lista existe na mesma.
+
+### O submeter ficou preto
+
+Um botão verde cheio, por baixo de dois painéis pretos, era o único elemento do ecrã ainda a falar a
+linguagem da lista de assaltos. A variante `panel` do `Button` — tecla preta, letras verdes
+maiúsculas — é a do marcador, e é a mesma no "Novo assalto" do modo cronómetro. Ao lado dela, o
+`Histórico` fica secundário e a um terço da largura: ver é uma escapadela, registar é o fim.
+
+O `± 10 s` passou a `small` (36 pt) com `hitSlop` a devolver os 48 pt de alvo: acertar o tempo é
+trabalho miúdo, e três botões à altura de HIG somavam mais peso do que importância por baixo do
+mostrador que **é** o botão grande deste ecrã.

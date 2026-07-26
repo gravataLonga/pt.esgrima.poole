@@ -1,6 +1,8 @@
 export { Badge } from './Badge';
 export { Banner } from './Banner';
 export { Button } from './Button';
+export { DotDisplay } from './DotDisplay';
+export { columnsFor } from './dotGlyphs';
 export { ProgressBar } from './ProgressBar';
 export { Screen } from './Screen';
 export { SegmentedControl } from './SegmentedControl';

@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
+import { ApiError } from '@/api/errors';
 import { useBouts, useStandings } from '@/api/queries';
 import type { Bout } from '@/api/types';
 import { Classification, Grid, boutStates, buildSheet, currentBout, onDeckBout } from '@/poule';
@@ -27,6 +28,12 @@ import {
 } from '@/ui';
 
 type PouleView = 'bouts' | 'sheet';
+
+/** O erro numa linha: `code` quando a API o deu, senão a mensagem do transporte. */
+function describe(error: unknown): string {
+  if (error instanceof ApiError) return `${error.status} ${error.code} — ${error.message}`;
+  return error instanceof Error ? error.message : String(error);
+}
 
 /**
  * Ecrã 2 — Lista de assaltos e folha de poule (spec §6).
@@ -132,6 +139,12 @@ export default function PouleScreen() {
           <Text variant="title">{t('poule.error.title')}</Text>
           <Text color={colors.textMuted} style={styles.centeredText}>
             {t('poule.error.body')}
+          </Text>
+          {/* O que o servidor respondeu, à letra. Uma frase genérica deixa o árbitro sem nada para
+              dizer ao organizador — e é o organizador quem pode resolver "a poule foi fechada" ou
+              "outro dispositivo assumiu". O ecrã de assalto já mostra o erro assim. */}
+          <Text variant="caption" style={styles.centeredText}>
+            {describe(bouts.error)}
           </Text>
           <Button label={t('common.retry')} onPress={() => void bouts.refetch()} />
         </View>

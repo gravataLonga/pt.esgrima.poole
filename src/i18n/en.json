@@ -25,6 +25,14 @@
     "ended": {
       "token_expired": "The session expired after 60 minutes without activity. Connect again.",
       "token_revoked": "Another device took over this piste."
+    },
+    "help": {
+      "title": "Where is the code?",
+      "step1": "Each piste has its own code.",
+      "step2": "The QR is on the poule sheet or the match card.",
+      "step3": "Or ask the organiser for the six digits.",
+      "reuse": "It works more than once — leaving and coming back costs six digits.",
+      "dismiss": "Got it"
     }
   },
   "scan": {
@@ -65,7 +73,7 @@
     "empty": "No bouts in this poule yet.",
     "error": {
       "title": "Could not load the bouts",
-      "body": "The server did not answer. The app keeps trying on its own."
+      "body": "The server did not answer. Check the connection and try again."
     },
     "readOnly": {
       "withBracket": "Poule closed — the competition moved on to the elimination table ({{done}}/{{total}} matches decided). Each match has its own six-digit code: ask for the one for your piste.",
@@ -86,7 +94,9 @@
     "scoreLabel_one": "{{name}}: {{count}} touch",
     "scoreLabel_other": "{{name}}: {{count}} touches",
     "period": {
-      "label": "Period {{current}} of {{total}}"
+      "label": "Period {{current}} of {{total}}",
+      "previous": "Previous period",
+      "next": "Next period"
     },
     "priority": {
       "draw": "Draw priority",
@@ -108,7 +118,7 @@
       },
       "count_one": "{{count}} given",
       "count_other": "{{count}} given",
-      "undo": "Undo last card"
+      "undoHint": "Press and hold to undo"
     },
     "timer": {
       "label": "Timer",
@@ -162,6 +172,24 @@
     },
     "error": {
       "gone": "This bout no longer exists — a fencer was removed from the poule. The result was not saved."
+    },
+    "events": {
+      "open": "Timeline",
+      "title": "What happened",
+      "subtitle": "Most recent first. The time is the one shown on the clock.",
+      "empty": "Nothing has happened in this bout yet.",
+      "close": "Close",
+      "period": "P{{period}}",
+      "suddenDeath": "SD",
+      "type": {
+        "touch": "Touch",
+        "double": "Double touch",
+        "card_yellow": "Yellow card",
+        "card_red": "Red card",
+        "card_black": "Black card",
+        "priority": "Priority drawn",
+        "period_end": "End of period"
+      }
     }
   },
   "timer": {

@@ -20,6 +20,7 @@ import {
 } from '@/ui';
 
 import { Clock } from './Clock';
+import { EventSheet } from './EventSheet';
 import { ScoreColumn } from './ScoreColumn';
 import { TimeSheet } from './TimeSheet';
 import { useAllowLandscape, useIsLandscape } from './orientation';
@@ -104,7 +105,7 @@ export interface BoutScreenProps {
   onFinished?: (result: RecordedScore) => void;
 }
 
-type SheetKind = 'none' | 'time' | 'submit' | 'conflict';
+type SheetKind = 'none' | 'time' | 'submit' | 'conflict' | 'events';
 
 /**
  * Carregar, falhar, ou arbitrar. A arbitragem em si vive num componente à parte e **só monta com
@@ -315,6 +316,8 @@ function Refereeing({
         setTimeSnapshotMs(timer.remainingMs);
         setSheet('time');
       }}
+      onStartRest={engine.startRest}
+      onGoToPeriod={engine.goToPeriod}
       compact={landscape}
     />
   );
@@ -337,14 +340,18 @@ function Refereeing({
         flashingPriority={engine.priorityDraw.flashing === side}
         onChange={engine.setScore(side)}
         onCard={engine.giveCard(side)}
+        onUndoCard={(kind) => engine.undoCard(side, kind)}
         compact={landscape}
       />
     );
   });
 
+  // Tecla preta de letras verdes: a ação que fecha o assalto fala a língua do mostrador que está
+  // por cima dela, e não a do botão verde de uma lista.
   const submit = (
     <Button
       label={t('bout.submit')}
+      variant="panel"
       size="compact"
       onPress={() => setSheet('submit')}
       // Desativado chega: o resultado empatado está nos dois números grandes, logo ali por cima.
@@ -353,12 +360,12 @@ function Refereeing({
     />
   );
 
-  const undo = rules.cards.length > 0 && (
+  const events = (
     <Button
-      label={t('bout.cards.undo')}
+      label={t('bout.events.open')}
       variant="secondary"
       size="compact"
-      onPress={engine.undoCard}
+      onPress={() => setSheet('events')}
     />
   );
 
@@ -429,7 +436,7 @@ function Refereeing({
           <View style={styles.landscapeClock}>
             <View style={styles.landscapeClockSlot}>{clock}</View>
             <View style={styles.landscapeActions}>
-              {undo ? <View style={styles.landscapeAction}>{undo}</View> : null}
+              <View style={styles.landscapeAction}>{events}</View>
               <View style={styles.landscapeAction}>{submit}</View>
             </View>
           </View>
@@ -439,12 +446,20 @@ function Refereeing({
         <>
           {clock}
           <View style={styles.scoreArea}>{columns}</View>
-          <View style={styles.actions}>
-            {undo}
-            {submit}
+          <View style={styles.actionRow}>
+            <View style={styles.actionAside}>{events}</View>
+            <View style={styles.actionMain}>{submit}</View>
           </View>
         </>
       )}
+
+      <EventSheet
+        visible={sheet === 'events'}
+        log={engine.log}
+        timing={timing}
+        nameOf={nameOf}
+        onClose={() => setSheet('none')}
+      />
 
       <TimeSheet
         visible={sheet === 'time'}
@@ -647,8 +662,16 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginVertical: spacing.md,
   },
-  actions: {
+  /** Consultar e registar na mesma linha, com o peso trocado: ver é uma escapadela, registar é o fim. */
+  actionRow: {
+    flexDirection: 'row',
     gap: spacing.sm,
+  },
+  actionAside: {
+    flex: 1,
+  },
+  actionMain: {
+    flex: 2,
   },
   landscape: {
     flex: 1,

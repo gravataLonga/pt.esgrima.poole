@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import {
   Clock,
+  EventSheet,
   ScoreColumn,
   TimeSheet,
   boutTiming,
@@ -53,6 +54,7 @@ export default function TimerScreen() {
   const { rules, timer } = engine;
 
   const [timeSheetOpen, setTimeSheetOpen] = useState(false);
+  const [eventsOpen, setEventsOpen] = useState(false);
   // O tempo com que a folha de acerto abre, fotografado no toque. Ler `timer.remainingMs` a cada
   // render remontava os campos dez vezes por segundo com o cronómetro a correr.
   const [timeSnapshotMs, setTimeSnapshotMs] = useState(0);
@@ -118,6 +120,8 @@ export default function TimerScreen() {
         setTimeSnapshotMs(timer.remainingMs);
         setTimeSheetOpen(true);
       }}
+      onStartRest={engine.startRest}
+      onGoToPeriod={engine.goToPeriod}
       compact={landscape}
     />
   );
@@ -138,6 +142,7 @@ export default function TimerScreen() {
       flashingPriority={engine.priorityDraw.flashing === side}
       onChange={engine.setScore(side)}
       onCard={engine.giveCard(side)}
+      onUndoCard={(kind) => engine.undoCard(side, kind)}
       compact={landscape}
     />
   ));
@@ -149,15 +154,15 @@ export default function TimerScreen() {
   // Secundário, sempre: recomeçar nunca é a ação principal deste ecrã — a principal é tocar no
   // mostrador para arrancar.
   const newBout = (
-    <Button label={t('timer.newBout')} variant="secondary" size="compact" onPress={onNewBout} />
+    <Button label={t('timer.newBout')} variant="panel" size="compact" onPress={onNewBout} />
   );
 
-  const undo = rules.cards.length > 0 && (
+  const events = (
     <Button
-      label={t('bout.cards.undo')}
+      label={t('bout.events.open')}
       variant="secondary"
       size="compact"
-      onPress={engine.undoCard}
+      onPress={() => setEventsOpen(true)}
     />
   );
 
@@ -192,7 +197,7 @@ export default function TimerScreen() {
           <View style={styles.landscapeClock}>
             <View style={styles.landscapeClockSlot}>{clock}</View>
             <View style={styles.landscapeActions}>
-              {undo ? <View style={styles.landscapeAction}>{undo}</View> : null}
+              <View style={styles.landscapeAction}>{events}</View>
               <View style={styles.landscapeAction}>{newBout}</View>
             </View>
           </View>
@@ -202,12 +207,20 @@ export default function TimerScreen() {
         <>
           {clock}
           <View style={styles.scoreArea}>{columns}</View>
-          <View style={styles.actions}>
-            {undo}
-            {newBout}
+          <View style={styles.actionRow}>
+            <View style={styles.actionAside}>{events}</View>
+            <View style={styles.actionMain}>{newBout}</View>
           </View>
         </>
       )}
+
+      <EventSheet
+        visible={eventsOpen}
+        log={engine.log}
+        timing={timing}
+        nameOf={(side) => sides[side].label}
+        onClose={() => setEventsOpen(false)}
+      />
 
       <TimeSheet
         visible={timeSheetOpen}
@@ -278,8 +291,15 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginVertical: spacing.md,
   },
-  actions: {
+  actionRow: {
+    flexDirection: 'row',
     gap: spacing.sm,
+  },
+  actionAside: {
+    flex: 1,
+  },
+  actionMain: {
+    flex: 2,
   },
   landscape: {
     flex: 1,

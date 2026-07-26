@@ -87,11 +87,25 @@ async function conditional<T>(
 }
 
 /**
- * Repetir um erro que não vai mudar de resposta só atrasa o ecrã de erro. O cliente HTTP já repete
- * o que é repetível (contrato §4) — aqui só se evita que o React Query volte a insistir por cima.
+ * Quantas vezes o React Query insiste por cima do cliente HTTP, que já repete sozinho o que é
+ * repetível (contrato §4).
  */
-const retryPolicy = (_count: number, error: Error): boolean =>
-  !isUnauthorized(error) && !isGone(error);
+export const MAX_QUERY_RETRIES = 2;
+
+/**
+ * Repetir um erro que não vai mudar de resposta só atrasa o ecrã de erro.
+ *
+ * **E tem de acabar.** Devolver `true` sem olhar para a contagem punha o React Query a repetir para
+ * sempre, de recuo em recuo exponencial: uma falha que não passa — servidor em baixo, Wi-Fi do
+ * pavilhão a cair, um `404` a um assalto que já não existe — deixava a lista em *"A carregar
+ * assaltos…"* **para sempre**. O ecrã de erro que existe logo ao lado, com o botão de tentar outra
+ * vez, era inalcançável: a query nunca saía de `pending`, e `isError` nunca chegava a ser verdade.
+ *
+ * Ao fim das tentativas, quem decide se insiste é o árbitro — que é quem sabe se já saiu da zona
+ * morta do pavilhão.
+ */
+export const retryPolicy = (count: number, error: Error): boolean =>
+  count < MAX_QUERY_RETRIES && !isUnauthorized(error) && !isGone(error);
 
 export function useBouts(pouleUuid: string | null): UseQueryResult<BoutsResponse> {
   const client = useQueryClient();

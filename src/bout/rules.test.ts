@@ -99,6 +99,47 @@ describe('anular cartão', () => {
     const state = start(3, 2);
     expect(boutRules(state, { type: 'undoCard' })).toBe(state);
   });
+
+  it('com lado e tipo, anula aquele cartão e não o último do assalto', () => {
+    const state = run(
+      start(),
+      { type: 'card', side: 'a', kind: 'red' }, // dá um toque ao b
+      { type: 'card', side: 'b', kind: 'yellow' },
+      { type: 'undoCard', side: 'a', kind: 'red' },
+    );
+
+    // O amarelo do b ficou; o toque que o vermelho tinha dado voltou atrás.
+    expect(state.b).toBe(0);
+    expect(cardCount(state, 'b', 'yellow')).toBe(1);
+    expect(cardCount(state, 'a', 'red')).toBe(0);
+  });
+
+  it('anula o mais recente daquele tipo quando há vários', () => {
+    const state = run(
+      start(),
+      { type: 'card', side: 'a', kind: 'yellow' },
+      { type: 'card', side: 'a', kind: 'yellow' },
+      { type: 'undoCard', side: 'a', kind: 'yellow' },
+    );
+
+    expect(cardCount(state, 'a', 'yellow')).toBe(1);
+  });
+
+  it('é inerte quando aquele atleta não tem cartão daquele tipo', () => {
+    const state = run(start(), { type: 'card', side: 'a', kind: 'yellow' });
+    expect(boutRules(state, { type: 'undoCard', side: 'b', kind: 'yellow' })).toBe(state);
+  });
+
+  it('não deixa o placar negativo quando o toque do vermelho já tinha sido retirado à mão', () => {
+    const state = run(
+      start(),
+      { type: 'card', side: 'a', kind: 'red' }, // b passa a 1
+      { type: 'touch', side: 'b', delta: -1 }, // e o árbitro tira-o
+      { type: 'undoCard' },
+    );
+
+    expect(state.b).toBe(0);
+  });
 });
 
 describe('prioridade', () => {

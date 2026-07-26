@@ -713,6 +713,41 @@ partilhado com o *polling* da [§5](#5-polling-e-etag) — daí o lote.
 
 ---
 
+### Linha temporal por ler — o `GET` que não existe
+
+**Os eventos só se escrevem.** Não há endpoint que os devolva: quem envia não os pode reler, e uma
+app instalada de novo a meio de um assalto não tem como saber o que já lá está.
+
+Do lado da app isto **não é um bloqueio**, e a `2.0.0` não o trata como tal: o motor do assalto
+guarda a linha temporal em memória enquanto o assalto dura (`engine.log`), e é ela que o ecrã mostra
+quando o árbitro quer confirmar a que minuto caiu um cartão. Chega para o caso real — o árbitro
+pergunta pelo assalto que está a arbitrar, não por um de ontem.
+
+O que a ausência custa, custa em três sítios:
+
+- **App reinstalada ou dispositivo trocado a meio.** O placar recupera-se do `GET /bouts/{bout}`;
+  o que se passou, não. A app abre com a linha temporal vazia e um placar certo.
+- **Segundo dispositivo na mesma pista.** Vê o resultado, não vê o caminho até ele.
+- **Reclamação depois de registado.** Os eventos estão na base de dados da plataforma e veem-se na
+  web; a app, que os enviou, é o único sítio onde não se leem.
+
+**Se vier a fazer falta, entra como MINOR aditivo** — nada do que existe muda de forma:
+
+```
+GET /bouts/{bout}/events        → 200 { "events": [ … ], "count": n }
+GET /elimination/{match}/events → idem
+```
+
+Devolveria os mesmos objetos que o `POST` aceita (`seq`, `type`, `side`, `period`, `at_ms`,
+`score_a`, `score_b`), por ordem de `seq`, com o mesmo alcance de sessão do resto do [§7](#7-fluxo-de-arbitragem)
+— o token da pista alcança **o seu** assalto e mais nenhum. Paginação não faz falta: o próprio
+`POST` já limita o assalto a **200 eventos**.
+
+Enquanto não existir, a regra é a que está escrita acima: **o que a app não guardou, perdeu-se para
+a app** — e nunca para a plataforma, que é quem tem de os ter.
+
+---
+
 ### `POST /bouts/{bout}/score`
 
 Regista o resultado. **Primeiro a submeter ganha.**
@@ -1228,6 +1263,7 @@ contador `seq` por assalto. Era a **F7** da `app-arbitragem-client-spec.md` §14
 | `base_url` no QR | Formato reservado do [§9](#9-emparelhamento-qr--pin); o QR continua a levar só os seis dígitos |
 | `round_name` | A app não nomeia rondas e o servidor ainda não as nomeia por ela. Entra como MINOR quando fizer falta no ecrã |
 | Vitória por prioridade | Não é representável (`a == b` é recusado). Reabrir implica `allow_draw` mais um campo de vencedor, e é **MAJOR** |
+| `GET` dos eventos de um assalto | A app guarda a linha temporal em memória enquanto o assalto dura e mostra-a de lá. Entra como MINOR aditivo quando fizer falta ler o que já subiu — ver [Linha temporal por ler](#linha-temporal-por-ler--o-get-que-não-existe) |
 
 ---
 

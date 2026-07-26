@@ -25,6 +25,14 @@
     "ended": {
       "token_expired": "A sessão expirou ao fim de 60 minutos sem atividade. Volte a ligar-se.",
       "token_revoked": "Outro dispositivo assumiu esta pista."
+    },
+    "help": {
+      "title": "Onde está o código?",
+      "step1": "Cada pista tem o seu código.",
+      "step2": "O QR está na folha de poule ou no cartão do combate.",
+      "step3": "Ou pede os seis dígitos ao organizador.",
+      "reuse": "É de utilização múltipla — sair e voltar custa seis dígitos.",
+      "dismiss": "Entendido"
     }
   },
   "scan": {
@@ -65,7 +73,7 @@
     "empty": "Ainda não há assaltos nesta poule.",
     "error": {
       "title": "Não foi possível carregar os assaltos",
-      "body": "O servidor não respondeu. A app continua a tentar sozinha."
+      "body": "O servidor não respondeu. Verifique a ligação e tente outra vez."
     },
     "readOnly": {
       "withBracket": "Poule fechada — a competição passou às eliminatórias ({{done}}/{{total}} combates decididos). Cada combate tem o seu código de seis dígitos: peça o da sua pista.",
@@ -86,7 +94,9 @@
     "scoreLabel_one": "{{name}}: {{count}} toque",
     "scoreLabel_other": "{{name}}: {{count}} toques",
     "period": {
-      "label": "Período {{current}} de {{total}}"
+      "label": "Período {{current}} de {{total}}",
+      "previous": "Período anterior",
+      "next": "Período seguinte"
     },
     "priority": {
       "draw": "Sortear prioridade",
@@ -108,7 +118,7 @@
       },
       "count_one": "{{count}} atribuído",
       "count_other": "{{count}} atribuídos",
-      "undo": "Anular último cartão"
+      "undoHint": "Premir sem largar para anular"
     },
     "timer": {
       "label": "Cronómetro",
@@ -162,6 +172,24 @@
     },
     "error": {
       "gone": "Este assalto já não existe — um atleta foi removido da poule. O resultado não foi guardado."
+    },
+    "events": {
+      "open": "Histórico",
+      "title": "O que aconteceu",
+      "subtitle": "Do mais recente para o mais antigo. O tempo é o do mostrador.",
+      "empty": "Ainda não aconteceu nada neste assalto.",
+      "close": "Fechar",
+      "period": "P{{period}}",
+      "suddenDeath": "MS",
+      "type": {
+        "touch": "Toque",
+        "double": "Toque duplo",
+        "card_yellow": "Cartão amarelo",
+        "card_red": "Cartão vermelho",
+        "card_black": "Cartão preto",
+        "priority": "Prioridade sorteada",
+        "period_end": "Fim do período"
+      }
     }
   },
   "timer": {

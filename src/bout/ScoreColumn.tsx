@@ -2,9 +2,16 @@ import { useEffect, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
-import { Text, colors, fonts, radius, spacing, touch, type } from '@/ui';
+import { DotDisplay, Text, colors, columnsFor, fonts, radius, spacing, type } from '@/ui';
 
 import { BLACK_CARD_LIMIT, type CardKind } from './rules';
+
+/**
+ * O painel do resultado reserva sempre dois algarismos, mesmo com o resultado a 3. Sem isso, o
+ * número mudava de tamanho ao passar de 9 para 10 — a meio de um assalto, e no elemento que o
+ * árbitro olha mais vezes.
+ */
+const SCORE_COLUMNS = columnsFor('00');
 
 export interface ScoreColumnProps {
   /**
@@ -33,6 +40,8 @@ export interface ScoreColumnProps {
   flashingPriority?: boolean;
   onChange: (value: number) => void;
   onCard: (kind: CardKind) => void;
+  /** Anula um cartão deste atleta — premindo o próprio cartão sem largar. */
+  onUndoCard: (kind: CardKind) => void;
   /** Layout apertado, para landscape: nome numa linha e menos respiração vertical. */
   compact?: boolean;
 }
@@ -52,6 +61,7 @@ export function ScoreColumn({
   flashingPriority = false,
   onChange,
   onCard,
+  onUndoCard,
   compact = false,
 }: ScoreColumnProps) {
   const { t } = useTranslation();
@@ -73,28 +83,27 @@ export function ScoreColumn({
           ) : null}
         </View>
       ) : (
-        /* Altura fixa: sem isto, um nome que quebra para duas linhas desalinha as duas colunas. */
-        <View style={[styles.nameBlock, compact ? styles.nameBlockCompact : null]}>
+        /* Uma linha, e encostado ao painel. O nome é a etiqueta do resultado, não o título da
+           coluna: em duas linhas a 16 pt ocupava mais altura do que os algarismos que identifica,
+           e empurrava o painel para longe do polegar. */
+        <View style={styles.nameBlock}>
           <View style={styles.nameRow}>
             <View style={styles.numberChip}>
               <Text variant="caption" color={colors.light} style={styles.numberLabel}>
                 {number}
               </Text>
             </View>
-            {hasPriority || flashingPriority ? (
-              <PriorityChip name={label} settled={hasPriority} />
-            ) : null}
+
+            <Text variant="label" numberOfLines={1} style={styles.fencerName}>
+              {label}
+            </Text>
           </View>
 
-          <Text
-            variant="label"
-            numberOfLines={compact ? 1 : 2}
-            style={[styles.fencerName, compact ? styles.fencerNameCompact : null]}
-          >
-            {label}
-          </Text>
-
-          {compact ? null : (
+          {/* A prioridade toma o lugar do clube quando aparece: é a informação mais urgente das
+              duas, e a linha é a mesma para as colunas não desalinharem. */}
+          {hasPriority || flashingPriority ? (
+            <PriorityChip name={label} settled={hasPriority} />
+          ) : compact ? null : (
             <Text variant="caption" numberOfLines={1}>
               {club ?? ''}
             </Text>
@@ -102,63 +111,65 @@ export function ScoreColumn({
         </View>
       )}
 
-      {/* O resultado é o que cede espaço quando a coluna aperta — um banner por cima chegava para
-          empurrar os `+`/`−` para fora do cartão. Encolher o número é sempre melhor do que pôr os
-          botões fora da caixa. */}
-      <View style={styles.scoreSlot}>
+      {/* **O painel é o botão de marcar**, como o mostrador é o botão de arrancar o cronómetro
+          (spec §7). Dois botões `+`/`−` de igual peso por baixo diziam que tirar um toque é tão
+          frequente como dar um, e não é: dão-se cinco a quinze por assalto e tira-se um de tempos
+          a tempos, por engano. O alvo passou de 56 pt para a coluna quase toda. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('bout.addTouch', { name: label })}
+        accessibilityState={{ disabled: score >= target }}
+        onPress={() => onChange(Math.min(target, score + 1))}
+        disabled={score >= target}
+        style={({ pressed }) => [
+          styles.scoreSlot,
+          pressed && score < target ? styles.scoreSlotPressed : null,
+        ]}
+      >
         {/* Sozinho, o número grande é lido pelo VoiceOver como "5" — sem dizer de quem. */}
-        <Text
-          accessibilityLabel={t('bout.scoreLabel', { name: label, count: score })}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.55}
-          style={[
-            styles.score,
-            compact ? styles.scoreCompact : null,
-            atTarget ? styles.scoreAtTarget : null,
-          ]}
-        >
-          {score}
-        </Text>
-      </View>
+        <DotDisplay
+          value={String(score)}
+          label={t('bout.scoreLabel', { name: label, count: score })}
+          color={scoreColor(tone)}
+          reserveColumns={SCORE_COLUMNS}
+          style={styles.scoreDisplay}
+        />
 
-      <CardStrip label={label} cards={cards} onCard={onCard} />
+        {/* A lâmpada de limite de toques, ao canto — a borda verde a toda a volta era um berro
+            para dizer o que uma lâmpada acesa diz melhor, e é assim que o aparelho o diz. */}
+        {atTarget ? <View style={styles.lamp} /> : null}
+      </Pressable>
 
-      <View style={styles.stepper}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('bout.removeTouch', { name: label })}
-          onPress={() => onChange(Math.max(0, score - 1))}
-          disabled={score <= 0}
-          style={({ pressed }) => [
-            styles.stepperButton,
-            compact ? styles.stepperButtonCompact : null,
-            score <= 0 ? styles.stepperDisabled : null,
-            pressed && score > 0 ? styles.stepperPressed : null,
-          ]}
-        >
-          <View style={styles.minusBar} />
-        </Pressable>
+      <CardStrip label={label} cards={cards} onCard={onCard} onUndoCard={onUndoCard} />
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('bout.addTouch', { name: label })}
-          onPress={() => onChange(Math.min(target, score + 1))}
-          disabled={score >= target}
-          style={({ pressed }) => [
-            styles.stepperButton,
-            compact ? styles.stepperButtonCompact : null,
-            styles.stepperPrimary,
-            score >= target ? styles.stepperDisabled : null,
-            pressed && score < target ? styles.stepperPressed : null,
-          ]}
-        >
-          <View style={styles.plusVertical} />
-          <View style={styles.plusHorizontal} />
-        </Pressable>
-      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('bout.removeTouch', { name: label })}
+        accessibilityState={{ disabled: score <= 0 }}
+        onPress={() => onChange(Math.max(0, score - 1))}
+        disabled={score <= 0}
+        hitSlop={{ top: 6, bottom: 6 }}
+        style={({ pressed }) => [
+          styles.remove,
+          compact ? styles.removeCompact : null,
+          score <= 0 ? styles.removeDisabled : null,
+          pressed && score > 0 ? styles.removePressed : null,
+        ]}
+      >
+        <View style={styles.minusBar} />
+      </Pressable>
     </View>
   );
+}
+
+/**
+ * O algarismo acende com a cor do lado — verde e vermelho, como as lâmpadas do aparelho. Com a
+ * poule ligada não há lado: quem distingue as colunas é o nome, e o painel acende a branco.
+ */
+function scoreColor(tone: ScoreColumnProps['tone']): string {
+  if (tone === 'green') return colors.green;
+  if (tone === 'red') return colors.cardRed;
+  return colors.light;
 }
 
 /**
@@ -209,6 +220,7 @@ interface CardStripProps {
   label: string;
   cards: Record<CardKind, number>;
   onCard: (kind: CardKind) => void;
+  onUndoCard: (kind: CardKind) => void;
 }
 
 /**
@@ -216,10 +228,13 @@ interface CardStripProps {
  * `+`/`−` de propósito: dar um cartão é raro, e escondê-lo atrás de um menu obrigaria a procurá-lo
  * no pior momento possível — mas pô-lo ao lado do `+` convidava ao toque errado.
  *
- * A contagem aparece no próprio cartão. Anular é uma ação do ecrã, não de cada cartão: o vermelho
- * mexe no resultado do adversário e um "−" por cartão dava dois sítios para desfazer a mesma coisa.
+ * A contagem aparece no próprio cartão, e **anula-se premindo-o sem largar**. Era um botão à parte,
+ * de largura inteira, que só existia depois do primeiro cartão e empurrava o resto do ecrã para
+ * baixo ao aparecer — e que, com dois atletas, anulava o último cartão do assalto e não o daquela
+ * coluna. Anular onde se deu é o sítio certo e não ocupa linha nenhuma; o preço é ser uma ação
+ * escondida, e por isso está no `accessibilityHint`.
  */
-function CardStrip({ label, cards, onCard }: CardStripProps) {
+function CardStrip({ label, cards, onCard, onUndoCard }: CardStripProps) {
   const { t } = useTranslation();
 
   return (
@@ -236,9 +251,13 @@ function CardStrip({ label, cards, onCard }: CardStripProps) {
             accessibilityRole="button"
             accessibilityLabel={t(`bout.cards.give.${kind}`, { name: label })}
             accessibilityValue={{ text: t('bout.cards.count', { count }) }}
+            accessibilityHint={count > 0 ? t('bout.cards.undoHint') : undefined}
             accessibilityState={{ disabled: spent }}
-            disabled={spent}
-            onPress={() => onCard(kind)}
+            // Anunciado como esgotado, mas **não** desativado: `disabled` fecharia também a pressão
+            // longa, e ela é a única saída de um preto dado por engano. Quem carrega não dá um
+            // segundo preto — quem carrega sem largar anula o primeiro.
+            onPress={spent ? undefined : () => onCard(kind)}
+            onLongPress={count > 0 ? () => onUndoCard(kind) : undefined}
             // O desenho tem 26×34; o alvo passa a 44×44, o mínimo das HIG.
             hitSlop={{ top: 5, bottom: 5, left: 9, right: 9 }}
             style={({ pressed }) => [
@@ -277,18 +296,17 @@ const styles = StyleSheet.create({
   },
   nameBlock: {
     alignSelf: 'stretch',
-    minHeight: 88,
-    // Nome e `+`/`−` mantêm o tamanho; é o resultado, no meio, que dá o espaço que faltar.
+    // Duas linhas curtas, e nunca mais: nome e (clube ou prioridade). Altura fixa para as colunas
+    // não desalinharem quando uma tem clube e a outra não.
+    minHeight: 46,
     flexShrink: 0,
     alignItems: 'center',
-    gap: spacing.xs,
-  },
-  nameBlockCompact: {
-    minHeight: 0,
+    gap: 2,
   },
   /**
-   * A cor fica confinada a esta faixa. O `+` continua verde e o mostrador continua a ficar verde a
-   * correr — assim cada zona do ecrã mantém um só significado para a cor.
+   * A faixa e os algarismos do painel são os dois únicos sítios onde a cor do lado aparece — e são
+   * a mesma coisa dita duas vezes de propósito, como no aparelho: a lâmpada em cima, o resultado
+   * daquela cor por baixo. O `+` continua verde por ser a ação principal, não por ser um lado.
    */
   toneBar: {
     alignSelf: 'stretch',
@@ -320,22 +338,56 @@ const styles = StyleSheet.create({
   toneLabelRed: {
     color: colors.light,
   },
+  /**
+   * A janela do resultado, preta como a do marcador. É a segunda e última zona escura da app — a
+   * outra é o mostrador do cronómetro —, e é escura pela mesma razão: sem fundo preto, pontos
+   * acesos são só pontos.
+   *
+   * É também o botão de marcar um toque — daí ser ele a ceder espaço e não os cartões: um alvo de
+   * meia coluna é o que se acerta sem olhar.
+   */
   scoreSlot: {
     flex: 1,
     minHeight: 0,
     alignSelf: 'stretch',
     alignItems: 'center',
     justifyContent: 'center',
+    marginVertical: spacing.xs,
+    padding: spacing.sm,
+    borderRadius: radius.r10,
+    backgroundColor: colors.black,
+  },
+  // Esmorece ao toque, como o mostrador do cronómetro. Aclarar o fundo era o instinto — é um gesto
+  // de somar — mas punha os algarismos vermelhos a 1.95:1 contra o fundo novo: o número que se
+  // está a mudar deixava de se ler no instante em que se lhe toca.
+  scoreSlotPressed: {
+    opacity: 0.75,
+  },
+  scoreDisplay: {
+    flex: 1,
+    alignSelf: 'stretch',
+  },
+  lamp: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    width: 8,
+    height: 8,
+    borderRadius: radius.full,
+    backgroundColor: colors.green,
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing.xs,
+    alignSelf: 'stretch',
+    minWidth: 0,
   },
   numberChip: {
-    minWidth: 24,
-    height: 24,
-    paddingHorizontal: 6,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 5,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radius.full,
@@ -362,28 +414,10 @@ const styles = StyleSheet.create({
     color: colors.warningText,
   },
   fencerName: {
+    flexShrink: 1,
     fontFamily: fonts.montserrat,
-    fontSize: type.base,
-    textAlign: 'center',
-  },
-  fencerNameCompact: {
     fontSize: type.sm,
-  },
-  score: {
-    fontFamily: fonts.montserrat,
-    fontSize: 68,
-    lineHeight: 76,
-    color: colors.dark,
-    fontVariant: ['tabular-nums'],
-    marginVertical: spacing.xs,
-  },
-  scoreCompact: {
-    fontSize: 52,
-    lineHeight: 58,
-    marginVertical: 0,
-  },
-  scoreAtTarget: {
-    color: colors.success,
+    textAlign: 'center',
   },
   cardStrip: {
     flexDirection: 'row',
@@ -413,51 +447,33 @@ const styles = StyleSheet.create({
     fontSize: type.sm,
     fontVariant: ['tabular-nums'],
   },
-  stepper: {
-    flexDirection: 'row',
+  /**
+   * Corrigir para baixo: uma tira baixa, sem preenchimento e sem palavra nenhuma. Fica com metade
+   * da altura que o par `+`/`−` tinha, porque vale metade das vezes — e o `hitSlop` devolve-lhe os
+   * 48 pt de alvo que o desenho não tem.
+   */
+  remove: {
     flexShrink: 0,
     alignSelf: 'stretch',
-    gap: spacing.sm,
-  },
-  stepperButton: {
-    // `flex` e não largura fixa: dois botões de 96 pt não cabem numa meia-coluna de telemóvel
-    // e transbordavam por cima da coluna ao lado.
-    flex: 1,
-    height: touch.min + 8,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radius.r10,
     borderWidth: 1,
-    borderColor: colors.dark,
+    // `textMuted` e não `grayDark`: o contorno é o que identifica o botão, e a WCAG 1.4.11 pede-lhe
+    // 3:1. O `grayDark` sobre branco dá 1.77 — o mesmo erro que motivou o `contrast.test.ts`.
+    borderColor: colors.textMuted,
   },
-  stepperButtonCompact: {
-    height: touch.min,
+  removeCompact: {
+    height: 32,
   },
-  stepperPrimary: {
-    backgroundColor: colors.green,
-    borderColor: colors.green,
-  },
-  stepperPressed: {
+  removePressed: {
     backgroundColor: colors.grayLight,
   },
-  stepperDisabled: {
+  removeDisabled: {
     opacity: 0.35,
   },
   minusBar: {
-    width: 18,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: colors.dark,
-  },
-  plusVertical: {
-    position: 'absolute',
-    width: 3,
-    height: 18,
-    borderRadius: 2,
-    backgroundColor: colors.dark,
-  },
-  plusHorizontal: {
-    position: 'absolute',
     width: 18,
     height: 3,
     borderRadius: 2,

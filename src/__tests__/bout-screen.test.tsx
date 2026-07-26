@@ -70,14 +70,14 @@ describe('períodos', () => {
 describe('acertar o tempo', () => {
   it('soma e tira 10 s ao que falta', async () => {
     await open();
-    expect(screen.getByText('03:00')).toBeTruthy();
+    expect(screen.getByLabelText('03:00')).toBeTruthy();
 
     await fireEvent.press(screen.getByText('+ 10 s'));
-    expect(screen.getByText('03:10')).toBeTruthy();
+    expect(screen.getByLabelText('03:10')).toBeTruthy();
 
     await fireEvent.press(screen.getByText('− 10 s'));
     await fireEvent.press(screen.getByText('− 10 s'));
-    expect(screen.getByText('02:50')).toBeTruthy();
+    expect(screen.getByLabelText('02:50')).toBeTruthy();
   });
 
   it('deixa escrever um tempo exato', async () => {
@@ -90,7 +90,7 @@ describe('acertar o tempo', () => {
     await fireEvent.changeText(screen.getByLabelText('Seconds'), '30');
     await fireEvent.press(screen.getByText('Apply'));
 
-    expect(screen.getByText('01:30')).toBeTruthy();
+    expect(screen.getByLabelText('01:30')).toBeTruthy();
   });
 
   it('repor vive dentro do acerto e volta ao tempo cheio', async () => {
@@ -100,7 +100,7 @@ describe('acertar o tempo', () => {
     await fireEvent.press(screen.getByText('Adjust'));
     await fireEvent.press(await screen.findByText('Reset to 3:00'));
 
-    expect(screen.getByText('03:00')).toBeTruthy();
+    expect(screen.getByLabelText('03:00')).toBeTruthy();
   });
 
   it('não deixa escrever mais de 59 segundos', async () => {
@@ -112,7 +112,7 @@ describe('acertar o tempo', () => {
     await fireEvent.press(screen.getByText('Apply'));
 
     // 59 s ainda está acima do limiar dos décimos, por isso continua em MM:SS.
-    expect(screen.getByText('00:59')).toBeTruthy();
+    expect(screen.getByLabelText('00:59')).toBeTruthy();
   });
 });
 
@@ -144,11 +144,11 @@ describe('passividade e paragem do tempo', () => {
     await fireEvent.press(screen.getByLabelText('One more touch for Marta Lopes'));
 
     // "Halt": o cronómetro pára onde estava e o minuto recomeça.
-    expect(screen.getByText('02:40')).toBeTruthy();
+    expect(screen.getByLabelText('02:40')).toBeTruthy();
     expect(screen.getByLabelText('Passivity: 60 s')).toBeTruthy();
 
     await run(10_000);
-    expect(screen.getByText('02:40')).toBeTruthy();
+    expect(screen.getByLabelText('02:40')).toBeTruthy();
   });
 
   it('um cartão faz o mesmo', async () => {
@@ -158,7 +158,7 @@ describe('passividade e paragem do tempo', () => {
 
     await fireEvent.press(screen.getByLabelText('Yellow card for Marta Lopes'));
 
-    expect(screen.getByText('02:40')).toBeTruthy();
+    expect(screen.getByLabelText('02:40')).toBeTruthy();
     expect(screen.getByLabelText('Passivity: 60 s')).toBeTruthy();
   });
 
@@ -169,7 +169,9 @@ describe('passividade e paragem do tempo', () => {
 
     expect(screen.getByLabelText('Passivity: 0 s')).toBeTruthy();
     // O tempo principal continua a correr e ninguém levou cartão.
-    expect(screen.queryByText('Undo last card')).toBeNull();
+    expect(
+      screen.getByLabelText('Yellow card for Marta Lopes').props.accessibilityValue,
+    ).toMatchObject({ text: '0 given' });
     expect(screen.getByLabelText('Marta Lopes: 0 touches')).toBeTruthy();
   });
 
@@ -214,10 +216,122 @@ describe('cartões', () => {
     await open();
 
     await fireEvent.press(screen.getByLabelText(giveRedTo));
-    await fireEvent.press(screen.getByText('Undo last card'));
+    // Anula-se no próprio cartão, sem largar — não há botão à parte.
+    await fireEvent(screen.getByLabelText(giveRedTo), 'longPress');
 
     expect(screen.getByLabelText('Tiago Rocha: 0 touches')).toBeTruthy();
-    expect(screen.queryByText('Undo last card')).toBeNull();
+    expect(screen.getByLabelText(giveRedTo).props.accessibilityValue).toMatchObject({
+      text: '0 given',
+    });
+  });
+
+  it('anula o cartão daquele atleta, e não o último do assalto', async () => {
+    await open();
+
+    await fireEvent.press(screen.getByLabelText(giveRedTo));
+    await fireEvent.press(screen.getByLabelText('Yellow card for Tiago Rocha'));
+
+    // O último cartão do assalto é o amarelo do Tiago; anular no vermelho da Marta tira o dela.
+    await fireEvent(screen.getByLabelText(giveRedTo), 'longPress');
+
+    expect(
+      screen.getByLabelText('Yellow card for Tiago Rocha').props.accessibilityValue,
+    ).toMatchObject({ text: '1 given' });
+    expect(screen.getByLabelText(giveRedTo).props.accessibilityValue).toMatchObject({
+      text: '0 given',
+    });
+  });
+
+  it('um preto dado por engano ainda se anula', async () => {
+    await open();
+
+    await fireEvent.press(screen.getByLabelText(giveBlackTo));
+    await fireEvent(screen.getByLabelText(giveBlackTo), 'longPress');
+
+    expect(screen.getByLabelText(giveBlackTo).props.accessibilityValue).toMatchObject({
+      text: '0 given',
+    });
+    // E volta a poder dar-se.
+    expect(screen.getByLabelText(giveBlackTo)).not.toBeDisabled();
+  });
+});
+
+describe('controlo dos períodos', () => {
+  it('avança e recua de período sem esperar pelo cronómetro', async () => {
+    // A fixture manda 3 períodos.
+    await open();
+    expect(screen.getByLabelText('Period 1 of 3')).toBeTruthy();
+    // Não há para onde recuar no primeiro.
+    expect(screen.getByLabelText('Previous period')).toBeDisabled();
+
+    await fireEvent.press(screen.getByLabelText('Next period'));
+    expect(screen.getByLabelText('Period 2 of 3')).toBeTruthy();
+
+    await fireEvent.press(screen.getByLabelText('Previous period'));
+    expect(screen.getByLabelText('Period 1 of 3')).toBeTruthy();
+  });
+
+  it('o período seguinte recomeça no tempo cheio', async () => {
+    await open();
+    await fireEvent.press(screen.getByText('− 10 s'));
+    expect(screen.getByLabelText('02:50')).toBeTruthy();
+
+    await fireEvent.press(screen.getByLabelText('Next period'));
+
+    expect(screen.getByLabelText('03:00')).toBeTruthy();
+  });
+
+  it('pára no último período', async () => {
+    await open();
+    await fireEvent.press(screen.getByLabelText('Next period'));
+    await fireEvent.press(screen.getByLabelText('Next period'));
+
+    expect(screen.getByLabelText('Period 3 of 3')).toBeTruthy();
+    expect(screen.getByLabelText('Next period')).toBeDisabled();
+  });
+
+  it('deixa entrar em descanso a meio do período', async () => {
+    withPoule({ rest_seconds: 45 });
+    await open();
+
+    // Sem esperar que o tempo acabe — o botão está lá desde o princípio.
+    await fireEvent.press(screen.getByText('Start rest'));
+
+    expect(screen.getByText('Rest')).toBeTruthy();
+    expect(screen.getByLabelText('00:45')).toBeTruthy();
+  });
+
+  it('não oferece descanso onde não há intervalo nenhum', async () => {
+    withPoule({ rest_seconds: null });
+    await open();
+
+    expect(screen.queryByText('Start rest')).toBeNull();
+  });
+});
+
+describe('linha temporal', () => {
+  it('mostra o que já aconteceu, do mais recente para o mais antigo', async () => {
+    await open();
+
+    await fireEvent.press(screen.getByLabelText('One more touch for Marta Lopes'));
+    await fireEvent.press(screen.getByLabelText('Yellow card for Tiago Rocha'));
+
+    await fireEvent.press(screen.getByText('Timeline'));
+    await screen.findByText('What happened');
+
+    expect(screen.getByText('Yellow card')).toBeTruthy();
+    expect(screen.getByText('Touch')).toBeTruthy();
+    // O placar depois de cada acontecimento, e o período em que caiu.
+    expect(screen.getAllByText('1–0')).toHaveLength(2);
+    expect(screen.getAllByText('P1')).toHaveLength(2);
+  });
+
+  it('num assalto por começar diz que ainda não há nada', async () => {
+    await open();
+
+    await fireEvent.press(screen.getByText('Timeline'));
+
+    expect(await screen.findByText('Nothing has happened in this bout yet.')).toBeTruthy();
   });
 });
 
@@ -250,14 +364,14 @@ describe('descanso entre períodos', () => {
 
     expect(screen.getByText('Rest')).toBeTruthy();
     expect(screen.getByText('before period 2')).toBeTruthy();
-    expect(screen.getByText('00:45')).toBeTruthy();
+    expect(screen.getByLabelText('00:45')).toBeTruthy();
 
     // Dispensar o resto do intervalo está sempre disponível.
     await fireEvent.press(screen.getByText('Start period 2'));
 
     expect(screen.getByLabelText('Period 2 of 3')).toBeTruthy();
     // Um segundo de período: abaixo do limiar, logo com minutos e décimos (`0:01,0`).
-    expect(screen.getByText('0:01,0')).toBeTruthy();
+    expect(screen.getByLabelText('0:01,0')).toBeTruthy();
   });
 
   it('salta o descanso quando a API não o manda', async () => {
@@ -323,7 +437,7 @@ describe('prioridade e morte súbita', () => {
     await finishDraw();
 
     expect(screen.getByText('Sudden death')).toBeTruthy();
-    expect(screen.getByText('01:00')).toBeTruthy();
+    expect(screen.getByLabelText('01:00')).toBeTruthy();
     // A marca fica num atleta só — é o que substitui o aviso escrito.
     expect(screen.getAllByText('Priority')).toHaveLength(1);
   });

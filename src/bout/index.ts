@@ -1,6 +1,7 @@
 export { BoutScreen } from './BoutScreen';
 export type { BoutAssignment, RecordedScore } from './BoutScreen';
 export { Clock, NUDGE_MS } from './Clock';
+export { EventSheet } from './EventSheet';
 export { ScoreColumn } from './ScoreColumn';
 export { TimeSheet } from './TimeSheet';
 export { lockPortrait, useAllowLandscape, useIsLandscape } from './orientation';
@@ -9,7 +10,7 @@ export { usePriorityDraw } from './usePriorityDraw';
 export { boutTiming, nextClockAction, phaseDuration } from './phase';
 export type { BoutPhase, BoutTiming, ClockAction } from './phase';
 export { useBoutEngine } from './useBoutEngine';
-export type { BoutEngine } from './useBoutEngine';
+export type { BoutEngine, BoutLogEntry } from './useBoutEngine';
 export {
   BLACK_CARD_LIMIT,
   PRIORITY_DRAW_STEPS,

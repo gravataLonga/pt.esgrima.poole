@@ -48,16 +48,31 @@ const normalText: Pair[] = [
   ['aviso sobre fundo claro', colors.warningText, colors.light],
   ['sucesso sobre fundo de sucesso', colors.successText, colors.lightSuccess],
   ['sucesso sobre fundo claro', colors.successText, colors.light],
+  // O painel preto do mostrador e do resultado. As variantes escurecidas (`warningText`,
+  // `dangerText`) não entram aqui de propósito: existem para texto pequeno sobre fundo claro, e
+  // sobre preto são o contrário do que é preciso.
+  ['etiqueta sobre o painel', colors.textMutedOnDark, colors.black],
+  ['tecla preta do assalto', colors.green, colors.black],
+  ['nome sobre o painel', colors.light, colors.black],
+  ['morte súbita sobre o painel', colors.warning, colors.black],
   ['cartão amarelo', colors.dark, colors.cardYellow],
   ['cartão vermelho', colors.light, colors.cardRed],
   ['cartão preto', colors.light, colors.cardBlack],
 ];
 
-/** Só o cronómetro (88 pt) e os resultados (48–68 pt). Nada de 12–16 pt entra nesta lista. */
+/**
+ * Os algarismos de pontos do cronómetro e dos resultados. Não são texto para o sistema — são
+ * `View`s —, mas são-no para quem olha, e é por isso que se medem pela régua do texto grande e não
+ * pelos 3:1 do não textual.
+ */
 const largeText: Pair[] = [
-  ['cronómetro em tempo esgotado', colors.danger, colors.light],
-  ['cronómetro nos últimos 10 s', colors.warning, colors.light],
-  ['resultado no limite de toques', colors.success, colors.light],
+  ['cronómetro a contar', colors.green, colors.black],
+  ['cronómetro nos últimos 10 s', colors.warning, colors.black],
+  ['cronómetro em tempo esgotado', colors.danger, colors.black],
+  ['cronómetro em descanso', colors.textMutedOnDark, colors.black],
+  ['resultado do lado verde', colors.green, colors.black],
+  ['resultado do lado vermelho', colors.cardRed, colors.black],
+  ['resultado sem lado, na poule', colors.light, colors.black],
 ];
 
 /**
@@ -67,13 +82,15 @@ const largeText: Pair[] = [
  * preenchimento verde sozinho sobre branco dá 1.4:1.
  */
 const nonText: Pair[] = [
-  ['símbolo play/pausa sobre o mostrador', colors.textMuted, colors.light],
-  ['símbolo play/pausa em descanso', colors.textMuted, colors.grayLight],
-  ['símbolo play/pausa em tempo esgotado', colors.textMuted, colors.lightDanger],
-  ['símbolo play/pausa em morte súbita', colors.textMuted, colors.lightWarning],
-  ['contorno dos pontos de período', colors.dark, colors.light],
-  ['contorno dos pontos em morte súbita', colors.dark, colors.lightWarning],
-  ['borda do mostrador a correr', colors.green, colors.dark],
+  ['símbolo play/pausa sobre o painel', colors.textMutedOnDark, colors.black],
+  ['contorno dos pontos de período', colors.textMutedOnDark, colors.black],
+  ['ponto do período a decorrer', colors.green, colors.black],
+  ['borda do mostrador a correr', colors.green, colors.black],
+  ['borda do mostrador em morte súbita', colors.warning, colors.black],
+  ['borda do mostrador em tempo esgotado', colors.danger, colors.black],
+  ['galhos de mudar de período', colors.textMutedOnDark, colors.black],
+  ['lâmpada de limite de toques', colors.green, colors.black],
+  ['contorno do botão de retirar toque', colors.textMuted, colors.light],
 ];
 
 describe('contraste WCAG AA', () => {

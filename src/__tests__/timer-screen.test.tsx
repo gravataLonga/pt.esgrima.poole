@@ -87,14 +87,17 @@ describe('conduzir o assalto', () => {
     );
     expect(screen.getByLabelText('Red: 1 touch')).toBeTruthy();
 
-    await fireEvent.press(screen.getByText('Undo last card'));
+    await fireEvent(
+      screen.getByLabelText('Red card for Green — awards a touch to the opponent'),
+      'longPress',
+    );
     expect(screen.getByLabelText('Red: 0 touches')).toBeTruthy();
   });
 
   it('arranca em 3:00, o preset de poule', async () => {
     await open();
 
-    expect(screen.getByText('03:00')).toBeTruthy();
+    expect(screen.getByLabelText('03:00')).toBeTruthy();
   });
 });
 
@@ -143,6 +146,6 @@ describe('sem para onde submeter', () => {
 
     expect(alert).toHaveBeenCalled();
     expect(screen.getByLabelText('Green: 0 touches')).toBeTruthy();
-    expect(screen.getByText('03:00')).toBeTruthy();
+    expect(screen.getByLabelText('03:00')).toBeTruthy();
   });
 });
