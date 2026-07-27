@@ -115,7 +115,6 @@ export default function TimerScreen() {
       phase={engine.phase}
       period={engine.period}
       timing={timing}
-      priorityName={rules.priority ? sides[rules.priority].label : null}
       passivityMs={engine.passivityMs}
       action={engine.action}
       onAction={engine.onAction}

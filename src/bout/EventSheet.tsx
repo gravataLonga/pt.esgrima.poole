@@ -84,12 +84,17 @@ function Row({ entry, timing, nameOf }: RowProps) {
       </View>
 
       {/* O placar **depois** do acontecimento, no preto do painel: é o mesmo número, e lê-se como
-          uma continuação dele em vez de mais uma coluna de texto. */}
-      <View style={styles.score}>
-        <Text style={styles.scoreText}>
-          {entry.score_a ?? '–'}–{entry.score_b ?? '–'}
-        </Text>
-      </View>
+          uma continuação dele em vez de mais uma coluna de texto.
+
+          Só aparece em quem o traz: o placar pertence aos eventos que o mudam (ADR-035), e um
+          `–—–` num painel preto lê-se como um resultado a zero em vez de "não se aplica". */}
+      {entry.score_a === undefined || entry.score_b === undefined ? null : (
+        <View style={styles.score}>
+          <Text style={styles.scoreText}>
+            {entry.score_a}–{entry.score_b}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }

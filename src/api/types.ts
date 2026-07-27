@@ -1,7 +1,7 @@
 /**
  * Tipos do contrato de API — fonte de verdade única.
  *
- * Tipados a partir de `docs/API-CONTRACT.md` v2.0.1 (§7 Endpoints, §8 Catálogo de erros,
+ * Tipados a partir de `docs/API-CONTRACT.md` v2.1.0 (§7 Endpoints, §8 Catálogo de erros,
  * §9 Emparelhamento QR/PIN). Este ficheiro não contém mais nada: sem lógica, sem helpers.
  *
  * Regra de tolerância (contrato §1): a app ignora campos que não conhece e nunca falha por os
@@ -9,11 +9,15 @@
  */
 
 /**
- * Versão do contrato **em vigor nos dois lados**. A `2.0.0` é a versão em que o código de árbitro
- * deixou de ser da competição e passou a ser **da pista**: uma poule tem o seu, e cada combate de
- * eliminatória tem um só dele. A `2.0.1` é redação — o documento a registar que a app migrou.
+ * Versão do contrato que esta app fala. A `2.0.0` é a versão em que o código de árbitro deixou de
+ * ser da competição e passou a ser **da pista**: uma poule tem o seu, e cada combate de eliminatória
+ * tem um só dele. A `2.1.0` é aditiva — o assalto passa a ter horas, e não só cronómetro.
+ *
+ * **Não é um mínimo exigido ao servidor.** Os `type` e os campos da `2.1.0` são todos opcionais, e
+ * um servidor na `2.0.0` que recuse os `type` novos não trava a app: o `useLiveEvents` desliga os
+ * marcos e continua a espelhar o resto (ADR-035, corrigido).
  */
-export const API_CONTRACT_VERSION = '2.0.1';
+export const API_CONTRACT_VERSION = '2.1.0';
 
 /**
  * Prefixo de versão da API. Um MAJOR do contrato implica normalmente um prefixo novo — a `2.0.0`
@@ -257,39 +261,105 @@ export interface StartResponse {
   status: 'in_progress';
 }
 
-// ─── POST .../score ─────────────────────────────────────────────────────────
+/*
+ * ─── Eventos do assalto — o vocabulário partilhado (contrato §7) ────────────
+ *
+ * Um evento é **uma coisa que aconteceu na pista, no instante em que aconteceu**, e a forma é a
+ * mesma nos dois caminhos que a transportam: em direto (`POST .../events`, com `seq`) ou em lote no
+ * fim (`events` do `score`, sem ele). Descritivos, nunca autoritários — o resultado é o `a`/`b` do
+ * `score` e mais nada.
+ */
+
+/** O que acontece **em pista**, mais o fim do período. São os `type` da `1.5.0`. */
+export type BoutActionEventType =
+  | 'touch'
+  | 'double'
+  | 'card_yellow'
+  | 'card_red'
+  | 'card_black'
+  | 'priority'
+  | 'period_end';
+
+/**
+ * Os **marcos do combate** — os oito `type` que a `2.1.0` acrescenta. Nenhum leva `side`: não são de
+ * um atleta, são do assalto.
+ *
+ * Enumerados em vez de escritos só como união porque o `useLiveEvents` precisa de os reconhecer em
+ * execução: um servidor na `2.0.0` recusa-os com `422`, e o que ele faz nesse caso é tirá-los do
+ * lote e continuar a mandar o resto.
+ */
+export const MARKER_EVENT_TYPES = [
+  'bout_start',
+  'period_start',
+  'rest_start',
+  'rest_end',
+  'sudden_death_start',
+  'clock_start',
+  'clock_stop',
+  'bout_end',
+] as const;
+
+export type BoutMarkerEventType = (typeof MARKER_EVENT_TYPES)[number];
 
 /** Conjunto fechado (contrato §7). Um `type` fora da lista devolve `422 validation_failed`. */
-export type BoutEventType =
-  'touch' | 'double' | 'card_yellow' | 'card_red' | 'card_black' | 'priority' | 'period_end';
+export type BoutEventType = BoutActionEventType | BoutMarkerEventType;
+
+/**
+ * Que segmento é que o `at_ms` e o `remaining_ms` estão a medir. Ausente → `sudden_death` se
+ * `period > periods`, `period` nos outros casos.
+ */
+export type EventPhase = 'period' | 'rest' | 'sudden_death';
 
 export interface BoutEvent {
   type: BoutEventType;
-  /** Ausente quando não se aplica (ex.: `double`). */
+  /** Ausente quando não se aplica — em `double` e em todos os marcos. */
   side?: 'a' | 'b';
-  /** Período em que ocorreu. A morte súbita é `periods + 1`. */
+  /**
+   * Período em que ocorreu. A morte súbita é `periods + 1`. Um evento de descanso leva o período
+   * que **acabou de terminar** — o descanso não tem número próprio.
+   */
   period: number;
-  /** Milissegundos decorridos **dentro do período**, medidos pelo cronómetro local. */
+  /**
+   * Milissegundos decorridos **dentro da fase**, medidos pelo cronómetro local. É tempo de esgrima:
+   * pára quando o árbitro dá halt. Não é hora de parede.
+   */
   at_ms: number;
+  /** Contrato `2.1.0`. */
+  phase?: EventPhase;
+  /**
+   * Contrato `2.1.0`. Milissegundos desde o `bout_start`, **de parede**: contam os descansos, as
+   * paragens e as discussões. Nunca pára — é o que diz que a pista está atrasada, e não se deriva do
+   * `at_ms` sem reconstruir todas as paragens.
+   */
+  elapsed_ms?: number;
+  /** Contrato `2.1.0`. O que faltava **da fase em curso** no instante do evento. */
+  remaining_ms?: number;
+  /**
+   * Contrato `2.1.0`. ISO-8601 UTC com milissegundos: a hora de parede pelo relógio do dispositivo.
+   * O servidor guarda-o como veio e **nenhuma decisão dele depende disto**.
+   */
+  at?: string;
+  /**
+   * Placar **depois** do evento. Vem contado pela app e **não** é recalculado. Em direto desde a
+   * `1.5.0`; no lote do `score`, desde a `2.1.0`.
+   */
+  score_a?: number;
+  score_b?: number;
 }
 
 /** Máximo de eventos por assalto (contrato §7). Acima disso, `422 validation_failed`. */
-export const MAX_BOUT_EVENTS = 200;
+export const MAX_BOUT_EVENTS = 300;
 
 // ─── POST .../events — a pista ao vivo (contrato 1.5.0, §7) ─────────────────
 
 /**
  * O mesmo evento, enviado **enquanto o assalto decorre** em vez de em lote no fim.
  *
- * Duas diferenças em relação ao `BoutEvent` do `score`: o contador, que é a idempotência toda, e o
- * placar depois do evento — que vem contado pela app e **não** é recalculado pelo servidor.
+ * Desde a `2.1.0` a única diferença é o contador, que é a idempotência toda.
  */
 export interface LiveBoutEvent extends BoutEvent {
   /** Contador do próprio assalto, a partir de `1`. O assalto seguinte volta a numerar de `1`. */
   seq: number;
-  /** Placar **depois** do evento. É o que a web mostra enquanto o assalto decorre. */
-  score_a?: number;
-  score_b?: number;
 }
 
 /** Eventos por pedido (contrato §7): 1 a 50. Acima disso, `422 validation_failed`. */
@@ -303,6 +373,8 @@ export interface LiveEventsRequest {
 export interface LiveEventsResponse {
   accepted: number;
 }
+
+// ─── POST .../score ─────────────────────────────────────────────────────────
 
 export interface ScoreRequest {
   /**

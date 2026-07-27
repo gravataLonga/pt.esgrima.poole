@@ -100,8 +100,6 @@
     },
     "priority": {
       "draw": "Sortear prioridade",
-      "suddenDeath": "Morte súbita",
-      "holder": "Prioridade: {{name}}",
       "badge": "Prioridade",
       "badgeLabel": "{{name}} tem prioridade",
       "decidingTouch": "Prioridade a {{name}} — regista o toque decisivo."
@@ -188,7 +186,15 @@
         "card_red": "Cartão vermelho",
         "card_black": "Cartão preto",
         "priority": "Prioridade sorteada",
-        "period_end": "Fim do período"
+        "period_end": "Fim do período",
+        "bout_start": "Início do combate",
+        "period_start": "Início do período",
+        "rest_start": "Início do descanso",
+        "rest_end": "Fim do descanso",
+        "sudden_death_start": "Morte súbita",
+        "clock_start": "Cronómetro a correr",
+        "clock_stop": "Cronómetro parado",
+        "bout_end": "Fim do combate"
       }
     }
   },

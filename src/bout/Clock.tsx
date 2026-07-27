@@ -36,8 +36,6 @@ export interface ClockProps {
   /** Período atual, 1..periods. */
   period: number;
   timing: BoutTiming;
-  /** Nome de quem tem prioridade. `null` fora da morte súbita. */
-  priorityName: string | null;
   /** Relógio de passividade. `null` nas fases em que não se conta (descanso). */
   passivityMs: number | null;
   /** O passo seguinte do assalto, ou `null` se não houver. */
@@ -66,7 +64,6 @@ export function Clock({
   phase,
   period,
   timing,
-  priorityName,
   passivityMs,
   action,
   onAction,
@@ -124,7 +121,6 @@ export function Clock({
           phase={phase}
           period={period}
           timing={timing}
-          priorityName={priorityName}
           onGoToPeriod={onGoToPeriod}
         />
 
@@ -286,7 +282,6 @@ interface PhaseHeaderProps {
   phase: BoutPhase;
   period: number;
   timing: BoutTiming;
-  priorityName: string | null;
   onGoToPeriod: ((period: number) => void) | null;
 }
 
@@ -295,22 +290,16 @@ interface PhaseHeaderProps {
  *
  * Num período são só os pontos, sem texto: disputado, a decorrer e por disputar distinguem-se pela
  * cor e pelo tamanho, e a palavra "tempo" repetida por cima de um cronómetro não acrescentava
- * nada. O rótulo continua a existir para o VoiceOver, que não vê cores. Descanso e morte súbita
- * mantêm texto porque aí a diferença **não** é de contagem, é de natureza.
+ * nada. O rótulo continua a existir para o VoiceOver, que não vê cores. O descanso mantém texto
+ * porque aí a diferença **não** é de contagem, é de natureza.
  */
-function PhaseHeader({ phase, period, timing, priorityName, onGoToPeriod }: PhaseHeaderProps) {
+function PhaseHeader({ phase, period, timing, onGoToPeriod }: PhaseHeaderProps) {
   const { t } = useTranslation();
 
-  if (phase === 'priority' && priorityName) {
-    return (
-      <View style={styles.headerRow}>
-        <Text style={[styles.tag, styles.tagSuddenDeath]}>{t('bout.priority.suddenDeath')}</Text>
-        <Text style={styles.headerName} numberOfLines={1}>
-          {t('bout.priority.holder', { name: priorityName })}
-        </Text>
-      </View>
-    );
-  }
+  // Na morte súbita não vai texto nenhum para dentro do mostrador: a borda laranja diz a fase, e a
+  // marca na coluna de quem tem prioridade diz o nome — escrito outra vez aqui, esbarrava no
+  // relógio de passividade, que mora no mesmo canto. Fica só o espaço, para o painel não saltar.
+  if (phase === 'priority') return <View style={styles.headerSpacer} />;
 
   if (phase === 'rest') {
     return (
@@ -482,11 +471,10 @@ const styles = StyleSheet.create({
     fontFamily: fonts.montserrat,
     color: colors.light,
   },
-  // `warning` e não `warningText`: as variantes escurecidas existem para texto pequeno **sobre
-  // fundo claro**, e sobre o painel preto são o contrário do que é preciso.
-  tagSuddenDeath: {
-    fontFamily: fonts.montserrat,
-    color: colors.warning,
+  // A altura que o cabeçalho ocupa quando não tem nada a dizer — a mesma dos pontos e do texto do
+  // descanso, para o mostrador ficar sempre à mesma altura do cartão.
+  headerSpacer: {
+    minHeight: type.base,
   },
   headerName: {
     flexShrink: 1,

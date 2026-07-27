@@ -19,7 +19,16 @@
 import { useCallback, useRef } from 'react';
 
 import { isRetryable } from '@/api/client';
-import { MAX_EVENTS_PER_REQUEST, type LiveBoutEvent } from '@/api/types';
+import { isValidationFailed } from '@/api/errors';
+import {
+  MARKER_EVENT_TYPES,
+  MAX_BOUT_EVENTS,
+  MAX_EVENTS_PER_REQUEST,
+  type LiveBoutEvent,
+} from '@/api/types';
+
+/** Os marcos do combate (contrato `2.1.0`), para os reconhecer num lote recusado. */
+const MARKERS = new Set<string>(MARKER_EVENT_TYPES);
 
 /** O que o motor do assalto sabe do evento. O `seq` é atribuído aqui. */
 export type LiveEventDraft = Omit<LiveBoutEvent, 'seq'>;
@@ -45,6 +54,14 @@ export function useLiveEvents(send: LiveEventSender | null): LiveEvents {
    * este endpoint partilha com o *polling*.
    */
   const givenUp = useRef(false);
+  /**
+   * Os marcos do combate ainda vão no lote?
+   *
+   * A plataforma aceita-os desde a `2.1.0`, mas uma instalação anterior recusa o lote **inteiro**
+   * com `422` por causa de um `type` que não conhece — e o assalto perdia com eles os toques, que
+   * essa instalação aceitava bem. Ao primeiro `422`, tiram-se e continua-se sem eles.
+   */
+  const markers = useRef(true);
 
   const flush = useCallback(async () => {
     if (!send || sending.current || givenUp.current) return;
@@ -59,6 +76,14 @@ export function useLiveEvents(send: LiveEventSender | null): LiveEvents {
           await send(batch);
         } catch (error) {
           if (isRetryable(error)) break;
+
+          // Um servidor anterior à `2.1.0`. Não é bug do cliente e não se desiste do assalto: o
+          // lote volta a sair sem os marcos, que é exatamente o que ele aceitava antes deles.
+          if (isValidationFailed(error) && markers.current) {
+            markers.current = false;
+            pending.current = pending.current.filter((event) => !MARKERS.has(event.type));
+            continue;
+          }
 
           pending.current = [];
           givenUp.current = true;
@@ -77,6 +102,15 @@ export function useLiveEvents(send: LiveEventSender | null): LiveEvents {
   const record = useCallback(
     (draft: LiveEventDraft) => {
       if (!send || givenUp.current) return;
+      if (markers.current === false && MARKERS.has(draft.type)) return;
+
+      /*
+       * O contrato limita o assalto a `MAX_BOUT_EVENTS`, e os marcos triplicaram o volume: um
+       * combate de quadro com muitos halts passa a poder lá chegar, e o que vinha a seguir era um
+       * `422` que desistia do assalto todo. **O `log` do motor continua a crescer** — a folha do
+       * histórico é do árbitro e não tem teto de servidor nenhum.
+       */
+      if (nextSeq.current > MAX_BOUT_EVENTS) return;
 
       const event: LiveBoutEvent = { ...draft, seq: nextSeq.current };
       nextSeq.current += 1;

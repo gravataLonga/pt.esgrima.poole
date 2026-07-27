@@ -38,13 +38,14 @@ dois divergirem, **este documento manda no cliente** e o outro manda no servidor
 > próprio. O porquê está no **ADR-032** e o plano executado em **`PLANO-2.0.0.md`**, os dois no
 > repositório da app.
 
-> ⏳ **Os marcos do combate (contrato `2.1.0`): a plataforma já os aceita, a app ainda não os
-> envia.** O que a app envia hoje diz *em que altura do período* caiu um toque; não diz a que horas o
-> combate começou, a que horas se entrou no terceiro período, a que horas o tempo voltou a correr,
-> nem a que horas se foi a morte súbita. A **F9** acrescenta oito tipos de evento e quatro campos,
-> todos opcionais, sem mudar um pixel do ecrã — [§7.2](#72-os-marcos-do-combate--contrato-210). A
-> plataforma aceita-os desde 2026-07-26, e contra uma instalação anterior a app **baixa sozinha para
-> a `1.5.0`** em vez de perder o assalto, portanto a ordem de entrega deixou de importar.
+> ✅ **Os marcos do combate (contrato `2.1.0`) — feitos (2026-07-26).** Até aqui a app dizia *em que
+> altura do período* caiu um toque; não dizia a que horas o combate começou, a que horas se entrou no
+> terceiro período, a que horas o tempo voltou a correr, nem a que horas se foi a morte súbita. A
+> **F9** acrescentou oito tipos de evento e quatro campos, todos opcionais —
+> [§7.2](#72-os-marcos-do-combate--contrato-210). A plataforma aceita-os desde 2026-07-26, e contra
+> uma instalação anterior a app **baixa sozinha para a `1.5.0`** em vez de perder o assalto, portanto
+> a ordem de entrega deixou de importar. O plano executado está em **`PLANO-2.1.0.md`** e o porquê no
+> **ADR-035**.
 
 ---
 
@@ -471,9 +472,9 @@ fechada não espelha nada: a escrita está travada dos dois lados.
 
 ### 7.2 Os marcos do combate — contrato `2.1.0`
 
-Contrato `2.1.0`, **por implementar**. A [§7.1](#71-a-pista-ao-vivo) põe o placar a subir na web; isto
-põe lá o **relógio**. A pergunta que a `1.5.0` não responde é a mais simples de todas: *a que horas é
-que este combate começou?*
+Contrato `2.1.0`, **feito**. A [§7.1](#71-a-pista-ao-vivo) põe o placar a subir na web; isto põe lá o
+**relógio**. A pergunta que a `1.5.0` não responde é a mais simples de todas: *a que horas é que este
+combate começou?*
 
 **O motor já sabe tudo isto.** O `useBoutEngine` conduz as fases (`period` · `rest` · `priority`),
 muda de período, sorteia a prioridade e é dono do cronómetro que arranca e pára. Nenhum destes
@@ -502,10 +503,15 @@ E os quatro campos novos, em todos os eventos:
 - **`remaining_ms`** — `timer.remainingNowMs()`, que é o que já alimenta o `at_ms`.
 - **`phase`** — a `BoutPhase` do motor, traduzida: `priority` → `sudden_death`.
 
+**O placar vai em quem o muda, e não em todos.** O toque e o cartão levam-no como sempre levaram, e o
+`bout_end` leva o resultado final por definição. Um `clock_start` não sabe o resultado nem tem de
+saber — quem lê o placar ao vivo lê o último evento **com** placar, não o último (ADR-035).
+
 **Continua tudo *fire-and-forget*, e continua tudo opcional.** As três regras da §7.1 valem sem uma
 exceção: o contador é a idempotência, na falha junta-se ao lote seguinte, e falhar nunca sobe ao ecrã.
-**O ecrã não muda por causa disto** — nem um pixel. Um árbitro não deve conseguir dizer se a app está
-a emitir marcos ou não.
+**A arbitragem não muda um pixel** — um árbitro não deve conseguir dizer se a app está a emitir
+marcos ou não. O que muda é a **folha do histórico**, que lê a mesma linha temporal e passa a mostrar
+o arranque, os halts e as transições de fase; o painel do placar só aparece nas linhas que o trazem.
 
 > **O `clock_stop` de um toque duplica-se com o `touch`, e é para duplicar.** O `registerCombat` dá
 > halt e a seguir vem o toque, portanto quase todos os `clock_stop` têm um evento de pista a um passo
@@ -517,6 +523,10 @@ a emitir marcos ou não.
 > combate de quadro disputado até ao fim, e o `useLiveEvents` já deita fora os mais velhos quando o
 > lote enche — a linha temporal fica com um buraco e o placar que a web mostra continua a ser o do
 > evento mais recente, que é a regra que já lá está.
+>
+> **O que passou a existir é o travão nos 300.** Com os marcos, um combate com muitos halts chega lá,
+> e o que vinha a seguir era um `422` que desistia do assalto inteiro — perdendo os toques por causa
+> dos halts. O emissor pára de enviar ao chegar ao teto; o `log` do motor continua a crescer.
 
 #### Um servidor que não conheça os marcos perde os marcos, e mais nada
 
@@ -834,7 +844,7 @@ contrato**.
 | **F6 — Polimento** | Acessibilidade, som/háptica, legibilidade em sol, ecrãs de erro, *store* | F5 |
 | **F7 — Pista ao vivo** ✅ | Enviar os eventos do assalto à medida que acontecem ([§7.1](#71-a-pista-ao-vivo)): contador `seq` por assalto, lote na falha | F5 + servidor §13.19 |
 | **F8 — O código é da pista** ✅ | Contrato `2.0.0`: `scope: poule \| match`, o ecrã de quadro apagado, o combate como raiz de sessão, poule fechada em leitura, `API_CONTRACT_VERSION` a `'2.0.0'` | F7 + servidor §11.A15 do contrato |
-| **F9 — Os marcos do combate** | Contrato `2.1.0` ([§7.2](#72-os-marcos-do-combate--contrato-210)): emitir os oito marcos e os quatro campos novos, `API_CONTRACT_VERSION` a `'2.1.0'` | F8 + servidor §11.E do contrato |
+| **F9 — Os marcos do combate** ✅ | Contrato `2.1.0` ([§7.2](#72-os-marcos-do-combate--contrato-210)): emitir os oito marcos e os quatro campos novos, `API_CONTRACT_VERSION` a `'2.1.0'` | F8 + servidor §11.E do contrato |
 
 F0–F4 correm **inteiramente contra os mocks** e não dependem do trabalho do servidor.
 

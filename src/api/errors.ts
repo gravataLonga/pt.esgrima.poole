@@ -62,6 +62,17 @@ export function isGone(error: unknown): error is ApiError {
   return error instanceof ApiError && (error.status === 404 || error.code === 'poule_scope_mismatch');
 }
 
+/**
+ * Corpo recusado pelo servidor (contrato §8, `422 validation_failed`).
+ *
+ * Em regra é *bug do cliente* e mostra-se. Há um caso em que não é: um servidor anterior à `2.1.0`
+ * recusa assim os `type` que não conhece, e é a isso que o `useLiveEvents` reage tirando os marcos
+ * do lote em vez de desistir dele.
+ */
+export function isValidationFailed(error: unknown): error is ApiError {
+  return error instanceof ApiError && error.code === 'validation_failed';
+}
+
 /** Já registado por outra pessoa (assalto de poule ou combate de quadro). */
 export function isConflict(error: unknown): error is ApiError {
   return (

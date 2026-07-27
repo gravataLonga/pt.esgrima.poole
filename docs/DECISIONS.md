@@ -1402,11 +1402,38 @@ halt antes de os aplicar. **Não se filtram:** um halt sem nada a seguir — mat
 que sai da pista — é exatamente o que só ele conta, e no instante em que se emite não há como saber
 qual é qual.
 
-### O ecrã não muda, e é um requisito
+### O ecrã não muda — menos o histórico, que passa a mostrá-los
 
-Nem um pixel. Um árbitro não deve conseguir dizer se a app está a emitir marcos ou não. Continua tudo
-*fire-and-forget*, continua tudo fora da fila offline, e falhar continua a não subir ao ecrã — as
-três regras do ADR-029 valem sem exceção.
+**A arbitragem não muda um pixel.** Um árbitro não deve conseguir dizer se a app está a emitir marcos
+ou não: continua tudo *fire-and-forget*, continua tudo fora da fila offline, e falhar continua a não
+subir ao ecrã — as três regras do ADR-029 valem sem exceção.
+
+**A folha do histórico muda, e foi decidido que mudasse.** O `engine.log` é a mesma linha temporal
+que sobe para a plataforma, e é dele que a folha "O que aconteceu" (ADR-034) se serve: com os marcos,
+um combate de quadro passa de ~40 para ~115 linhas, com um `clock_stop` antes de quase todos os
+toques.
+
+Escondê-los pedia uma segunda regra a dizer o que é do árbitro e o que é do servidor, e a resposta a
+essa regra é que não há diferença: a folha existe para responder a *"o segundo amarelo foi antes ou
+depois do meu toque?"*, e *"o tempo esteve parado quanto tempo?"* é a mesma pergunta com outro
+sujeito. Um halt sem toque a seguir — material partido, um atleta fora da pista — só ali se vê.
+
+O que se afinou foi o desenho da linha: **o painel do placar só aparece em quem o traz.** Um
+`clock_start` não sabe o resultado, e um `–—–` no preto do painel lia-se como um resultado a zero em
+vez de "não se aplica".
+
+### Três arestas que só apareceram a emitir
+
+| O quê | Como ficou | Porquê |
+|---|---|---|
+| O tempo a esgotar-se emite `clock_stop`? | **Não** | O fim de tempo já tem evento próprio no mesmo instante, o `period_end`. Dois eventos para o mesmo acontecimento é ruído, e o `clock_stop` existe para contar o **halt** — que é decisão de quem arbitra, não do cronómetro |
+| Mudar de período à mão emite `period_start`? | **Não** | O `goToPeriod` é a correção de um período mal contado, e já estava escrito que não vai à linha temporal. Emiti-lo punha na história do combate um terceiro período que nunca se disputou |
+| E os eventos antes do primeiro arranque? | **Sem `elapsed_ms`** | O campo conta-se do `bout_start`, e antes dele não há de onde contar. É opcional, e omiti-lo diz a verdade; um zero dizia que o combate tinha começado num toque dado com o cronómetro parado |
+
+E uma quarta, que é de volume: **o teto de 300 eventos por assalto passou a ser alcançável.** Os
+marcos triplicam a contagem, e o que vinha a seguir a ultrapassá-lo era um `422` que desistia do
+assalto inteiro — perdendo os toques por causa dos halts. O `useLiveEvents` pára de enviar ao chegar
+lá; o `log` do motor continua a crescer, porque a folha do histórico não tem teto de servidor nenhum.
 
 ### A ordem de entrega era uma dependência, e passou a não ser
 

@@ -244,6 +244,16 @@ function Refereeing({
     setSubmitting(true);
     setProblem(null);
 
+    /*
+     * A última linha da história do combate, antes do resultado (contrato `2.1.0`). É emitida a
+     * cada confirmação e não uma só vez: um `rejected` devolve o árbitro ao assalto para corrigir e
+     * submeter outra vez, e foram dois fins de combate declarados.
+     *
+     * O `live.discard()` que vem a seguir à submissão não a apanha — o `record` manda o lote de
+     * imediato, e o que já vai em voo chega na mesma.
+     */
+    engine.end();
+
     const result = await submitScore({
       kind: assignment.kind,
       targetId: assignment.id,
@@ -315,7 +325,6 @@ function Refereeing({
       phase={engine.phase}
       period={engine.period}
       timing={timing}
-      priorityName={rules.priority ? nameOf(rules.priority) : null}
       passivityMs={engine.passivityMs}
       action={engine.action}
       onAction={engine.onAction}

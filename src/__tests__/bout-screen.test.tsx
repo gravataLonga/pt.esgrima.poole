@@ -333,6 +333,31 @@ describe('linha temporal', () => {
 
     expect(await screen.findByText('Nothing has happened in this bout yet.')).toBeTruthy();
   });
+
+  it('mostra também os marcos do combate, com nome e sem placar', async () => {
+    jest.useFakeTimers();
+    await open();
+
+    await fireEvent.press(screen.getByLabelText('Timer'));
+    await act(async () => {
+      jest.advanceTimersByTime(29_000);
+    });
+    await fireEvent.press(screen.getByLabelText('One more touch for Marta Lopes'));
+
+    await fireEvent.press(screen.getByText('Timeline'));
+    await screen.findByText('What happened');
+
+    // O arranque e o halt são acontecimentos como os outros — um halt sem toque a seguir é
+    // exatamente o que só ele conta.
+    expect(screen.getByText('Start of bout')).toBeTruthy();
+    expect(screen.getByText('Clock stopped')).toBeTruthy();
+
+    // O placar pertence aos eventos que o mudam: só o toque o traz, e o painel não aparece nos
+    // outros a dizer `–—–`, que se leria como um resultado a zero.
+    expect(screen.getAllByText('1–0')).toHaveLength(1);
+
+    jest.useRealTimers();
+  });
 });
 
 describe('descanso entre períodos', () => {
@@ -429,14 +454,13 @@ describe('prioridade e morte súbita', () => {
 
     // A meio do sorteio já há uma marca no ecrã, mas ainda não é o resultado.
     expect(screen.getAllByText('Priority').length).toBeGreaterThan(0);
-    expect(screen.queryByText('Sudden death')).toBeNull();
+    expect(screen.queryByLabelText('01:00')).toBeNull();
   });
 
   it('entra em morte súbita de um minuto quando a piscadela pára', async () => {
     await runOutOfLastPeriod();
     await finishDraw();
 
-    expect(screen.getByText('Sudden death')).toBeTruthy();
     expect(screen.getByLabelText('01:00')).toBeTruthy();
     // A marca fica num atleta só — é o que substitui o aviso escrito.
     expect(screen.getAllByText('Priority')).toHaveLength(1);
@@ -517,7 +541,7 @@ describe('a pista ao vivo', () => {
     ]);
   });
 
-  it('o fim do tempo e o sorteio de prioridade também sobem', async () => {
+  it('o combate inteiro sobe com os marcos, do arranque à morte súbita', async () => {
     jest.useFakeTimers();
     withPoule({ duration_seconds: 1, periods: 1 });
     await open();
@@ -532,13 +556,44 @@ describe('a pista ao vivo', () => {
       jest.advanceTimersByTime(4000);
     });
 
-    // A morte súbita é `periods + 1` (contrato §7), e o sorteio abre-a ao segundo zero.
+    /*
+     * Os marcos do combate (contrato `2.1.0`). O que se fixa aqui é a **ordem**: o combate começa
+     * uma vez, o primeiro período começa logo a seguir — e não em vez dele —, e o
+     * `sudden_death_start` vem antes do sorteio, que é quem abre a morte súbita. A morte súbita é
+     * `periods + 1` e conta-se ao segundo zero.
+     */
     expect(eventsOfBout()).toMatchObject([
-      { seq: 1, type: 'period_end', period: 1, at_ms: 1_000 },
-      { seq: 2, type: 'priority', period: 2, at_ms: 0 },
+      { seq: 1, type: 'bout_start', period: 1, at_ms: 0, elapsed_ms: 0, remaining_ms: 1_000 },
+      { seq: 2, type: 'period_start', period: 1, at_ms: 0, phase: 'period' },
+      { seq: 3, type: 'clock_start', period: 1, at_ms: 0 },
+      { seq: 4, type: 'period_end', period: 1, at_ms: 1_000, remaining_ms: 0 },
+      {
+        seq: 5,
+        type: 'sudden_death_start',
+        period: 2,
+        at_ms: 0,
+        phase: 'sudden_death',
+        remaining_ms: 60_000,
+      },
+      { seq: 6, type: 'priority', period: 2, at_ms: 0, phase: 'sudden_death' },
     ]);
 
+    // O `at` é hora de parede do dispositivo, e é o que responde a "a que horas começou".
+    expect(eventsOfBout()[0]?.at).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/);
+
     jest.useRealTimers();
+  });
+
+  it('confirmar o resultado fecha a história do combate antes de o registar', async () => {
+    await open();
+
+    await fireEvent.press(screen.getByLabelText('One more touch for Marta Lopes'));
+    await fireEvent.press(screen.getByText('Submit result'));
+    await fireEvent.press(await screen.findByText('Record'));
+
+    // O `bout_end` é a última linha da história, **não** o registo dela: o que fica registado é o
+    // `a`/`b` do `score`. Um combate cujo resultado nunca chegou fica com um e sem o outro.
+    expect(eventsOfBout().at(-1)).toMatchObject({ type: 'bout_end', score_a: 1, score_b: 0 });
   });
 
   it('o que a rede não levou vai no lote seguinte, e não duplica', async () => {

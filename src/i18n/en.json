@@ -100,8 +100,6 @@
     },
     "priority": {
       "draw": "Draw priority",
-      "suddenDeath": "Sudden death",
-      "holder": "Priority: {{name}}",
       "badge": "Priority",
       "badgeLabel": "{{name}} has priority",
       "decidingTouch": "Priority to {{name}} — record the deciding touch."
@@ -188,7 +186,15 @@
         "card_red": "Red card",
         "card_black": "Black card",
         "priority": "Priority drawn",
-        "period_end": "End of period"
+        "period_end": "End of period",
+        "bout_start": "Start of bout",
+        "period_start": "Start of period",
+        "rest_start": "Start of break",
+        "rest_end": "End of break",
+        "sudden_death_start": "Sudden death",
+        "clock_start": "Clock started",
+        "clock_stop": "Clock stopped",
+        "bout_end": "End of bout"
       }
     }
   },
