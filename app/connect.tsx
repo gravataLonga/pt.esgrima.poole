@@ -4,6 +4,7 @@ import {
   Animated,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -29,6 +30,10 @@ export default function ConnectScreen() {
   const { t } = useTranslation();
   const { connecting, error, blocked, blockedUntil, connect, clearError } = useConnect();
   const endReason = useSessionStore((s) => s.endReason);
+  // Os dois URLs que a App Store exige alcançáveis de dentro da app saem daqui e não de uma
+  // constante: o QR pode trazer outro servidor (contrato §9) e é esse que manda; sem QR nenhum,
+  // isto é o `defaultBaseUrl`, que é produção.
+  const baseUrl = useSessionStore((s) => s.baseUrl);
 
   const [pin, setPin] = useState('');
   const [focused, setFocused] = useState(false);
@@ -111,9 +116,6 @@ export default function ConnectScreen() {
             </Text>
             <Text variant="display" color={colors.light}>
               {t('connect.title')}
-            </Text>
-            <Text color={colors.grayDark} style={styles.intro}>
-              {t('connect.intro')}
             </Text>
           </View>
 
@@ -252,6 +254,16 @@ export default function ConnectScreen() {
           <Text variant="caption" color={colors.textMuted}>
             {t('connect.help.reuse')}
           </Text>
+
+          {/* A política de privacidade e o suporte têm de estar alcançáveis de dentro da app, e
+              este é o único sítio do ecrã que já é "onde se vai buscar informação". */}
+          <View style={styles.helpLinks}>
+            <HelpLink label={t('connect.help.privacy')} url={`${baseUrl}/privacy`} />
+            <Text variant="caption" color={colors.textMuted}>
+              ·
+            </Text>
+            <HelpLink label={t('connect.help.support')} url={`${baseUrl}/support`} />
+          </View>
         </View>
       </Sheet>
     </Screen>
@@ -262,6 +274,30 @@ export default function ConnectScreen() {
 function formatTime(at: number | null): string {
   if (at === null) return '';
   return new Date(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+interface HelpLinkProps {
+  label: string;
+  url: string;
+}
+
+/**
+ * Abre no browser do sistema. O `openURL` rejeita quando não há quem abra o URL — e a folha não
+ * tem para onde levar esse erro: é um atalho, não um caminho da arbitragem. Fica sem acontecer
+ * nada, em vez de uma rejeição por apanhar.
+ */
+function HelpLink({ label, url }: HelpLinkProps) {
+  return (
+    <Pressable
+      accessibilityRole="link"
+      hitSlop={8}
+      onPress={() => void Linking.openURL(url).catch(() => undefined)}
+    >
+      <Text variant="caption" color={colors.dark} style={styles.helpLink}>
+        {label}
+      </Text>
+    </Pressable>
+  );
 }
 
 interface PinBoxProps {
@@ -373,9 +409,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: 'uppercase',
   },
-  intro: {
-    maxWidth: 320,
-  },
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -416,6 +449,16 @@ const styles = StyleSheet.create({
   },
   helpStepText: {
     flex: 1,
+  },
+  helpLinks: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  /** Sublinhado e não cor: sobre a folha clara o verde da marca não chega aos 4.5:1. */
+  helpLink: {
+    textDecorationLine: 'underline',
   },
   scanTile: {
     flexDirection: 'row',

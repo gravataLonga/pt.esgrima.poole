@@ -15,6 +15,9 @@ A base de produção é `https://poole.esgrima.pt` — o mesmo valor por omissã
 | Política de privacidade (obrigatório no App Store Connect) | `https://poole.esgrima.pt/privacy` |
 | Suporte (obrigatório no App Store Connect) | `https://poole.esgrima.pt/support` |
 
+Os dois estão alcançáveis de dentro da app, na folha do "?" do [`app/connect.tsx`](../app/connect.tsx),
+construídos a partir do `baseUrl` da sessão — o do QR, quando o há; o de `env.ts` quando não.
+
 > **Verificado a 2026-07-26: os dois respondem `404` em produção.** As páginas existem no repositório
 > da plataforma e ainda não foram publicadas. Um URL de privacidade que não responde é recusa
 > imediata — confirmar que ambos abrem **antes** de submeter, não depois.

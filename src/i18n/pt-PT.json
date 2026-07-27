@@ -6,7 +6,6 @@
     "logoLabel": "Esgrima.pt",
     "eyebrow": "Poole Referee",
     "title": "Ligar à sua pista",
-    "intro": "Lê o QR da tua pista — folha de poule ou cartão do combate — ou introduz o PIN de 6 dígitos.",
     "scan": "Ler QR",
     "scanHint": "Aponta a câmara à folha de poule ou ao cartão do combate.",
     "or": "ou",
@@ -32,6 +31,8 @@
       "step2": "O QR está na folha de poule ou no cartão do combate.",
       "step3": "Ou pede os seis dígitos ao organizador.",
       "reuse": "É de utilização múltipla — sair e voltar custa seis dígitos.",
+      "privacy": "Política de privacidade",
+      "support": "Suporte",
       "dismiss": "Entendido"
     }
   },

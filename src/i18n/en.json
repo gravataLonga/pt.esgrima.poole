@@ -6,7 +6,6 @@
     "logoLabel": "Esgrima.pt",
     "eyebrow": "Poole Referee",
     "title": "Connect to your piste",
-    "intro": "Scan the QR code for your piste — a poule sheet or a match card — or enter the 6-digit PIN.",
     "scan": "Scan QR",
     "scanHint": "Point the camera at the poule sheet or the match card.",
     "or": "or",
@@ -32,6 +31,8 @@
       "step2": "The QR is on the poule sheet or the match card.",
       "step3": "Or ask the organiser for the six digits.",
       "reuse": "It works more than once — leaving and coming back costs six digits.",
+      "privacy": "Privacy policy",
+      "support": "Support",
       "dismiss": "Got it"
     }
   },
