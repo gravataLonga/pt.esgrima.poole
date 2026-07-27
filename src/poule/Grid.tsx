@@ -2,6 +2,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import type { Standing } from '@/api/types';
+import { sheetName } from '@/fencer/name';
 import { Text, colors, fonts, radius, type } from '@/ui';
 
 import { SHEET_METRICS, SheetEmpty, SheetPanel } from './SheetChrome';
@@ -69,7 +70,7 @@ export function Grid({ sheet, standings, showClubs }: GridProps) {
                 </View>
                 <View style={styles.nameCell}>
                   <Text style={styles.name} numberOfLines={1}>
-                    {fencer.name}
+                    {sheetName(fencer.name)}
                   </Text>
                   {showClubs ? (
                     <Text style={styles.club} numberOfLines={1}>

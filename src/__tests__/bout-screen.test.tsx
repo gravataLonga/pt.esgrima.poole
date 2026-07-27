@@ -225,6 +225,25 @@ describe('cartões', () => {
     });
   });
 
+  it('largar o dedo depois de anular não volta a dar o cartão', async () => {
+    await open();
+
+    await fireEvent.press(screen.getByLabelText(giveRedTo));
+
+    // O gesto inteiro, como o sistema o entrega: o dedo pousa, a pressão longa dispara, e depois
+    // larga-se. O `Pressable` decide se cancela o `onPress` do largar lendo o `onLongPress` que
+    // existe **nesse instante** — e anular o último cartão punha-o a `undefined`, com o cartão a ser
+    // dado outra vez ao levantar o dedo.
+    await fireEvent(screen.getByLabelText(giveRedTo), 'pressIn');
+    await fireEvent(screen.getByLabelText(giveRedTo), 'longPress');
+    await fireEvent.press(screen.getByLabelText(giveRedTo));
+
+    expect(screen.getByLabelText(giveRedTo).props.accessibilityValue).toMatchObject({
+      text: '0 given',
+    });
+    expect(screen.getByLabelText('Tiago Rocha: 0 touches')).toBeTruthy();
+  });
+
   it('anula o cartão daquele atleta, e não o último do assalto', async () => {
     await open();
 

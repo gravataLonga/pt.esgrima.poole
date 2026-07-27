@@ -2,6 +2,7 @@ import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import type { Standing } from '@/api/types';
+import { sheetName } from '@/fencer/name';
 import { Text, colors, fonts, radius, spacing, type } from '@/ui';
 
 import { SHEET_METRICS, SheetEmpty, SheetPanel } from './SheetChrome';
@@ -52,7 +53,7 @@ export function Classification({ standings, showClubs }: ClassificationProps) {
 
             <View style={styles.nameColumn}>
               <Text style={styles.name} numberOfLines={1}>
-                {standing.fencer.name}
+                {sheetName(standing.fencer.name)}
               </Text>
               {showClubs ? (
                 <Text style={styles.club} numberOfLines={1}>

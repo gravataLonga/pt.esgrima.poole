@@ -5,9 +5,10 @@ import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import {
+  BoutInfo,
   Clock,
   EventSheet,
-  ScoreColumn,
+  ScoreBoard,
   TimeSheet,
   boutTiming,
   cardCount,
@@ -15,9 +16,10 @@ import {
   useBoutEngine,
   useIsLandscape,
   type CardKind,
+  type ScoreColumnProps,
   type Side,
 } from '@/bout';
-import { Button, Screen, Text, colors, fonts, radius, spacing, touch, type } from '@/ui';
+import { Button, Screen, Text, colors, radius, spacing, touch, type } from '@/ui';
 
 /**
  * Modo cronómetro — um assalto, offline, sem atletas e sem sessão (ADR-021).
@@ -129,26 +131,26 @@ export default function TimerScreen() {
     />
   );
 
-  const columns = (['a', 'b'] as const).map((side) => (
-    <ScoreColumn
-      key={side}
-      label={sides[side].label}
-      // Sem atletas: é isto que colapsa o bloco de nome e dá lugar à faixa de cor.
-      number={null}
-      club={null}
-      tone={sides[side].tone}
-      score={rules[side]}
-      opponentScore={side === 'a' ? rules.b : rules.a}
-      target={STANDALONE.target}
-      cards={cardsOf(side)}
-      hasPriority={rules.priority === side}
-      flashingPriority={engine.priorityDraw.flashing === side}
-      onChange={engine.setScore(side)}
-      onCard={engine.giveCard(side)}
-      onUndoCard={(kind) => engine.undoCard(side, kind)}
-      compact={landscape}
-    />
-  ));
+  const columnFor = (side: Side): ScoreColumnProps => ({
+    label: sides[side].label,
+    // Sem atletas: é isto que colapsa o bloco de nome e dá lugar à faixa de cor.
+    number: null,
+    club: null,
+    tone: sides[side].tone,
+    score: rules[side],
+    opponentScore: side === 'a' ? rules.b : rules.a,
+    target: STANDALONE.target,
+    cards: cardsOf(side),
+    hasPriority: rules.priority === side,
+    flashingPriority: engine.priorityDraw.flashing === side,
+    onChange: engine.setScore(side),
+    onCard: engine.giveCard(side),
+    onUndoCard: (kind: CardKind) => engine.undoCard(side, kind),
+    // Quem está à esquerda da pista encosta o nome à esquerda; quem está à direita, à direita.
+    align: side === 'a' ? 'start' : 'end',
+  });
+
+  const columns = { a: columnFor('a'), b: columnFor('b') };
 
   // Não há "Submeter": não há para onde submeter. E o empate fica por decidir se o árbitro assim o
   // quiser — `canSubmit` existe porque a plataforma recusa `a === b` (contrato §7), e aqui não há
@@ -187,16 +189,14 @@ export default function TimerScreen() {
           {t('timer.title')}
         </Text>
 
-        <View style={styles.targetChip}>
-          <Text variant="caption" color={colors.dark} style={styles.targetLabel}>
-            {t('bout.target', { target: STANDALONE.target })}
-          </Text>
-        </View>
+        <BoutInfo timing={timing} target={STANDALONE.target} />
       </View>
 
       {landscape ? (
         <View style={styles.landscape}>
-          <View style={styles.landscapeColumn}>{columns[0]}</View>
+          <View style={styles.landscapeColumn}>
+            <ScoreBoard sides={[columns.a]} compact />
+          </View>
           <View style={styles.landscapeClock}>
             <View style={styles.landscapeClockSlot}>{clock}</View>
             <View style={styles.landscapeActions}>
@@ -204,12 +204,14 @@ export default function TimerScreen() {
               <View style={styles.landscapeAction}>{newBout}</View>
             </View>
           </View>
-          <View style={styles.landscapeColumn}>{columns[1]}</View>
+          <View style={styles.landscapeColumn}>
+            <ScoreBoard sides={[columns.b]} compact />
+          </View>
         </View>
       ) : (
         <>
           {clock}
-          <View style={styles.scoreArea}>{columns}</View>
+          <ScoreBoard sides={[columns.a, columns.b]} />
           <View style={styles.actionRow}>
             <View style={styles.actionAside}>{events}</View>
             <View style={styles.actionMain}>{newBout}</View>
@@ -276,23 +278,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     flex: 1,
     fontSize: type.xl,
-  },
-  targetChip: {
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.full,
-    backgroundColor: colors.grayLight,
-    borderWidth: 1,
-    borderColor: colors.grayMedium,
-  },
-  targetLabel: {
-    fontFamily: fonts.workSansBold,
-  },
-  scoreArea: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginVertical: spacing.md,
   },
   actionRow: {
     flexDirection: 'row',

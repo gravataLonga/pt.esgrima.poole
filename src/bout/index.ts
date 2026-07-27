@@ -1,8 +1,11 @@
 export { BoutScreen } from './BoutScreen';
 export type { BoutAssignment, RecordedScore } from './BoutScreen';
 export { Clock, NUDGE_MS } from './Clock';
+export { BoutInfo } from './BoutInfo';
 export { EventSheet } from './EventSheet';
-export { ScoreColumn } from './ScoreColumn';
+export { ScoreBoard } from './ScoreBoard';
+export { ScoreHalf, ScoreTray } from './ScoreColumn';
+export type { ScoreColumnProps } from './ScoreColumn';
 export { TimeSheet } from './TimeSheet';
 export { lockPortrait, useAllowLandscape, useIsLandscape } from './orientation';
 export { PASSIVITY_SECONDS, usePassivity } from './usePassivity';

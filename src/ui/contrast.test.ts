@@ -58,6 +58,12 @@ const normalText: Pair[] = [
   ['cartão amarelo', colors.dark, colors.cardYellow],
   ['cartão vermelho', colors.light, colors.cardRed],
   ['cartão preto', colors.light, colors.cardBlack],
+  // O marcador: nome, clube e contagens dos cartões, dentro do painel preto. A contagem do cartão
+  // preto é **escura** por isto mesmo — clara sobre o cinzento do painel dava 3.42:1.
+  ['nome do atleta no marcador', colors.light, colors.black],
+  ['clube no marcador', colors.textMutedOnDark, colors.black],
+  ['marca de prioridade no marcador', colors.warning, colors.black],
+  ['contagem do cartão preto no marcador', colors.black, colors.cardOnPanel],
 ];
 
 /**
@@ -73,6 +79,7 @@ const largeText: Pair[] = [
   ['resultado do lado verde', colors.green, colors.black],
   ['resultado do lado vermelho', colors.cardRed, colors.black],
   ['resultado sem lado, na poule', colors.light, colors.black],
+  ['resultado de quem vai à frente, na poule', colors.green, colors.black],
 ];
 
 /**
@@ -91,6 +98,11 @@ const nonText: Pair[] = [
   ['galhos de mudar de período', colors.textMutedOnDark, colors.black],
   ['lâmpada de limite de toques', colors.green, colors.black],
   ['contorno do botão de retirar toque', colors.textMuted, colors.light],
+  // Os cartões do marcador, por dar (contorno) e dados (preenchimento), contra o painel preto.
+  ['cartão amarelo no marcador', colors.cardYellow, colors.black],
+  ['cartão vermelho no marcador', colors.cardRed, colors.black],
+  ['cartão preto no marcador', colors.cardOnPanel, colors.black],
+  ['traço de retirar toque no marcador', colors.textMutedOnDark, colors.black],
 ];
 
 describe('contraste WCAG AA', () => {

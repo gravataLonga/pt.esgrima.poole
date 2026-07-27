@@ -91,7 +91,27 @@
   },
   "bout": {
     "title": "Bout {{sequence}}",
-    "target": "To {{target}} touches",
+    "info": {
+      "title": "This bout",
+      "dismiss": "Got it",
+      "rows": {
+        "target": "Victory",
+        "time": "Time",
+        "periods": "Periods",
+        "periodTime": "Time per period",
+        "rest": "Rest",
+        "suddenDeath": "Sudden death",
+        "passivity": "Passivity"
+      },
+      "touches_one": "{{count}} touch",
+      "touches_other": "{{count}} touches",
+      "minutes": "{{count}} min",
+      "seconds": "{{count}} s",
+      "howTitle": "How it works",
+      "howClock": "Tap the display to start and stop the time.",
+      "howTouch": "Tap a score to add a touch; the − key takes one back.",
+      "howCards": "Tap a card to give it; press and hold it to undo it."
+    },
     "scoreLabel_one": "{{name}}: {{count}} touch",
     "scoreLabel_other": "{{name}}: {{count}} touches",
     "period": {

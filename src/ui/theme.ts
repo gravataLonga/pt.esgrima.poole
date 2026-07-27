@@ -59,6 +59,12 @@ export const colors = {
   cardYellow: '#FFD43B',
   cardRed: '#DE161A',
   cardBlack: '#1D1D1D',
+  /**
+   * O cartão preto **sobre o painel preto**, onde `cardBlack` não existe de todo. Cinzento claro o
+   * bastante para os 3:1 da WCAG 1.4.11 contra o painel (6.08:1), e para levar a contagem em
+   * escuro. Coberto por `contrast.test.ts`.
+   */
+  cardOnPanel: '#8A8A8A',
 } as const;
 
 export const radius = {

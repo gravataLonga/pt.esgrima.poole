@@ -1,4 +1,4 @@
-import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import { Alert, Vibration } from 'react-native';
 
 import { useSessionStore } from '@/session/store';
@@ -98,6 +98,32 @@ describe('conduzir o assalto', () => {
     await open();
 
     expect(screen.getByLabelText('03:00')).toBeTruthy();
+  });
+});
+
+describe('as regras deste assalto', () => {
+  it('o "?" diz os presets e como se conduz, e fecha-se', async () => {
+    await open();
+
+    // Fechada, o conteúdo não está montado — o `Modal` só o desenha quando é visível.
+    expect(screen.queryByText('How it works')).toBeNull();
+
+    await fireEvent.press(screen.getByLabelText('This bout'));
+
+    // Os presets do modo cronómetro: 5 toques, 3 minutos, um período só.
+    expect(screen.getByText('5 touches')).toBeTruthy();
+    expect(screen.getByText('3 min')).toBeTruthy();
+    // Um período não é "períodos": a linha muda de nome em vez de dizer "1 ×".
+    expect(screen.getByText('Time')).toBeTruthy();
+    expect(screen.queryByText('Periods')).toBeNull();
+    // E sem períodos não há descanso que separar — a linha nem aparece.
+    expect(screen.queryByText('Rest')).toBeNull();
+
+    // A pressão longa para anular um cartão não se descobre a olhar: é aqui que está escrita.
+    expect(screen.getByText('Tap a card to give it; press and hold it to undo it.')).toBeTruthy();
+
+    await fireEvent.press(screen.getByText('Got it'));
+    await waitFor(() => expect(screen.queryByText('How it works')).toBeNull());
   });
 });
 

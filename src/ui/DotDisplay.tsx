@@ -27,6 +27,18 @@ export interface DotDisplayProps {
    * mostrador, dígitos que encolhem sozinhos leem-se como avaria.
    */
   reserveColumns?: number;
+  /**
+   * Centrar pelos pontos **acesos** em vez de pela grelha.
+   *
+   * O `1` são os segmentos `b` e `c`: acende só a coluna direita da sua célula de cinco. Centrada a
+   * grelha, um resultado de `1` fica encostado à direita do painel e lê-se torto — e é por isso que
+   * o marcador pede isto.
+   *
+   * **O cronómetro não pede.** Ali a linha muda dez vezes por segundo, e centrar pela tinta punha
+   * a linha inteira a saltar de lado sempre que o primeiro algarismo passasse de `2` para `1`.
+   * Num mostrador a contar, dígitos que dançam leem-se como avaria.
+   */
+  centerInk?: boolean;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -42,7 +54,14 @@ export interface DotDisplayProps {
  * Só se desenham os pontos **acesos**: no painel preto os apagados não se veem, e não desenhá-los
  * baixa o mostrador do cronómetro de umas 200 `View`s para menos de 70.
  */
-export function DotDisplay({ value, color, label, reserveColumns = 0, style }: DotDisplayProps) {
+export function DotDisplay({
+  value,
+  color,
+  label,
+  reserveColumns = 0,
+  centerInk = false,
+  style,
+}: DotDisplayProps) {
   const [box, setBox] = useState({ width: 0, height: 0 });
 
   const onLayout = (event: LayoutChangeEvent) => {
@@ -64,10 +83,17 @@ export function DotDisplay({ value, color, label, reserveColumns = 0, style }: D
     return { char, index, left };
   });
 
+  const shift = centerInk ? inkShift(chars, offset, unit, dotSize) : null;
+
   return (
     <View accessible accessibilityLabel={label} style={[styles.frame, style]} onLayout={onLayout}>
       {unit > 0 ? (
-        <View style={{ width: offset * unit, height: GLYPH_ROWS * unit }}>
+        <View
+          style={[
+            { width: offset * unit, height: GLYPH_ROWS * unit },
+            shift ? { transform: [{ translateX: shift.x }, { translateY: shift.y }] } : null,
+          ]}
+        >
           {chars.map(({ char, index, left }) => (
             <Char
               key={`${index}-${char}`}
@@ -82,6 +108,40 @@ export function DotDisplay({ value, color, label, reserveColumns = 0, style }: D
       ) : null}
     </View>
   );
+}
+
+/**
+ * Quanto há a deslocar a linha para os pontos acesos ficarem ao centro da caixa — a diferença entre
+ * o centro da grelha e o centro da tinta que ela contém.
+ */
+function inkShift(
+  chars: { char: string; left: number }[],
+  totalColumns: number,
+  unit: number,
+  dotSize: number,
+): { x: number; y: number } {
+  let minColumn = Infinity;
+  let maxColumn = -Infinity;
+  let minRow = Infinity;
+  let maxRow = -Infinity;
+
+  for (const { char, left } of chars) {
+    for (const dot of glyphFor(char).dots) {
+      const column = left + dot.column;
+      if (column < minColumn) minColumn = column;
+      if (column > maxColumn) maxColumn = column;
+      if (dot.row < minRow) minRow = dot.row;
+      if (dot.row > maxRow) maxRow = dot.row;
+    }
+  }
+
+  // Linha sem um único ponto aceso: não há tinta para centrar.
+  if (minColumn === Infinity) return { x: 0, y: 0 };
+
+  return {
+    x: (totalColumns * unit - (minColumn * unit + maxColumn * unit + dotSize)) / 2,
+    y: (GLYPH_ROWS * unit - (minRow * unit + maxRow * unit + dotSize)) / 2,
+  };
 }
 
 interface CharProps {

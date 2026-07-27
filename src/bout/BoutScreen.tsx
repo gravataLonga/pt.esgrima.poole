@@ -20,9 +20,11 @@ import {
   type,
 } from '@/ui';
 
+import { BoutInfo } from './BoutInfo';
 import { Clock } from './Clock';
 import { EventSheet } from './EventSheet';
-import { ScoreColumn } from './ScoreColumn';
+import { ScoreBoard } from './ScoreBoard';
+import type { ScoreColumnProps } from './ScoreColumn';
 import { TimeSheet } from './TimeSheet';
 import { useAllowLandscape, useIsLandscape } from './orientation';
 import type { BoutTiming } from './phase';
@@ -339,29 +341,29 @@ function Refereeing({
     />
   );
 
-  const columns = (['a', 'b'] as const).map((side) => {
+  const columnFor = (side: Side): ScoreColumnProps => {
     const fencer = side === 'a' ? assignment.fencerA : assignment.fencerB;
 
-    return (
-      <ScoreColumn
-        key={side}
-        label={fencer?.name ?? t('bout.unknownFencer')}
-        number={fencer?.number ?? null}
-        club={fencer?.club ?? null}
-        tone={null}
-        score={rules[side]}
-        opponentScore={side === 'a' ? rules.b : rules.a}
-        target={target}
-        cards={cardsOf(side)}
-        hasPriority={rules.priority === side}
-        flashingPriority={engine.priorityDraw.flashing === side}
-        onChange={engine.setScore(side)}
-        onCard={engine.giveCard(side)}
-        onUndoCard={(kind) => engine.undoCard(side, kind)}
-        compact={landscape}
-      />
-    );
-  });
+    return {
+      label: fencer?.name ?? t('bout.unknownFencer'),
+      number: fencer?.number ?? null,
+      club: fencer?.club ?? null,
+      tone: null,
+      score: rules[side],
+      opponentScore: side === 'a' ? rules.b : rules.a,
+      target,
+      cards: cardsOf(side),
+      hasPriority: rules.priority === side,
+      flashingPriority: engine.priorityDraw.flashing === side,
+      onChange: engine.setScore(side),
+      onCard: engine.giveCard(side),
+      onUndoCard: (kind: CardKind) => engine.undoCard(side, kind),
+      // Quem está à esquerda da pista encosta o nome à esquerda; quem está à direita, à direita.
+      align: side === 'a' ? 'start' : 'end',
+    };
+  };
+
+  const columns = { a: columnFor('a'), b: columnFor('b') };
 
   // Tecla preta de letras verdes: a ação que fecha o assalto fala a língua do mostrador que está
   // por cima dela, e não a do botão verde de uma lista.
@@ -414,11 +416,7 @@ function Refereeing({
           </Text>
         </View>
 
-        <View style={styles.targetChip}>
-          <Text variant="caption" color={colors.dark} style={styles.targetLabel}>
-            {t('bout.target', { target })}
-          </Text>
-        </View>
+        <BoutInfo timing={timing} target={target} />
       </View>
 
       {/* Deitado o ecrã é do cronómetro e das duas colunas: um banner de sessão ali rouba a
@@ -449,7 +447,9 @@ function Refereeing({
 
       {landscape ? (
         <View style={styles.landscape}>
-          <View style={styles.landscapeColumn}>{columns[0]}</View>
+          <View style={styles.landscapeColumn}>
+            <ScoreBoard sides={[columns.a]} compact />
+          </View>
           <View style={styles.landscapeClock}>
             <View style={styles.landscapeClockSlot}>{clock}</View>
             <View style={styles.landscapeActions}>
@@ -457,12 +457,14 @@ function Refereeing({
               <View style={styles.landscapeAction}>{submit}</View>
             </View>
           </View>
-          <View style={styles.landscapeColumn}>{columns[1]}</View>
+          <View style={styles.landscapeColumn}>
+            <ScoreBoard sides={[columns.b]} compact />
+          </View>
         </View>
       ) : (
         <>
           {clock}
-          <View style={styles.scoreArea}>{columns}</View>
+          <ScoreBoard sides={[columns.a, columns.b]} />
           <View style={styles.actionRow}>
             <View style={styles.actionAside}>{events}</View>
             <View style={styles.actionMain}>{submit}</View>
@@ -659,25 +661,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginBottom: spacing.sm,
   },
-  targetChip: {
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.full,
-    backgroundColor: colors.grayLight,
-    borderWidth: 1,
-    borderColor: colors.grayMedium,
-  },
-  targetLabel: {
-    fontFamily: fonts.workSansBold,
-  },
   banner: {
     marginBottom: spacing.sm,
-  },
-  scoreArea: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginVertical: spacing.md,
   },
   /** Consultar e registar na mesma linha, com o peso trocado: ver é uma escapadela, registar é o fim. */
   actionRow: {

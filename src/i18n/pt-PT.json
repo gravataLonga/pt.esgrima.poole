@@ -91,7 +91,27 @@
   },
   "bout": {
     "title": "Assalto {{sequence}}",
-    "target": "Até {{target}} toques",
+    "info": {
+      "title": "Este assalto",
+      "dismiss": "Entendido",
+      "rows": {
+        "target": "Vitória",
+        "time": "Tempo",
+        "periods": "Períodos",
+        "periodTime": "Tempo por período",
+        "rest": "Descanso",
+        "suddenDeath": "Morte súbita",
+        "passivity": "Passividade"
+      },
+      "touches_one": "{{count}} toque",
+      "touches_other": "{{count}} toques",
+      "minutes": "{{count}} min",
+      "seconds": "{{count}} s",
+      "howTitle": "Como se usa",
+      "howClock": "Tocar no mostrador arranca e pára o tempo.",
+      "howTouch": "Tocar no resultado marca um toque; a tecla − tira um.",
+      "howCards": "Tocar num cartão dá-o; premir sem largar anula-o."
+    },
     "scoreLabel_one": "{{name}}: {{count}} toque",
     "scoreLabel_other": "{{name}}: {{count}} toques",
     "period": {

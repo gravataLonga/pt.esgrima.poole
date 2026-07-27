@@ -1,10 +1,10 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { useQueueStore } from '@/queue/store';
-import { Button, Sheet, Text, colors, spacing } from '@/ui';
+import { Button, Sheet, Text, colors, radius, spacing } from '@/ui';
 
 import { nothingLeftToDo } from './completion';
 import { useSessionStore } from './store';
@@ -39,12 +39,19 @@ export function LeaveButton() {
 
   return (
     <>
-      <Button
-        label={t('session.leave')}
-        variant="secondary"
-        size="compact"
+      {/* Um ícone, e não a palavra: o cabeçalho é do nome da poule, e "Sair" escrito por extenso
+          ocupava-lhe um terço da largura para uma ação que se usa uma vez por dia. A porta com a
+          seta é o desenho de sair em todo o lado, e o nome continua lá para o VoiceOver. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('session.leave')}
         onPress={() => setOpen(true)}
-      />
+        // O alvo desenhado tem 36 pt; o `hitSlop` leva-o aos 48 pt das HIG sem o engordar.
+        hitSlop={6}
+        style={({ pressed }) => [styles.leave, pressed ? styles.leavePressed : null]}
+      >
+        <ExitGlyph />
+      </Pressable>
 
       <Sheet
         visible={open}
@@ -63,6 +70,23 @@ export function LeaveButton() {
         ) : null}
       </Sheet>
     </>
+  );
+}
+
+/**
+ * Uma porta e uma seta a sair dela, desenhadas com `View`s — não há biblioteca de ícones instalada,
+ * e o resto da app faz o mesmo (o play/pausa do cronómetro, os galhos de período).
+ *
+ * A porta é um retângulo **aberto do lado por onde se sai**: fechado dos quatro lados era uma
+ * moldura, e a seta parecia estar a bater-lhe na parede.
+ */
+function ExitGlyph() {
+  return (
+    <View style={styles.glyph}>
+      <View style={styles.door} />
+      <View style={styles.arrowShaft} />
+      <View style={styles.arrowHead} />
+    </View>
   );
 }
 
@@ -106,8 +130,55 @@ export function FinishButton() {
   );
 }
 
+/** Espessura do traço do ícone. Uma constante porque o desenho tem de a repetir em quatro sítios. */
+const STROKE = 2;
+
 const styles = StyleSheet.create({
   finish: {
     paddingTop: spacing.sm,
+  },
+  leave: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.full,
+    borderWidth: 1.5,
+    // `textMuted` e não `grayDark`: o contorno é o que identifica o botão, e a WCAG 1.4.11 pede-lhe
+    // 3:1. O `grayDark` sobre branco dá 1.77 — o mesmo erro que motivou o `contrast.test.ts`.
+    borderColor: colors.textMuted,
+  },
+  leavePressed: {
+    backgroundColor: colors.grayLight,
+  },
+  glyph: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  door: {
+    width: 9,
+    height: 16,
+    borderWidth: STROKE,
+    // Aberta do lado por onde se sai.
+    borderRightWidth: 0,
+    borderTopLeftRadius: 2,
+    borderBottomLeftRadius: 2,
+    borderColor: colors.dark,
+  },
+  arrowShaft: {
+    width: 7,
+    height: STROKE,
+    marginLeft: 1,
+    backgroundColor: colors.dark,
+  },
+  arrowHead: {
+    width: 0,
+    height: 0,
+    borderTopWidth: 4,
+    borderBottomWidth: 4,
+    borderLeftWidth: 5,
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
+    borderLeftColor: colors.dark,
   },
 });

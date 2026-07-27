@@ -106,8 +106,10 @@ describe('ligar', () => {
     // tem de saber, que tipo de código lhe deram (contrato §7).
     await screen.findByText('Round 2 · 1');
     expect(router.getPathname()).toBe('/match/m_1');
-    // O combate veio no próprio `connect`: 15 toques, e não os 5 da poule.
-    expect(screen.getByText('To 15 touches')).toBeTruthy();
+    // O combate veio no próprio `connect`: 15 toques, e não os 5 da poule. O alvo mudou-se para
+    // dentro do "?", ao lado do resto das regras deste assalto.
+    await fireEvent.press(screen.getByLabelText('This bout'));
+    expect(screen.getByText('15 touches')).toBeTruthy();
   });
 });
 
@@ -269,10 +271,11 @@ describe('sair e concluir', () => {
     await router;
     await screen.findByText('Poule 3 — Sabre Masculino');
 
-    await fireEvent.press(screen.getByText('Leave'));
+    // O do cabeçalho é um ícone: o rótulo é a única forma de lhe chegar, no teste e no VoiceOver.
+    await fireEvent.press(screen.getByLabelText('Leave'));
     await screen.findByText('Leave this piste?');
-    // O segundo "Leave" é o da folha — o do cabeçalho continua montado por baixo.
-    await fireEvent.press(screen.getAllByText('Leave').at(-1)!);
+    // O "Leave" escrito é o da folha, e é o único que resta.
+    await fireEvent.press(screen.getByText('Leave'));
 
     await waitFor(() => expect(router.getPathname()).toBe('/connect'));
     expect(useSessionStore.getState().phase).toBe('disconnected');
@@ -286,7 +289,7 @@ describe('sair e concluir', () => {
     await router;
     await screen.findByText('Poule 3 — Sabre Masculino');
 
-    await fireEvent.press(screen.getByText('Leave'));
+    await fireEvent.press(screen.getByLabelText('Leave'));
     await fireEvent.press(await screen.findByText('Stay'));
 
     expect(router.getPathname()).toBe('/poule');
@@ -349,8 +352,16 @@ describe('combate de eliminatória', () => {
     await screen.findByText('Round 2 · 1');
     // A prova é a única coisa que diz ao árbitro onde está: chegou com seis dígitos (contrato §7).
     expect(screen.getByText('Torneio de Verão 2026')).toBeTruthy();
-    // 15 toques, e não os 5 da poule: o alvo vem da API (contrato §7).
-    expect(screen.getByText('To 15 touches')).toBeTruthy();
+    // 15 toques, e não os 5 da poule: o alvo vem da API (contrato §7), e lê-se no "?".
+    await fireEvent.press(screen.getByLabelText('This bout'));
+    expect(screen.getByText('15 touches')).toBeTruthy();
+    expect(screen.getByText('Sudden death')).toBeTruthy();
+
+    // Quantos períodos e quanto dura cada um são duas linhas, e não "3 × 3 min" numa só.
+    expect(screen.getByText('Periods')).toBeTruthy();
+    expect(screen.getByText('3')).toBeTruthy();
+    expect(screen.getByText('Time per period')).toBeTruthy();
+    expect(screen.getByText('3 min')).toBeTruthy();
     expect(router.getPathname()).toBe('/match/m_1');
   });
 
@@ -363,9 +374,9 @@ describe('combate de eliminatória', () => {
 
     // Sem lista por baixo, este ecrã é a sessão: sem "Sair" aqui não havia forma de largar a
     // pista antes de o token expirar sozinho, 60 minutos depois.
-    await fireEvent.press(screen.getByText('Leave'));
+    await fireEvent.press(screen.getByLabelText('Leave'));
     await screen.findByText('Leave this piste?');
-    await fireEvent.press(screen.getAllByText('Leave').at(-1)!);
+    await fireEvent.press(screen.getByText('Leave'));
 
     await waitFor(() => expect(router.getPathname()).toBe('/connect'));
     expect(useSessionStore.getState().phase).toBe('disconnected');
@@ -384,7 +395,7 @@ describe('combate de eliminatória', () => {
     // Nada de cronómetro nem de contadores: sem atletas não há o que cronometrar, e o servidor
     // recusaria o resultado com `409 match_not_ready`.
     expect(screen.queryByText('Submit result')).toBeNull();
-    expect(screen.queryByText('To 15 touches')).toBeNull();
+    expect(screen.queryByLabelText('This bout')).toBeNull();
   });
 
   it('destranca-se sozinho quando a ronda anterior acaba', async () => {
@@ -398,7 +409,7 @@ describe('combate de eliminatória', () => {
     readyMatch();
     await act(() => poll());
 
-    await screen.findByText('To 15 touches');
+    await screen.findByLabelText('This bout');
     expect(await screen.findByLabelText('One more touch for Ana Silva')).toBeTruthy();
   });
 
