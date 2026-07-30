@@ -61,6 +61,15 @@ export interface BoutAssignment {
   /** `true` → só leitura: a poule fechou, ou o quadro está decidido. */
   locked: boolean;
   competitionUuid: string;
+  /**
+   * `true` → o assalto está `in_progress` e **não foi este dispositivo** que o começou: a poule
+   * está a ser arbitrada noutra pista com o mesmo código (contrato `2.2.0`).
+   *
+   * Vale um banner e mais nada. O contrato §6 fecha a porta a reservar ou atribuir assaltos, e o
+   * que sobra — dois árbitros a submeterem o mesmo — está resolvido desde a `1.0.0`: o primeiro
+   * leva o assalto e o segundo recebe o `409`, que já tem folha própria aqui.
+   */
+  startedElsewhere?: boolean;
 }
 
 /** O resultado tal como o árbitro o deu por bom — tenha ele chegado ao servidor ou à fila. */
@@ -426,6 +435,14 @@ function Refereeing({
       {assignment.locked ? (
         <View style={styles.banner}>
           <Banner tone="warning" compact={landscape} message={t('bout.locked')} />
+        </View>
+      ) : null}
+
+      {/* Fechado ganha ao "está noutra pista": um assalto fechado já não se arbitra em lado
+          nenhum, e dois banners a dizer coisas diferentes sobre o mesmo assalto é ruído. */}
+      {assignment.startedElsewhere && !assignment.locked ? (
+        <View style={styles.banner}>
+          <Banner tone="warning" compact={landscape} message={t('bout.startedElsewhere')} />
         </View>
       ) : null}
 

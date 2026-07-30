@@ -2,6 +2,7 @@ import { Redirect } from 'expo-router';
 import { useEffect } from 'react';
 import { View } from 'react-native';
 
+import { useRefereeingStore } from '@/poule';
 import { useQueueStore } from '@/queue/store';
 import { useSessionStore } from '@/session/store';
 import { Screen } from '@/ui';
@@ -20,13 +21,16 @@ export default function Index() {
   const match = useSessionStore((s) => s.match);
   const restore = useSessionStore((s) => s.restore);
   const hydrate = useQueueStore((s) => s.hydrate);
+  const hydrateRefereeing = useRefereeingStore((s) => s.hydrate);
 
   useEffect(() => {
     void restore();
     // A fila é do disco, não da sessão: pode haver resultados por enviar de uma sessão que já
     // expirou, e é isso que se recupera aqui.
     void hydrate();
-  }, [restore, hydrate]);
+    // E qual era o assalto deste dispositivo antes de a app ser morta (contrato `2.2.0`).
+    void hydrateRefereeing();
+  }, [restore, hydrate, hydrateRefereeing]);
 
   if (restoring) {
     return (

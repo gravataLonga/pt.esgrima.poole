@@ -2,14 +2,15 @@
  * Ponto de partida limpo para um teste que renderiza a app inteira.
  *
  * Três estados sobrevivem entre testes do mesmo ficheiro e têm de ser repostos à mão: o servidor
- * falso, os dois *stores* de zustand e a cache do React Query. Esquecer qualquer um deles faz um
- * teste passar por causa do anterior — que é a pior forma de um teste passar.
+ * falso, os *stores* de zustand e a cache do React Query. Esquecer qualquer um deles faz um teste
+ * passar por causa do anterior — que é a pior forma de um teste passar.
  */
 
 import { QueryClient } from '@tanstack/react-query';
 
 import type { MatchDetail, PouleSummary } from '@/api/types';
 import { defaultBaseUrl } from '@/config/env';
+import { useRefereeingStore } from '@/poule';
 import { useQueueStore } from '@/queue/store';
 import { phaseFor, useSessionStore } from '@/session/store';
 
@@ -59,6 +60,10 @@ export function resetApp(overrides: Partial<FakeState> = {}): void {
   });
 
   useQueueStore.setState({ items: [], notices: [], hydrated: true });
+
+  // Sem isto, um teste que começasse um assalto deixava-o marcado como "meu" para os seguintes —
+  // e o cartão do topo do teste a seguir apontava para o assalto do teste anterior.
+  useRefereeingStore.setState({ started: {} });
 }
 
 /**

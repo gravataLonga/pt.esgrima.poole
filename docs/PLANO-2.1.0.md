@@ -9,9 +9,10 @@
 > reflete o resultado ([`CLIENT-SPEC.md`](CLIENT-SPEC.md) §7.2). Este documento fica como registo do
 > raciocínio — e das **duas coisas que mudaram a meio** (§8).
 >
-> **Por fazer, e não é deste repositório:** a §11 E do contrato continua a dizer "**App — por
-> fazer**". O contrato vive em duplicado, byte a byte, nos dois repositórios — atualizá-lo é alterar
-> os dois lados, e não se faz de um só.
+> ✅ **Fechado a 2026-07-29:** a §11 E do contrato dizia "**App — em curso (F9)**" e passou a dar os
+> dois lados por feitos, na `2.1.1` — PATCH de redação, como a `1.4.1` e a `2.0.1` foram. O contrato
+> vive em duplicado, byte a byte, nos dois repositórios: **a mesma alteração tem de ser copiada tal e
+> qual para o lado da plataforma**, senão as duas cópias divergem.
 
 > **Nada disto quebra o que existe.** A `2.1.0` é MINOR aditiva: oito `type` novos e quatro campos
 > opcionais. Um servidor na `2.0.0` ignora os campos que não conhece — mas **recusa os `type` que não
@@ -203,9 +204,11 @@ arranque e os halts com nome legível, nenhuma chave crua.
    muda" (§3.1) e "a F9 não se entrega antes do servidor" (§3.2) —, com a razão de cada um.
 3. **`docs/CLIENT-SPEC.md`:** §7.2 deixa de ser "por implementar"; a F9 da §14 e a dependência §13.20
    passam a ✅, esta com a nota de que deixou de bloquear.
-4. **`docs/API-CONTRACT.md`: não se toca.** Vive em duplicado nos dois repositórios e a §11 E é o
-   registo dos dois lados. Fica **por fazer, e não é deste repositório**: a linha "App" da §11 E
-   passa a feita quando a plataforma também lá chegar.
+4. **`docs/API-CONTRACT.md`: não se tocou aqui** — a §11 E é o registo dos dois lados e a plataforma
+   já lá estava (§8.1), pelo que a linha "App" ficou a dizer "em curso" durante três dias.
+   **Sincronizada a 2026-07-29 na `2.1.1`**, com a lista do que a app fez (E6 a E12) e o `422`
+   escrito como propriedade do contrato e não como detalhe de implementação. A cópia da plataforma
+   tem de receber o mesmo ficheiro, byte a byte.
 
 **Verificar:** `npm test`, `npm run typecheck` e `npm run lint` limpos.
 

@@ -23,7 +23,7 @@
     },
     "ended": {
       "token_expired": "A sessão expirou ao fim de 60 minutos sem atividade. Volte a ligar-se.",
-      "token_revoked": "Outro dispositivo assumiu esta pista."
+      "token_revoked": "O código desta pista foi renovado na plataforma. Peça o novo ao organizador."
     },
     "help": {
       "title": "Onde está o código?",
@@ -180,6 +180,7 @@
     "loadingHint": "A buscar ao servidor os toques, o tempo e os períodos.",
     "unknownFencer": "Atleta",
     "locked": "Fechado para registo. Modo de leitura.",
+    "startedElsewhere": "Este assalto está a decorrer noutro dispositivo. Quem submeter primeiro fica com o resultado.",
     "confirmSending": "A registar…",
     "conflict": {
       "title": "Já registado",

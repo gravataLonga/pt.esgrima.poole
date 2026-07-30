@@ -2,6 +2,8 @@ import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-librar
 import { Dimensions, Vibration } from 'react-native';
 
 import type { PouleSummary } from '@/api/types';
+import { poule as fixturePoule } from '@/fixtures/poule';
+import { useRefereeingStore } from '@/poule';
 import { useQueueStore } from '@/queue/store';
 import { useSessionStore } from '@/session/store';
 
@@ -646,6 +648,51 @@ describe('a pista ao vivo', () => {
 
     // Escrita travada dos dois lados: o servidor responderia `422 poule_locked` a cada toque.
     expect(eventsOfBout()).toHaveLength(0);
+  });
+});
+
+/**
+ * Contrato `2.2.0`: dois árbitros podem estar na mesma poule com o mesmo código. Abrir um assalto
+ * que decorre na outra pista é possível — e é informação, nunca proibição.
+ */
+describe('assalto a decorrer noutra pista', () => {
+  const WARNING =
+    'This bout is under way on another device. Whoever submits first records the result.';
+
+  it('avisa quem abre um assalto que não foi este dispositivo a começar', async () => {
+    // Este dispositivo arbitrou o 5; o 4 está a decorrer, e portanto é de outro.
+    useRefereeingStore.setState({
+      started: { [fixturePoule.uuid]: { bout_id: 'b_01J8X005', at: new Date().toISOString() } },
+    });
+
+    await open();
+
+    expect(screen.getByText(WARNING)).toBeTruthy();
+    // Aviso e mais nada: arbitrar continua a ser possível, e é o `409` que resolve o empate.
+    await fireEvent.press(screen.getByLabelText('One more touch for Marta Lopes'));
+    expect(screen.getByLabelText('Marta Lopes: 1 touch')).toBeTruthy();
+  });
+
+  it('cala-se assim que este dispositivo arranca o cronómetro', async () => {
+    useRefereeingStore.setState({
+      started: { [fixturePoule.uuid]: { bout_id: 'b_01J8X005', at: new Date().toISOString() } },
+    });
+
+    await open();
+    expect(screen.getByText(WARNING)).toBeTruthy();
+
+    // Arrancar o tempo é o que marca o assalto como deste dispositivo — e o aviso deixa de valer.
+    await fireEvent.press(screen.getByLabelText('Timer'));
+
+    expect(screen.queryByText(WARNING)).toBeNull();
+  });
+
+  it('não avisa quem nunca arbitrou nesta poule', async () => {
+    // Sem memória não há como saber de quem é o assalto, e a hipótese que acerta com um árbitro
+    // só — o normal — é que seja dele. Avisar aqui era assustar o caso comum.
+    await open();
+
+    expect(screen.queryByText(WARNING)).toBeNull();
   });
 });
 

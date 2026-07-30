@@ -72,3 +72,62 @@ describe('boutStates', () => {
     expect(states.filter((state) => state === 'on_deck')).toHaveLength(1);
   });
 });
+
+/**
+ * Contrato `2.2.0`: uma poule pode estar a ser arbitrada em duas pistas com o mesmo código, e o
+ * servidor deixou de despromover os outros assaltos em curso. "O assalto a decorrer" e "o meu
+ * assalto" deixaram de ser a mesma coisa.
+ */
+describe('dois árbitros na mesma poule', () => {
+  it('o assalto atual é o meu, e não o primeiro a decorrer da lista', () => {
+    const bouts = [bout(1, 'in_progress'), bout(2, 'pending'), bout(3, 'in_progress')];
+
+    expect(currentBout(bouts, 'b_3')?.id).toBe('b_3');
+  });
+
+  it('o assalto do outro nunca vira o meu assalto atual', () => {
+    // Este dispositivo arbitrou o 3 e acabou-o; o 1 continua a decorrer, noutra pista. Propor
+    // "Retomar" sobre ele era mandar este árbitro para dentro do assalto de outro.
+    const bouts = [bout(1, 'in_progress'), bout(2, 'pending'), bout(3, 'done')];
+
+    expect(currentBout(bouts, 'b_3')?.id).toBe('b_2');
+    expect(boutStates(bouts, 'b_3')).toEqual({ b_1: 'in_progress', b_2: 'up_next', b_3: 'done' });
+  });
+
+  it('o "começar" volta a existir quando quem está em pista é outro', () => {
+    // Sem memória de ter arbitrado aqui, o cartão do topo agarrava-se ao assalto do outro e este
+    // árbitro ficava sem nada que lhe dissesse qual chamar.
+    const bouts = [bout(1, 'in_progress'), bout(2, 'pending'), bout(3, 'pending')];
+    const states = boutStates(bouts, 'b_9');
+
+    expect(currentBout(bouts, 'b_9')?.id).toBe('b_2');
+    expect(states.b_2).toBe('up_next');
+    expect(states.b_3).toBe('on_deck');
+  });
+
+  it('quem nunca arbitrou nesta poule assume que o que está em pista é seu', () => {
+    // É o comportamento de sempre, e é o que acerta com um árbitro só — que continua a ser o
+    // normal. Sem memória não há como saber, e adivinhar ao contrário partia o caso comum.
+    const bouts = [bout(1, 'in_progress'), bout(2, 'pending')];
+
+    expect(currentBout(bouts)?.id).toBe('b_1');
+  });
+
+  it('um assalto a decorrer mostra-se a decorrer, seja de quem for', () => {
+    // A `CLIENT-SPEC.md` §6 decidiu-o assim: para quem está na pista ao lado, é a informação que
+    // interessa. O que a app não pode é propor uma **ação** sobre ele.
+    const bouts = [bout(1, 'in_progress'), bout(2, 'in_progress'), bout(3, 'pending')];
+    const states = boutStates(bouts, 'b_2');
+
+    expect(states.b_1).toBe('in_progress');
+    expect(states.b_2).toBe('in_progress');
+  });
+
+  it('o meu assalto desaparecido da lista não prende o cartão do topo', () => {
+    // Um atleta removido leva o assalto com ele (contrato §8, `404`). O que resta é o primeiro por
+    // disputar — nunca o assalto que está a decorrer noutra pista.
+    const bouts = [bout(1, 'in_progress'), bout(2, 'pending')];
+
+    expect(currentBout(bouts, 'b_removido')?.id).toBe('b_2');
+  });
+});

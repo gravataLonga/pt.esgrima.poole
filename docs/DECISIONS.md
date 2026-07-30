@@ -1339,7 +1339,7 @@ mostrador que **é** o botão grande deste ecrã.
 
 ## ADR-035 — Contrato 2.1.0: o assalto passa a ter horas, e não só cronómetro
 
-**Data:** 2026-07-26 · **Estado:** aceite · **A plataforma serve-o desde 2026-07-26; o lado da app é a F9**
+**Data:** 2026-07-26 · **Estado:** aceite · **A plataforma serve-o desde 2026-07-26 e a app emite-o desde o mesmo dia (F9)**
 
 O [ADR-029](#adr-029--contrato-150-a-pista-passa-a-ver-se-enquanto-está-a-ser-arbitrada) pôs o placar
 a subir na web enquanto o assalto decorre. O que ele não pôs foi o **relógio**.
@@ -1473,7 +1473,96 @@ página pública e o painel do organizador em branco a meio do assalto.
 `useBoutEngine` põe `score_a`/`score_b` em tudo o que emite — no toque, no cartão, no `period_end` e
 no `priority`, que não precisava deles. Foi essa generosidade que escondeu o problema durante meses.
 
-O que fica dito, para a F9: **os marcos não vão ter placar**, e isso passa a ser normal em vez de
-acidental. Um `clock_start` não sabe o resultado nem tem de saber. A regra a não esquecer é a
+O que ficou dito para a F9, e foi seguido: **os marcos não levam placar**, e isso passa a ser normal
+em vez de acidental. Um `clock_start` não sabe o resultado nem tem de saber. A regra a não esquecer é a
 inversa da que se poderia tirar daqui — não "manda sempre o placar por precaução", mas "o placar
 pertence aos eventos que o mudam", e o servidor é que tem de aguentar os outros.
+
+---
+
+## ADR-036 — Contrato 2.2.0: qual dos assaltos em curso é o meu
+
+**Data:** 2026-07-30 · **Estado:** aceite · **A plataforma serve a `2.2.0` desde 2026-07-30; a app é a F10, do mesmo dia**
+
+> **Por sincronizar:** o `docs/API-CONTRACT.md` vive em duplicado, byte a byte, nos dois
+> repositórios. A `2.2.1` — a §11 F e a coluna do `401 token_revoked` no §8 — está só do lado da
+> app e **tem de ser copiada tal e qual para o lado da plataforma**, senão as duas cópias divergem.
+
+A `2.2.0` diz, à letra, que **a app não muda uma linha**. É verdade sobre o que os dois lados
+trocam: nenhum campo muda de forma, nenhum endpoint muda de assinatura, nenhum `type` aparece. Uma
+app na `2.1.1` fala com este servidor sem erro nenhum, e continuaria a falar durante meses.
+
+O que a `2.2.0` retirou foi uma **garantia** — que uma poule tem no máximo um assalto `in_progress`,
+porque era o `POST /bouts/{bout}/start` que despromovia os outros. A app usava-a sem nunca a ter
+escrito. Uma linha, no `src/poule/status.ts`:
+
+```ts
+return bouts.find((bout) => bout.status === 'in_progress') ?? firstPending(bouts);
+```
+
+Escrita quando "o assalto a decorrer" e "o meu assalto" eram a mesma coisa. Com dois árbitros a
+levarem a mesma poule a duas pistas com o mesmo código, deixaram de ser — e o cartão do topo da
+lista, que é o que **propõe uma ação**, passava a poder apontar ao assalto da outra pista, com um
+"Retomar" que levava lá dentro. Pior: enquanto o árbitro do lado estivesse em pista, o "Começar"
+desaparecia do ecrã deste, que ficava sem nada que lhe dissesse qual chamar.
+
+### A pergunta que o contrato não responde, e não por esquecimento
+
+Não há campo que diga de quem é o assalto. O `scored_by_me` é do **resultado**, não do estado, e o
+`API-CONTRACT.md` §6 fecha a porta explicitamente: *"não há repartição, atribuição nem reserva"*,
+porque os esgrimistas estão fisicamente num sítio só e dois árbitros não podem estar a disputar o
+mesmo assalto. Pedir um campo era pedir à plataforma que resolvesse um problema que não existe no
+pavilhão.
+
+**Decisão: quem sabe qual é o assalto deste dispositivo é o próprio dispositivo.** Foi ele que
+chamou o `start`, e é aí — no mesmo instante em que o diz ao servidor — que o regista. Vive em
+`src/poule/refereeing.ts`, por pista, e vai a disco pela razão da fila de submissões: a app é morta
+em *background* a meio de uma poule com regularidade operacional.
+
+### Três ramos, e o do meio é o que conserta
+
+```
+o meu, se estiver in_progress
+  ↳ senão, se já arbitrei aqui   → primeiro pending
+  ↳ senão (nunca arbitrei aqui)  → primeiro in_progress ?? primeiro pending
+```
+
+O terceiro ramo é o comportamento de sempre, e é deliberado mantê-lo: sem memória **não há como
+saber** se o assalto que está em pista é deste telemóvel antes de uma reinstalação, e adivinhar ao
+contrário partia o caso de um árbitro só, que continua a ser o normal. É por isso que a memória
+guarda o último assalto começado **mesmo depois de ele ficar `done`** — é o que distingue "nunca
+arbitrei aqui" de "arbitrei e acabei", e sem essa distinção o cartão voltava a agarrar-se ao assalto
+do outro assim que este árbitro fechasse o seu.
+
+### O que **não** muda: a linha da lista
+
+Um assalto a decorrer continua a dizer que está a decorrer, seja de quem for. Para quem está na
+pista ao lado é a informação certa, e a `CLIENT-SPEC.md` §6 já o tinha decidido assim. A distinção
+que este ADR faz não é entre *ver* e *não ver* — é entre **informar** e **propor uma ação**. Só a
+segunda tem de saber de quem é o assalto.
+
+O banner do ecrã de assalto está do mesmo lado dessa linha: avisa quem abre um assalto que decorre
+noutra pista, e não trava nada. Quem submeter primeiro fica com o resultado, e o segundo apanha o
+`409` que já tem folha própria desde a `1.0.0`. Pela mesma coerência, **não avisa quando não sabe**:
+sem memória de ter arbitrado nesta poule, assume que o assalto é dele — a mesma hipótese do terceiro
+ramo, e assustar o caso comum seria pior do que calar um aviso no caso raro.
+
+### O texto do `token_revoked`, corrigido de caminho
+
+"Outro dispositivo assumiu esta pista" era verdade até à `2.2.0` e passou a ser impossível: o
+`connect` deixou de expulsar ninguém, e o único caminho para um `token_revoked` é o código ter sido
+rodado na plataforma. O contrato deixava a correção para uma `2.3.0`; não havia por onde esperar —
+é uma linha de i18n de cada lado da app, e uma frase que aponta o árbitro ao sítio errado custa-lhe
+uma ida ao organizador com a pergunta trocada. Ficou *"O código desta pista foi renovado na
+plataforma. Peça o novo ao organizador"*, e a coluna do §8 do contrato foi sincronizada na `2.2.1`.
+
+### Consequência aceite
+
+**A memória é do dispositivo, não do árbitro.** Reinstalar a app, ou trocar de telemóvel a meio de
+uma poule, cai no terceiro ramo — que é o comportamento de sempre e, com dois árbitros em pista,
+pode voltar a apontar o cartão ao assalto do outro até este árbitro começar um. É o mesmo tipo de
+limite que o `scored_by_me` já tem por derivar do token
+([ADR-026, contrato 1.4.0](#adr-026--contrato-140-as-decisões-que-estavam-em-aberto)), e pela mesma
+razão se aceita: a alternativa
+era pedir ao contrato um conceito de "árbitro" que a plataforma não tem, para um caso que se
+resolve começando o assalto.

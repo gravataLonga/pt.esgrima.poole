@@ -182,7 +182,7 @@ primeiras estão formalizadas no [contrato de API](app-arbitragem-api-contract.m
 | Tema | Decisão | Porquê |
 |---|---|---|
 | Versionamento | Prefixo `/api/v1/` | Permite v2 sem partir apps instaladas. |
-| Formato do PIN | 6 dígitos, único entre PINs ativos, **de utilização múltipla** | Digitável à mão em pavilhão com QR ilegível. Múltipla utilização porque o árbitro que perde a sessão — bateria, reinstalação — tem de voltar a ligar-se sozinho; cortar acesso faz-se rodando o PIN, que mata também os tokens. |
+| Formato do PIN | 6 dígitos, único entre PINs ativos, **de utilização múltipla**, e desde o contrato `2.2.0` **de dispositivos múltiplos** | Digitável à mão em pavilhão com QR ilegível. Múltipla utilização porque o árbitro que perde a sessão — bateria, reinstalação — tem de voltar a ligar-se sozinho. Múltiplos dispositivos porque uma poule atrasada é levada a uma segunda pista por um segundo árbitro, com a folha e o código que já lá estavam. Cortar acesso faz-se rodando o PIN, que mata os tokens — todos. |
 | Payload do QR | **Só os 6 dígitos.** O JSON `{v, base_url, pin}` fica especificado como formato reservado | Ler o QR e escrever o PIN passam a ser o mesmo caminho. O `base_url` no QR entra quando houver *self-hosting* a justificá-lo; o cliente já o aceita, para a migração não ser coordenada. |
 | Atualizações | **Polling com ETag**, não WebSockets | A plataforma não tem *broadcasting*; polling resolve com custo quase zero. |
 | Re-submissão | **`submission_id`** (UUID v4 do cliente) no `score`; mesma submissão → **200**, não 409 | Sem chave de idempotência, um *retry* por *timeout* dá 409 falso ("outra pessoa") ao próprio autor. A chave é da submissão, não da sessão: sobrevive a uma reconexão com a fila cheia. |
@@ -328,12 +328,25 @@ múltipla.
   de rede.
 - Lista ordenada por `sequence`, cada linha: `#seq`, `Nº nome (clube)` vs `Nº nome (clube)`, estado.
   - `pending` — neutro, tocável.
-  - `in_progress` — destacado.
+  - `in_progress` — destacado. **Pode não ser o desta app** (contrato `2.2.0`): uma poule atrasada é
+    levada a uma segunda pista por um segundo árbitro, com o mesmo código, e o assalto que ele está a
+    arbitrar chega aqui marcado como o que é. É a informação que interessa a quem está na outra
+    pista, e por isso não há nada a mudar **na linha**. O que muda é o cartão do topo, logo abaixo.
   - `done` — resultado `5–3`, esbatido, tocável só para consulta.
 - **Destaque do próximo**, só quando `poule.ordered` é `true`: primeiro `pending` por `sequence` fica
   no topo visual com botão "Começar". Com `ordered: false` (poule isolada) não há "próximo" — a lista
   é plana e qualquer `pending` é tocável, porque a ordem não tem valor regulamentar e desloca-se
   sempre que o plantel muda.
+- **O cartão do topo é o assalto *deste* dispositivo** (contrato `2.2.0`), e não o primeiro que a
+  lista mostre a decorrer. A diferença só existe com dois árbitros na mesma poule, e é toda: uma
+  linha diz o que se passa, o cartão **propõe uma ação**, e propor "Retomar" sobre o assalto de
+  outro é mandar este árbitro para dentro da pista errada. Quem sabe qual é o dele é ele — foi ele
+  que chamou o `start` —, e a app guarda-o em disco por pista ([ADR-036](DECISIONS.md)):
+  - o meu, se estiver a decorrer;
+  - senão, se já arbitrei nesta poule, o primeiro por disputar — com "Começar", que é o que volta a
+    dizer a este árbitro qual chamar;
+  - senão (nunca arbitrei aqui) o primeiro a decorrer, que é o comportamento de sempre e o que
+    acerta com um árbitro só.
 - *Pull to refresh*. Polling de 10 s.
 - Banner permanente quando `READ_ONLY` ou offline com fila pendente.
 - **O banner de `READ_ONLY` diz para onde a competição foi**, e é ele que substitui o ecrã de quadro
@@ -354,6 +367,12 @@ múltipla.
 - Confirmação antes de submeter: *"Registar 5–3 para Ana Silva?"* — um resultado errado só se corrige
   na web.
 - Sair com resultado por submeter → pede confirmação.
+- **Banner quando o assalto está a decorrer noutro dispositivo** (contrato `2.2.0`): *"Este assalto
+  está a decorrer noutro dispositivo. Quem submeter primeiro fica com o resultado."* **Aviso, nunca
+  proibição** — o contrato §6 fecha a porta a reservar ou atribuir assaltos, e o empate que sobra
+  está resolvido desde a `1.0.0` pelo `409`, que tem folha própria. Só aparece quando a app **sabe**
+  que o assalto não é dela: sem memória de ter arbitrado nesta poule, assume-se que é, pela mesma
+  razão do cartão do topo da lista.
 
 **4. Conflito (409)** — folha modal, não ecrã
 - *"Este assalto já foi registado por outra pessoa: **4–5**, às 17:31."*
@@ -752,7 +771,8 @@ servidor local, como gerar *build* de teste, e onde está o contrato.
 
 1. Scan de QR → lista → começar assalto → cronómetro → toques → submeter → volta à lista com `done`.
 2. Modo avião a meio de uma submissão → resultado guardado → rede volta → enviado automaticamente.
-3. Dois dispositivos na mesma pista → o segundo recebe `token_revoked`.
+3. Dois dispositivos no mesmo código de poule → **ambos arbitram**, cada um o seu assalto, e nenhum
+   recebe `token_revoked` (contrato `2.2.0`). O código rodado na web → aí sim, os dois o recebem.
 4. Código de combate → combate abre direto → arbitrar → submeter → ecrã de pista terminada.
 5. Dois combates do mesmo quadro em dois dispositivos, com códigos diferentes → nenhum tira a
    sessão ao outro.
@@ -844,7 +864,8 @@ contrato**.
 | **F6 — Polimento** | Acessibilidade, som/háptica, legibilidade em sol, ecrãs de erro, *store* | F5 |
 | **F7 — Pista ao vivo** ✅ | Enviar os eventos do assalto à medida que acontecem ([§7.1](#71-a-pista-ao-vivo)): contador `seq` por assalto, lote na falha | F5 + servidor §13.19 |
 | **F8 — O código é da pista** ✅ | Contrato `2.0.0`: `scope: poule \| match`, o ecrã de quadro apagado, o combate como raiz de sessão, poule fechada em leitura, `API_CONTRACT_VERSION` a `'2.0.0'` | F7 + servidor §11.A15 do contrato |
-| **F9 — Os marcos do combate** ✅ | Contrato `2.1.0` ([§7.2](#72-os-marcos-do-combate--contrato-210)): emitir os oito marcos e os quatro campos novos, `API_CONTRACT_VERSION` a `'2.1.0'` | F8 + servidor §11.E do contrato |
+| **F9 — Os marcos do combate** ✅ | Contrato `2.1.0` ([§7.2](#72-os-marcos-do-combate--contrato-210)): emitir os oito marcos e os quatro campos novos, `API_CONTRACT_VERSION` a `'2.1.1'` (a `2.1.1` é a redação que registou os dois lados feitos) | F8 + servidor §11.E do contrato |
+| **F10 — Dois árbitros na mesma poule** ✅ | Contrato `2.2.0`: **nenhum campo novo**. A app deixa de assumir que só há um assalto a decorrer por poule — memória local de qual é o **deste** dispositivo, o cartão do topo a segui-la, aviso ao abrir um assalto que decorre noutra pista, e a *copy* do `token_revoked` corrigida. `API_CONTRACT_VERSION` a `'2.2.1'` (a `2.2.1` é a redação que registou o lado da app) | F9 + servidor §11.A17 do contrato |
 
 F0–F4 correm **inteiramente contra os mocks** e não dependem do trabalho do servidor.
 

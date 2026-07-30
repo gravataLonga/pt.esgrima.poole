@@ -23,7 +23,7 @@
     },
     "ended": {
       "token_expired": "The session expired after 60 minutes without activity. Connect again.",
-      "token_revoked": "Another device took over this piste."
+      "token_revoked": "This piste's code was renewed on the platform. Ask the organiser for the new one."
     },
     "help": {
       "title": "Where is the code?",
@@ -180,6 +180,7 @@
     "loadingHint": "Fetching the touches, the time and the periods from the server.",
     "unknownFencer": "Fencer",
     "locked": "Closed for scoring. Read-only mode.",
+    "startedElsewhere": "This bout is under way on another device. Whoever submits first records the result.",
     "confirmSending": "Recording…",
     "conflict": {
       "title": "Already recorded",

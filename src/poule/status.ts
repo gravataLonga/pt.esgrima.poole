@@ -21,16 +21,33 @@ export type BoutState =
   | 'done';
 
 /**
- * O assalto que o árbitro tem em mãos: o que está a decorrer ou, se não houver nenhum, o primeiro
- * por disputar. `undefined` quando a poule está completa.
+ * O assalto que **este** árbitro tem em mãos: o que ele está a arbitrar ou, se não houver nenhum, o
+ * primeiro por disputar. `undefined` quando a poule está completa.
+ *
+ * O `startedId` é o assalto em que este dispositivo chamou o `start` (`refereeing.ts`), e existe
+ * desde o contrato `2.2.0`: uma poule pode ter **N** assaltos `in_progress`, porque pode estar a
+ * ser arbitrada em duas pistas com o mesmo código. Sem ele, o primeiro `in_progress` da lista podia
+ * ser o do árbitro do lado — e propor "Retomar" sobre esse era mandar este para dentro do assalto
+ * de outro.
+ *
+ * Três ramos, e é toda a regra:
+ * - o meu, se estiver a decorrer;
+ * - senão, se já arbitrei aqui, o primeiro por disputar — o que decorre é de outra pista;
+ * - senão (nunca arbitrei aqui) o primeiro a decorrer, que é o comportamento de sempre e o que
+ *   acerta com um árbitro só, que continua a ser o normal.
  */
-export function currentBout(bouts: Bout[]): Bout | undefined {
+export function currentBout(bouts: Bout[], startedId: string | null = null): Bout | undefined {
+  if (startedId) {
+    const mine = bouts.find((bout) => bout.id === startedId);
+    return mine?.status === 'in_progress' ? mine : firstPending(bouts);
+  }
+
   return bouts.find((bout) => bout.status === 'in_progress') ?? firstPending(bouts);
 }
 
 /** O par que deve estar a preparar-se. `undefined` quando o atual é o último por disputar. */
-export function onDeckBout(bouts: Bout[]): Bout | undefined {
-  const current = currentBout(bouts);
+export function onDeckBout(bouts: Bout[], startedId: string | null = null): Bout | undefined {
+  const current = currentBout(bouts, startedId);
   return bouts.find((bout) => bout.status === 'pending' && bout.id !== current?.id);
 }
 
@@ -41,10 +58,18 @@ function firstPending(bouts: Bout[]): Bout | undefined {
 /**
  * Estado de cada assalto por `id`. Calculado de uma vez para a lista inteira porque `on_deck`
  * depende dos outros assaltos — decidi-lo linha a linha daria vários "a preparar".
+ *
+ * **Um assalto a decorrer mostra-se a decorrer, seja de quem for** (contrato `2.2.0`, e a
+ * `CLIENT-SPEC.md` §6 decidiu-o assim): para quem está na pista ao lado é informação verdadeira e
+ * é a que interessa. O que o `startedId` muda é quem é o `up_next` — que volta a existir quando o
+ * `in_progress` visível não é deste dispositivo.
  */
-export function boutStates(bouts: Bout[]): Record<string, BoutState> {
-  const onDeckId = onDeckBout(bouts)?.id;
-  const currentId = currentBout(bouts)?.id;
+export function boutStates(
+  bouts: Bout[],
+  startedId: string | null = null,
+): Record<string, BoutState> {
+  const onDeckId = onDeckBout(bouts, startedId)?.id;
+  const currentId = currentBout(bouts, startedId)?.id;
 
   return Object.fromEntries(
     bouts.map((bout) => {

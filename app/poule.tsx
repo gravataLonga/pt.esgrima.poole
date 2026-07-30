@@ -6,7 +6,15 @@ import { useTranslation } from 'react-i18next';
 import { ApiError } from '@/api/errors';
 import { useBouts, useStandings } from '@/api/queries';
 import type { Bout } from '@/api/types';
-import { Classification, Grid, boutStates, buildSheet, currentBout, onDeckBout } from '@/poule';
+import {
+  Classification,
+  Grid,
+  boutStates,
+  buildSheet,
+  currentBout,
+  onDeckBout,
+  useStartedBoutId,
+} from '@/poule';
 import type { BoutState } from '@/poule';
 import { FinishButton, LeaveButton, QueueBanner, SessionBar } from '@/session';
 import { useSessionStore } from '@/session/store';
@@ -56,10 +64,15 @@ export default function PouleScreen() {
 
   const list = useMemo(() => bouts.data?.bouts ?? [], [bouts.data]);
 
+  // Qual dos assaltos a decorrer é o deste telemóvel (contrato `2.2.0`). A poule pode estar a ser
+  // arbitrada em duas pistas com o mesmo código, e sem isto o cartão do topo apontava ao assalto
+  // do árbitro do lado.
+  const startedId = useStartedBoutId(poule?.uuid ?? null);
+
   // A matriz percorre todos os assaltos. Recalculá-la a cada render seria desperdício — e um
   // `304` devolve a mesma instância da lista, por isso isto não corre de 10 em 10 segundos.
   const sheet = useMemo(() => buildSheet(list), [list]);
-  const states = useMemo(() => boutStates(list), [list]);
+  const states = useMemo(() => boutStates(list, startedId), [list, startedId]);
 
   if (phase === 'disconnected') return <Redirect href="/connect" />;
   if (phase === 'complete') return <Redirect href="/complete" />;
@@ -70,8 +83,8 @@ export default function PouleScreen() {
 
   // Só há "próximo assalto" quando a ordem tem valor regulamentar. Numa poule isolada o plantel
   // muda a meio, a ordem é regerada e qualquer `pending` serve (contrato §7, `ordered`).
-  const current = poule.ordered ? currentBout(list) : undefined;
-  const onDeck = poule.ordered ? onDeckBout(list) : undefined;
+  const current = poule.ordered ? currentBout(list, startedId) : undefined;
+  const onDeck = poule.ordered ? onDeckBout(list, startedId) : undefined;
 
   return (
     <Screen>

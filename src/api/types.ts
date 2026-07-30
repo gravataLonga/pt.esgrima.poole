@@ -1,7 +1,7 @@
 /**
  * Tipos do contrato de API — fonte de verdade única.
  *
- * Tipados a partir de `docs/API-CONTRACT.md` v2.1.0 (§7 Endpoints, §8 Catálogo de erros,
+ * Tipados a partir de `docs/API-CONTRACT.md` v2.2.1 (§7 Endpoints, §8 Catálogo de erros,
  * §9 Emparelhamento QR/PIN). Este ficheiro não contém mais nada: sem lógica, sem helpers.
  *
  * Regra de tolerância (contrato §1): a app ignora campos que não conhece e nunca falha por os
@@ -11,13 +11,21 @@
 /**
  * Versão do contrato que esta app fala. A `2.0.0` é a versão em que o código de árbitro deixou de
  * ser da competição e passou a ser **da pista**: uma poule tem o seu, e cada combate de eliminatória
- * tem um só dele. A `2.1.0` é aditiva — o assalto passa a ter horas, e não só cronómetro.
+ * tem um só dele. A `2.1.0` é aditiva — o assalto passa a ter horas, e não só cronómetro —, e a
+ * `2.1.1` é redação: registou no contrato que a app já a emite.
+ *
+ * A `2.2.0` **não acrescenta um campo sequer**: um código passa a segurar N dispositivos, e uma
+ * poule passa a poder ter N assaltos `in_progress`. O que ela muda na app é um pressuposto que
+ * nunca chegou a estar escrito — que "o assalto a decorrer" e "o meu assalto" eram a mesma coisa —,
+ * e é a `src/poule/refereeing.ts` que passa a responder a isso (ADR-036).
  *
  * **Não é um mínimo exigido ao servidor.** Os `type` e os campos da `2.1.0` são todos opcionais, e
  * um servidor na `2.0.0` que recuse os `type` novos não trava a app: o `useLiveEvents` desliga os
- * marcos e continua a espelhar o resto (ADR-035, corrigido).
+ * marcos e continua a espelhar o resto (ADR-035, corrigido). Contra um servidor anterior à `2.2.0`
+ * a app também não muda de comportamento: nunca há dois assaltos a decorrer, e a memória do
+ * `refereeing.ts` aponta sempre para o único.
  */
-export const API_CONTRACT_VERSION = '2.1.0';
+export const API_CONTRACT_VERSION = '2.2.1';
 
 /**
  * Prefixo de versão da API. Um MAJOR do contrato implica normalmente um prefixo novo — a `2.0.0`

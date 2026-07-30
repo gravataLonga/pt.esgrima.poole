@@ -1,14 +1,32 @@
 # API de Arbitragem — Contrato
 
-**Versão do contrato: `2.1.0`** · Estado: **servida pela plataforma; a app consome a `2.0.0` e emite a `2.1.0` na F9** · 2026-07-26
+**Versão do contrato: `2.2.1`** · Estado: **feita dos dois lados** · 2026-07-30
 
 Fronteira partilhada entre a **plataforma** (`poole.esgrima.pt`, Laravel 12) e a **app de arbitragem**
 (React Native, repositório separado). Este ficheiro é a **única fonte de verdade** do que os dois
 lados trocam entre si.
 
-> 🆕 **`2.1.0` — o assalto passa a ter horas, e não só cronómetro.** MINOR **aditivo**. **A
-> plataforma já a serve** (2026-07-26); a app emite-a na **F9**, e até lá continua na `2.0.0` — que
-> é correta contra este servidor sem trocar uma linha, que é o que "aditivo" quer dizer.
+> 🆕 **`2.2.0` — um código segura tantos dispositivos quantos os que o lerem.** MINOR. **Nenhum campo
+> muda de forma e a app não muda uma linha**; o que muda é o comportamento por trás de dois pedidos
+> que ela já faz.
+>
+> Uma poule atrasada é levada a uma segunda pista por um segundo árbitro, com a folha e o código que
+> já lá estavam. Até aqui a plataforma respondia a isso das duas piores maneiras: o segundo `connect`
+> **tirava a sessão ao primeiro**, e o segundo `start` **despromovia o assalto do primeiro** — que
+> reaparecia na app dele como "por disputar" a meio de ser arbitrado. Passa a haver **N dispositivos
+> agarrados ao mesmo PIN** e **N assaltos em curso na mesma poule**.
+>
+> **Não há repartição, atribuição nem reserva**, e não é esquecimento: os esgrimistas estão
+> fisicamente num sítio só, portanto dois árbitros não podem estar a disputar o mesmo assalto. A
+> submissão em duplicado já estava tratada desde a `1.0.0` — primeiro a submeter leva o assalto, o
+> segundo apanha `409` com o resultado atual, e o `Refused` fica no registo do organizador.
+> Ver [§11 A17](#a-o-que-a-plataforma-serve) e [§6](#6-sessão-e-expiração).
+
+> ✅ **`2.1.0` — o assalto passa a ter horas, e não só cronómetro.** MINOR **aditivo**, e **os dois
+> lados já lá estão** (2026-07-26): a plataforma aceita-o e a app emite-o. Uma app na `2.0.0`
+> continua correta contra este servidor sem trocar uma linha, e uma app na `2.1.0` continua correta
+> contra um servidor anterior — que é o que "aditivo" quer dizer, e o [§11 E](#e-a-210--feita-dos-dois-lados)
+> diz como.
 >
 > Até aqui a linha temporal dizia *em que altura do período* caiu um toque e mais nada. Não dizia a
 > que horas o combate começou, a que horas se entrou no terceiro período, a que horas o tempo voltou
@@ -206,6 +224,11 @@ identidade natural — *este* resultado, *desta* submissão, *neste* assalto.
 > resultado que o árbitro registou antes de uma reconexão passa a aparecer como registado por outra
 > pessoa. É cosmético — a distinção existe para o ecrã de lista, não para decidir escritas —, mas
 > fica dito para não ser lido como bug.
+>
+> **E quer dizer *este dispositivo*, não *esta arbitragem*** (`2.2.0`). Com dois árbitros no mesmo
+> código, o assalto que o primeiro registou chega ao segundo com `scored_by_me: false`, que é
+> literalmente verdade e continua a ser o que o ecrã de lista quer saber. Quem precisa de saber quem
+> arbitrou o quê é o organizador, e isso lê-se no registo da poule, não aqui.
 
 ---
 
@@ -286,10 +309,16 @@ Em `429`, o cliente respeita `Retry-After` e duplica o intervalo até ao máximo
   - `scope: "poule"` — os assaltos dessa poule e a classificação dela. Mais nada.
   - `scope: "match"` — **um** combate de eliminatória, seja ele do quadro de uma poule ou do quadro
     de um torneio. Não alcança o combate da pista ao lado, nem a poule de onde os atletas vieram.
-- **Uma sessão por pista.** Um `POST /connect` bem-sucedido invalida o token anterior *dessa* poule
-  ou *desse* combate; o dispositivo anterior recebe `401 token_revoked` no pedido seguinte. Dois
-  árbitros em dois combates do mesmo quadro **não** se pisam — é para isso que o código desceu ao
-  combate.
+- **Tantas sessões quantos os dispositivos que lerem o código** (`2.2.0`). Um `POST /connect`
+  bem-sucedido **acrescenta** uma sessão em vez de substituir a anterior: uma poule atrasada é levada
+  a uma segunda pista por um segundo árbitro, com a folha e o código que já lá estavam, e tirar a
+  sessão ao primeiro era responder ao pavilhão com um erro. Dois árbitros em dois combates do mesmo
+  quadro continuam a não se pisar — é para isso que o código desceu ao combate na `2.0.0`.
+  - **Não há repartição, atribuição nem reserva.** Os esgrimistas estão fisicamente num sítio só, e
+    o que resta — a submissão em duplicado — está tratado desde a `1.0.0`: primeiro a submeter leva o
+    assalto, o segundo recebe `409 bout_already_scored` com o resultado atual.
+  - **O que corta acesso é rodar o código**, e corta-o a **todos** os dispositivos de uma vez. É o
+    preço de partilharem um código, e é o comportamento certo: quem roda quer cortar à poule inteira.
 - O servidor **invalida o token quando não há mais nada a fazer naquela pista**. A resposta do último
   `score` chega na mesma (201); é o pedido **seguinte** que recebe `401 poule_complete`.
   - Num combate: assim que o resultado é registado. A ronda seguinte é outro combate, com código
@@ -1237,7 +1266,7 @@ afinar a redação sem que isso seja uma alteração de contrato.
 | 410 | `competition_finished` | O PIN existe mas não há nada a arbitrar nessa pista | Mostra o `message` do servidor, que diz **qual** dos casos é e para onde ir — não é erro de digitação |
 | 429 | `pin_throttled` | Demasiadas tentativas | Bloqueia o campo até `Retry-After` |
 | 401 | `token_expired` | 60 min sem atividade | Volta ao ecrã de ligar |
-| 401 | `token_revoked` | Outro dispositivo ligou-se a esta pista | "Outro dispositivo assumiu esta pista" |
+| 401 | `token_revoked` | O código foi rodado na web (**`2.2.0`:** ligar-se outro dispositivo já não faz isto) | "O código desta pista foi renovado na plataforma. Peça o novo ao organizador" — texto corrigido na `2.2.1`: dizia "outro dispositivo assumiu esta pista", que passou a ser impossível. O caminho de saída, voltar a ligar, é o mesmo |
 | 401 | `poule_complete` | Nada mais a fazer aqui — combate arbitrado, ou poule disputada **e** fechada por um quadro | Ecrã de competição completa — **não é erro** |
 | 403 | `poule_scope_mismatch` | Token de outra pista, ou de âmbito errado (código de poule a pedir um combate) | Volta a ligar; sinaliza *bug* |
 | 404 | `not_found` | Assalto/poule/combate inexistente, ou de outra pista (ex.: atleta removido) | *Refetch* do que se tem |
@@ -1330,7 +1359,10 @@ passar a emitir o formato 2 em vez do 1.
 
 | Versão | Data | Alterações |
 |---|---|---|
-| `2.1.0` | 2026-07-26 | **MINOR, aditivo — um assalto passa a reconstituir-se, e não só a resumir-se.** A linha temporal da `1.5.0` dizia em que altura do período caiu um toque; não dizia a que horas o combate começou, a que horas se entrou no terceiro período, a que horas o tempo voltou a correr depois de um halt, nem a que horas se foi a morte súbita. **(1) Oito tipos de evento novos**, os marcos do combate: `bout_start`, `period_start`, `rest_start`, `rest_end`, `sudden_death_start`, `clock_start`, `clock_stop` e `bout_end` — a juntar ao `period_end`, que já existia. **(2) Quatro campos novos** em todos os eventos, todos opcionais: `at` (hora de parede ISO-8601 UTC, do relógio do dispositivo), `elapsed_ms` (desde o `bout_start`, contando paragens e descansos), `remaining_ms` (o que faltava da fase) e `phase` (`period` \| `rest` \| `sudden_death`). **(3) `score_a`/`score_b` passam a poder vir também no lote do `score`**, que até aqui só os aceitava em direto — as duas formas do evento passam a ser a mesma, menos o `seq`. **(4) O teto por assalto sobe de 200 para 300 eventos**, porque 200 era a conta dos toques e os marcos acrescentam ~85 a um combate de quadro. **(5) A definição do evento passou a viver num sítio só** — [Eventos do assalto](#eventos-do-assalto--o-vocabulário-partilhado) —, em vez de duplicada entre o `events` do `score` e o `POST .../events`, que era como as duas cópias podiam divergir. **Nada é obrigatório e nada entra no resultado:** uma app na `2.0.0` continua correta contra um servidor na `2.1.0`, e um servidor na `2.0.0` ignora estes campos como ignora qualquer outro que não conheça. **Especificado antes de implementado**, dos dois lados — ver [§11 E](#e-a-210--especificada-por-implementar). |
+| `2.2.0` | 2026-07-30 | **MINOR — um código segura tantos dispositivos quantos os que o lerem, e uma poule pode estar em duas pistas.** Nenhum campo muda de forma e **a app não muda uma linha**; o que muda é o comportamento por trás de dois pedidos que ela já fazia. Uma poule atrasada é levada a uma segunda pista por um segundo árbitro, com a folha e o código que já lá estavam — e a plataforma respondia a isso das duas piores maneiras. **(1) O `POST /connect` deixa de invalidar o token anterior**: as sessões acumulam-se no mesmo PIN em vez de se substituírem, e a linha "outro dispositivo ligou-se" desaparece da tabela do [§11 B](#b-como-o-401-sabe-qual-dos-três-é) — o `401 token_revoked` passa a querer dizer só uma coisa, que o código foi rodado. **(2) O `POST /bouts/{bout}/start` deixa de despromover os outros assaltos em curso**, portanto uma poule pode ter N assaltos `in_progress`; isto conserta de caminho um defeito que já existia sem segundo árbitro nenhum, em que o assalto do primeiro caía para `pending` e reaparecia na app dele como "por disputar" a meio de ser arbitrado. **(3) Não há repartição, atribuição nem reserva de assaltos**, e não é esquecimento: os esgrimistas estão fisicamente num sítio só, e a submissão em duplicado já estava tratada desde a `1.0.0` — primeiro a submeter leva o assalto, o segundo apanha `409` com o `current`, e o `Refused` fica no registo. **(4) Não há entidade "pista"**: um assalto identifica-se pelo número de sequência da folha, que é o que está impresso na que está pendurada na parede. **(5) O que fica pior:** rodar o código passa a expulsar todos os árbitros de uma vez, que é o comportamento certo para quem o roda. Do lado da web, o `now_fencing` e o `up_next` passaram a coleções e o `up_next` traz três, cada um a dizer se os seus esgrimistas estão livres. |
+| `2.2.1` | 2026-07-30 | **PATCH, redação — "a app não muda uma linha" era verdade sobre os campos, e não sobre o ecrã.** Nada mudou no que os dois lados trocam, e a app continua a pedir o mesmo e a receber o mesmo. O que a `2.2.0` retirou foi uma garantia que a app usava sem nunca a ter escrito: que uma poule tem **no máximo um** assalto `in_progress`. Com dois árbitros no mesmo código, o cartão do topo da lista — que **propõe uma ação** — podia apontar ao assalto da outra pista, com um "Retomar" que levava lá dentro; e o "Começar" desaparecia do ecrã do árbitro que ainda não tinha começado nada. (1) A [§11 F](#f-a-220-do-lado-da-app) regista o lado da app: memória local de qual é o assalto **deste** dispositivo — não há campo no contrato que o diga, e a §6 explica porquê —, o cartão do topo a segui-la, e um banner ao abrir um assalto que decorre noutra pista, informação e nunca proibição. (2) A coluna "o que a app mostra" do `401 token_revoked` no [§8](#8-catálogo-de-erros) deixa de dizer "outro dispositivo assumiu esta pista", que a `2.2.0` tornou impossível — era a meia-verdade que a linha anterior deixava para a `2.3.0`, e corrigi-la é uma linha de i18n do lado da app, não uma alteração de contrato. |
+| `2.1.1` | 2026-07-29 | **PATCH, redação — a app emite a `2.1.0`, e este documento passa a dizê-lo.** Nada mudou no que os dois lados trocam. (1) A [§11 E](#e-a-210--feita-dos-dois-lados) deixou de ser "servida pela plataforma; a app é que falta" e passou a ser o registo dos **dois** lados, com a lista do que a app fez — **E6** a **E12**: os tipos e o teto a 300, o carimbo dos quatro campos em **todos** os eventos, o cronómetro embrulhado de onde saem o `bout_start` e os `clock_start`/`clock_stop`, as transições de descanso e de morte súbita, o `bout_end` antes de o resultado ir para a fila, os marcos **sem** placar e o travão nos 300. (2) O aviso de topo e o cabeçalho da §11 deixam de dizer que a app está por chegar — a §11 dizia mesmo que a `2.1.0` "ainda não existe em nenhum dos dois lados", que já contradizia a §11 E ao lado. (3) A ligação da §10 para a §11 E estava partida desde a `2.1.0`: o título da secção mudou e a âncora ficou a apontar para o antigo. |
+| `2.1.0` | 2026-07-26 | **MINOR, aditivo — um assalto passa a reconstituir-se, e não só a resumir-se.** A linha temporal da `1.5.0` dizia em que altura do período caiu um toque; não dizia a que horas o combate começou, a que horas se entrou no terceiro período, a que horas o tempo voltou a correr depois de um halt, nem a que horas se foi a morte súbita. **(1) Oito tipos de evento novos**, os marcos do combate: `bout_start`, `period_start`, `rest_start`, `rest_end`, `sudden_death_start`, `clock_start`, `clock_stop` e `bout_end` — a juntar ao `period_end`, que já existia. **(2) Quatro campos novos** em todos os eventos, todos opcionais: `at` (hora de parede ISO-8601 UTC, do relógio do dispositivo), `elapsed_ms` (desde o `bout_start`, contando paragens e descansos), `remaining_ms` (o que faltava da fase) e `phase` (`period` \| `rest` \| `sudden_death`). **(3) `score_a`/`score_b` passam a poder vir também no lote do `score`**, que até aqui só os aceitava em direto — as duas formas do evento passam a ser a mesma, menos o `seq`. **(4) O teto por assalto sobe de 200 para 300 eventos**, porque 200 era a conta dos toques e os marcos acrescentam ~85 a um combate de quadro. **(5) A definição do evento passou a viver num sítio só** — [Eventos do assalto](#eventos-do-assalto--o-vocabulário-partilhado) —, em vez de duplicada entre o `events` do `score` e o `POST .../events`, que era como as duas cópias podiam divergir. **Nada é obrigatório e nada entra no resultado:** uma app na `2.0.0` continua correta contra um servidor na `2.1.0`, e um servidor na `2.0.0` ignora estes campos como ignora qualquer outro que não conheça. **Especificado antes de implementado**, dos dois lados — ver [§11 E](#e-a-210--feita-dos-dois-lados). |
 | `2.0.1` | 2026-07-25 | **PATCH, redação — a app migrou, e este documento passa a dizê-lo.** Nada mudou no que os dois lados trocam. (1) A [§11 C](#c-o-lado-da-app--feito) deixou de ser uma lista de trabalho por fazer e passou a ser o registo do que foi feito, com três pontos novos — **C9**, **C10** e **C11** — que a lista original não previa e que só apareceram ao implementá-la: o detalhe do combate precisou de *polling* próprio (era a lista do quadro que revalidava por ele, e é assim que um `ready: false` se destranca sozinho); a chave da fila de submissões passou a aceitar o `id` de um combate, porque um `MatchDetail` não tem `uuid`; e um resultado que fica em fila **só pode ser entregue pelo token da pista que o gerou**, que é uma consequência operacional de o código ter descido ao combate e que a app passou a dizer ao árbitro em vez de a esconder. (2) O aviso de topo e o cabeçalho da §11 deixam de dizer que a app tem de migrar. (3) A caixa da [§12](#12-levantamento-de-campo--a-app-ligada-ao-servidor-a-sério) regista que o `live.test.ts` foi refeito. (4) Fica escrito, no C7, que mostrar o `message` do `410` põe pt-PT numa interface em `en`, e que a saída limpa é um `reason` estável — alteração **MINOR**, quando fizer falta. |
 | `2.0.0` | 2026-07-25 | **MAJOR — o código deixou de ser da competição e passou a ser da pista.** Um quadro corre em várias pistas ao mesmo tempo; um código só para o quadro inteiro dava a cada árbitro todos os combates e, porque um código segura um dispositivo de cada vez, o segundo a ligar-se tirava a sessão ao primeiro. **(1) Cada combate de eliminatória tem o seu PIN**, e o `scope` da sessão passa a `poule` \| `match`. **(2) `scope: "tournament"` e o `TournamentSummary` desaparecem** — um torneio nunca foi arbitrável como um todo e agora não tem por onde. **(3) `GET /poules/{poule}/elimination` e `GET /tournaments/{tournament}/elimination` saem da API**: uma sessão vê um combate, não um quadro; o quadro desenha-se na web. **(4) O `connect` e o `session` devolvem `match`** (o `MatchDetail`, que é o detalhe do combate) no lugar de `tournament`, com `competition_name` novo a dizer em que prova o árbitro está. **(5) Um token de poule deixa de alcançar o quadro dessa poule.** **(6) `PouleSummary.elimination` passa a apontar o quadro *para onde os atletas foram*** — o da poule quando ela corre sozinha, o do torneio quando é uma pool — e é informativo, não navegável: era aqui que uma pool de torneio ficava `locked` com `elimination: null` e a app encalhava num ecrã sem saída. **(7) O `message` do `410 competition_finished` passa a dizer qual dos casos é e para onde ir.** **(8) `422 poule_locked` sai do `POST /elimination/{match}/start`.** **Sem `/api/v2`:** não há app instalada e o `/api/v1` nunca serviu produção, portanto não há versão antiga para coexistir; a regra da §1 vale para a próxima. |
 | `1.5.0` | 2026-07-25 | **MINOR, aditivo — a pista passa a ver-se enquanto está a ser arbitrada.** `POST /bouts/{bout}/events` e `POST /elimination/{match}/events`: a app envia o toque, o duplo, o cartão e a prioridade **no momento em que acontecem**, com um contador `seq` por assalto que é a idempotência toda. Até aqui a plataforma só sabia do assalto no fim, e uma poule a meio parecia uma poule que ninguém tinha começado; agora o placar sobe toque a toque no painel do organizador, na gaveta do assalto e na página pública do evento. **Nada disto é obrigatório e nada disto entra no resultado** — quem não enviar continua a funcionar exatamente como antes. Consequência: uma app que envie em direto tem o `events` do `score` **ignorado**, porque são os mesmos toques contados duas vezes. |
@@ -1349,8 +1381,13 @@ passar a emitir o formato 2 em vez do 1.
 
 **Levantado a 2026-07-25 contra o código da plataforma** (branch `test`). O servidor serve a `2.0.0`
 por inteiro e **a app consome-a** — o que mudou do lado dela está em
-[C](#c-o-lado-da-app--feito). A `2.1.0` foi escrita a 2026-07-26 e **ainda não existe em nenhum dos
-dois lados**: o que falta está em [E](#e-a-210--especificada-por-implementar).
+[C](#c-o-lado-da-app--feito). A `2.1.0` foi escrita a 2026-07-26 e **está feita dos dois lados** no
+mesmo dia: o registo de cada um está em [E](#e-a-210--feita-dos-dois-lados).
+
+A `2.2.0` foi implementada a 2026-07-30 e **é toda do lado da plataforma** no que os dois lados
+trocam — está em [A17](#a-o-que-a-plataforma-serve). A app pede o mesmo e recebe o mesmo; o que ela
+teve de fazer foi deixar de assumir que só há um assalto a decorrer por poule, e isso está em
+[F](#f-a-220-do-lado-da-app).
 
 ### A. O que a plataforma serve
 
@@ -1385,15 +1422,17 @@ Ponto a ponto, contra a lista de trabalho anterior:
 | A14 | **`POST .../events` nos dois quadros** (contrato `1.5.0`), com o contador `seq` por assalto como chave única e o `insertOrIgnore` que faz do reenvio um não-evento. O `events` do `score` desliga-se quando o assalto já recebeu eventos em direto. Do lado da web, o placar ao vivo entrou no painel do organizador, na gaveta do assalto — que passou a fazer *poll* — e na página pública do evento, por um `GET /event/{poole}/live` que **não** é do `/api/v1` e nunca serve o PIN |
 | A15 | **O código desceu ao combate** (contrato `2.0.0`). `elimination_matches.referee_pin` nova, `tournaments.referee_pin` largada com os tokens que dela vieram; `EliminationMatch` passou a ser *tokenable*, com a habilidade `match:{id}`; o `/connect` procura nas duas tabelas e o `scope` diz qual foi; o middleware prende um token de combate a esse combate e mais nenhum; as duas listas de quadro e o `TournamentSummary` foram **removidos**. Redesenhar um quadro apaga os códigos dele e larga os dispositivos agarrados. Do lado da web, os códigos passaram a viver **no cartão de cada combate** do quadro — seis dígitos, ponto verde quando há telemóvel agarrado, QR num clique —, e o painel de arbitragem do torneio desapareceu por não ter mais nada para mostrar |
 | A16 | **A poule deixou de encalhar.** `Poole::isFinishedForGood()` passou a ser "cartão disputado **e** fechado por um quadro", em vez de "cartão disputado e quadro decidido": o árbitro que acaba a poule fica com a sessão viva para ler a classificação, e é o quadro que a encerra. `PouleSummary.elimination` passou a olhar para o quadro do torneio quando a poule é uma pool dele — era aqui que uma pool fechada aparecia com `elimination: null` e a app ficava sem saída. E o `410` do `/connect` passou a dizer para onde ir |
+| A17 | **Dois árbitros na mesma poule** (contrato `2.2.0`). Duas remoções, e é tudo: `connectReferee()` deixou de apagar os tokens que já lá estavam, e `BoutScheduleService::start()` deixou de despromover os outros assaltos em curso. O segundo `start` conserta de caminho um defeito que já existia sem segundo árbitro nenhum — o assalto do primeiro caía para `pending` e reaparecia na app dele como "por disputar". `activeRefereeTokens()` nova a par da singular, e o painel do organizador passa a listar os N dispositivos. O `now_fencing` e o `up_next` das duas páginas web passaram a **coleções**: o `up_next` traz os três seguintes por sequência, cada um com um `busy` a dizer se algum dos seus esgrimistas está em pista — informação e nunca proibição, porque a ordem da folha é sugestão. **Nada disto toca na API da app**, que continua a pedir o mesmo e a receber o mesmo. Vale para os dois tipos de código: um combate de quadro também aceita um segundo dispositivo em vez de expulsar o primeiro, que é a resposta certa a uma bateria descarregada a meio |
 
 ### B. Como o `401` sabe qual dos três é
 
 O [§8](#8-catálogo-de-erros) exige distinguir `token_expired`, `token_revoked` e `poule_complete`, e
-um token apagado não consegue dizer qual dos três foi. A regra do servidor:
+um token apagado não consegue dizer qual dos três foi. A regra do servidor — com uma linha a menos
+desde a `2.2.0`, porque ligar-se outro dispositivo deixou de apagar seja o que for:
 
 | O que aconteceu ao token | O que o servidor faz | O que a app recebe |
 |---|---|---|
-| Outro dispositivo ligou-se, ou o PIN foi rodado | a linha é **apagada** | `401 token_revoked` |
+| O PIN foi rodado | as linhas são **apagadas**, todas | `401 token_revoked` |
 | A hora deslizante esgotou-se | a linha fica, com `expires_at` no passado | `401 token_expired` |
 | A pista ficou sem nada a fazer | a linha é **expirada no lugar**, não apagada | `401 poule_complete` |
 
@@ -1447,13 +1486,15 @@ contador `seq` por assalto. Era a **F7** da `app-arbitragem-client-spec.md` §14
 | `GET` dos eventos de um assalto | A app guarda a linha temporal em memória enquanto o assalto dura e mostra-a de lá. Entra como MINOR aditivo quando fizer falta ler o que já subiu — ver [Linha temporal por ler](#linha-temporal-por-ler--o-get-que-não-existe) |
 | Sincronização de relógio | O `at` da `2.1.0` é o relógio do telemóvel, e assume-se como tal. Corrigi-lo custaria uma troca de horas em todos os pedidos para acertar o desvio do dispositivo de quem está a arbitrar, e **nenhuma decisão do servidor depende do `at`** |
 
-### E. A `2.1.0` — servida pela plataforma; a app é que falta
+### E. A `2.1.0` — feita dos dois lados
 
-**Escrita e implementada no servidor a 2026-07-26.** O contrato foi primeiro, que é a regra da
-[§1](#como-usar-este-documento), e o servidor seguiu no mesmo dia.
+**Escrita e implementada a 2026-07-26.** O contrato foi primeiro, que é a regra da
+[§1](#como-usar-este-documento), e os dois lados seguiram no mesmo dia — o servidor primeiro, a app
+poucas horas depois.
 
-Enquanto a app não emitir nada disto, continua tudo correto: os campos e os tipos novos são todos
-opcionais, e uma app na `2.0.0` fala com este servidor exatamente como falava antes.
+Nada disto é obrigatório para nenhum dos dois: os campos e os tipos novos são todos opcionais, uma
+app na `2.0.0` fala com este servidor exatamente como falava antes, e uma app na `2.1.0` fala com um
+servidor anterior perdendo os marcos e mais nada — ver a caixa no fim desta secção.
 
 **Servidor — ✅ feito.** Registo em `docs/app-arbitragem-todo.md` §F.
 
@@ -1483,9 +1524,19 @@ opcionais, e uma app na `2.0.0` fala com este servidor exatamente como falava an
 > não são a mesma coisa para todos os *drivers*, e o conjunto é pequeno: o contrato limita um assalto
 > a 300 eventos e o índice único de `(subject_type, subject_id, sequence)` é o que a consulta lê.
 
-**App — em curso (F9).** Ver `docs/app-arbitragem-client-spec.md` §7.2. O motor do assalto
-(`useBoutEngine`) já conhecia todos estes momentos: as fases, as transições de período, o sorteio da
-prioridade e o cronómetro que arranca e pára. O que faltava era emiti-los.
+**App — ✅ feita (F9), a 2026-07-26.** Ver `docs/app-arbitragem-client-spec.md` §7.2. O motor do
+assalto (`useBoutEngine`) já conhecia todos estes momentos: as fases, as transições de período, o
+sorteio da prioridade e o cronómetro que arranca e pára. O que faltava era emiti-los.
+
+| # | O quê | Onde |
+|---|---|---|
+| E6 | Os oito `type` novos e o `EventPhase`, com o teto a **300** e o grupo B exportado à parte — é dele que o emissor se serve para o tirar do lote. As duas formas do evento colapsaram numa só, menos o `seq` | `src/api/types.ts` |
+| E7 | **Um carimbo comum a todos os eventos**, o grupo A incluído: `phase`, `remaining_ms`, `at` e o `elapsed_ms` medido pelo relógio **monotónico** — e **ausente** enquanto não houver `bout_start`, porque antes dele não há de onde contar | `src/bout/useBoutEngine.ts` |
+| E8 | **O cronómetro passou a ser embrulhado.** O `toggle` do motor emite `clock_start`/`clock_stop` e, no primeiro arranque do assalto, `bout_start` + `period_start`. O halt que precede cada toque e cada cartão passa por ele, e é daí que vem a maior parte dos `clock_stop`. O tempo a esgotar-se **não** emite `clock_stop`: já tem o `period_end` no mesmo instante | `src/bout/useBoutEngine.ts` |
+| E9 | `rest_start`, `rest_end` e `sudden_death_start` nas transições que já existiam — o `rest_end` com o período que **acabou**, e o `sudden_death_start` imediatamente antes do `priority`. Mudar de período à mão não emite nada: é uma correção de quem arbitra, não um acontecimento da pista | `src/bout/useBoutEngine.ts` |
+| E10 | `bout_end` com o placar final, **antes** de o resultado ir para a fila, e a cada confirmação — um `409` corrigido e submetido outra vez são dois fins de combate declarados. O cronómetro autónomo não o emite: não tem submissão | `src/bout/BoutScreen.tsx` |
+| E11 | **Os marcos vão sem placar** — só o `bout_end` leva o resultado, por definição deste documento. Consequência no ecrã: a folha do histórico deixou de desenhar o painel do placar nas linhas que não o trazem, porque um `–—–` em painel preto lia-se como um resultado a zero | `src/bout/EventSheet.tsx` |
+| E12 | **Travão nos 300.** Ao chegar ao teto o emissor pára de mandar, e o `log` do motor continua a crescer: a folha do histórico é do árbitro e não tem teto de servidor nenhum | `src/bout/useLiveEvents.ts` |
 
 > **A app degrada-se sozinha contra um servidor anterior, e isso apaga uma aresta deste documento.**
 > Estava escrito aqui e na `client-spec` que a F9 podia ser escrita antes da plataforma mas não
@@ -1501,6 +1552,27 @@ prioridade e o cronómetro que arranca e pára. O que faltava era emiti-los.
 > servidor, e nenhuma das duas partes precisa de saber em que versão a outra está. É o que "MINOR
 > aditivo" já prometia na [§1](#versionamento) para os *campos* — a regra de tolerância —, agora
 > valendo também para os *tipos*, que não a tinham porque um conjunto fechado é validado.
+
+### F. A `2.2.0` do lado da app
+
+**Nenhum campo, nenhum endpoint, nenhum `type`.** A app pede o mesmo e recebe o mesmo, e uma app na
+`2.1.1` fala com este servidor sem erro nenhum. O que a `2.2.0` retirou foi uma **garantia** que ela
+usava sem nunca a ter escrito: que uma poule tem no máximo um assalto `in_progress`, porque era o
+`start` que despromovia os outros. "O assalto a decorrer" e "o meu assalto" eram a mesma coisa, e
+deixaram de ser.
+
+| # | O quê | Onde |
+|---|---|---|
+| F1 | **A app passa a saber qual dos assaltos é o dela**, e sabe-o porque foi ela que chamou o `start` — não há campo aqui que o diga, e a [§6](#6-sessão-e-expiração) explica porquê: não há repartição, atribuição nem reserva. Guarda-o por pista e **em disco**, porque a app é morta em *background* a meio de uma poule e voltar sem memória é voltar ao comportamento errado. Uma pista com mais de 24 h é esquecida | `src/poule/refereeing.ts` |
+| F2 | **O cartão do topo da lista segue esse assalto**, em três ramos: o meu se estiver a decorrer; senão, se já arbitrei nesta poule, o primeiro por disputar; senão o primeiro a decorrer, que é o comportamento de sempre e o que acerta com um árbitro só. É o ramo do meio que conserta o "Retomar" sobre o assalto de outro — e o de cima que impede o cartão de saltar para lá a meio de uma arbitragem, por um *poll* de 10 s | `src/poule/status.ts` |
+| F3 | **A linha da lista não muda:** um assalto a decorrer diz que está a decorrer, seja de quem for. Para quem está na pista ao lado é a informação certa; o que a app não pode é **propor uma ação** sobre ele, e é só isso que o F2 corrige | — |
+| F4 | **Banner ao abrir um assalto que decorre noutra pista**, com o que o [§4](#4-idempotência-e-retry) já garante escrito à letra: quem submeter primeiro fica com o resultado. Informação e nunca proibição. **Só quando a app sabe** que o assalto não é dela: sem memória de ter arbitrado nesta poule, assume que é | `src/bout/BoutScreen.tsx` |
+| F5 | **A *copy* do `401 token_revoked` corrigida** — ver a [§8](#8-catálogo-de-erros). Dizia "outro dispositivo assumiu esta pista", que a `2.2.0` tornou impossível | `src/i18n/*.json` |
+
+> **Nada disto é observável do lado do servidor**, e por isso não houve ordem de entrega: a app
+> mudou depois da plataforma porque calhou, não porque tivesse de ser. Contra um servidor anterior à
+> `2.2.0` a app comporta-se exatamente como antes — nunca há dois assaltos a decorrer, a memória
+> aponta sempre para o único, e os três ramos devolvem o que a linha que substituíram devolvia.
 
 ---
 
