@@ -1,6 +1,6 @@
 import type { Bout, BoutStatus } from '@/api/types';
 
-import { boutStates, currentBout, onDeckBout } from './status';
+import { boutStates, currentBout, listOrder, onDeckBout } from './status';
 
 const bout = (sequence: number, status: BoutStatus): Bout => ({
   id: `b_${sequence}`,
@@ -70,6 +70,27 @@ describe('boutStates', () => {
 
     expect(states.filter((state) => state === 'up_next')).toHaveLength(0);
     expect(states.filter((state) => state === 'on_deck')).toHaveLength(1);
+  });
+});
+
+describe('listOrder', () => {
+  it('manda os já arbitrados para o fim', () => {
+    const bouts = [bout(1, 'done'), bout(2, 'in_progress'), bout(3, 'done'), bout(4, 'pending')];
+
+    expect(listOrder(bouts).map((b) => b.id)).toEqual(['b_2', 'b_4', 'b_1', 'b_3']);
+  });
+
+  it('não reordena dentro de cada bloco — a sequência do servidor manda', () => {
+    const bouts = [bout(1, 'done'), bout(2, 'pending'), bout(3, 'done'), bout(4, 'pending')];
+
+    expect(listOrder(bouts).map((b) => b.sequence)).toEqual([2, 4, 1, 3]);
+  });
+
+  it('não perde nem duplica assaltos', () => {
+    const bouts = [bout(1, 'done'), bout(2, 'pending')];
+
+    expect(listOrder(bouts)).toHaveLength(2);
+    expect(listOrder([])).toEqual([]);
   });
 });
 

@@ -82,7 +82,12 @@ export default function RootLayout() {
           screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.light } }}
         >
           <Stack.Screen name="index" />
-          <Stack.Screen name="connect" />
+          {/* Ligar nunca é um passo em frente: chega-se lá do arranque da app, ou de uma sessão que
+              acabou — sempre por `Redirect`/`replace`. A deslizada da direita é a gramática de
+              "entrei mais fundo", e à primeira abertura dava a ideia de que se tinha saltado um
+              ecrã. Como o `index` também é escuro, o fundido não se vê: sai do splash direto para o
+              formulário. */}
+          <Stack.Screen name="connect" options={{ animation: 'fade' }} />
           <Stack.Screen name="scan" />
           <Stack.Screen name="timer" />
           <Stack.Screen name="poule" />

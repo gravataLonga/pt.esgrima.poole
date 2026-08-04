@@ -12,6 +12,7 @@ import {
   boutStates,
   buildSheet,
   currentBout,
+  listOrder,
   onDeckBout,
   useStartedBoutId,
 } from '@/poule';
@@ -73,6 +74,10 @@ export default function PouleScreen() {
   // `304` devolve a mesma instância da lista, por isso isto não corre de 10 em 10 segundos.
   const sheet = useMemo(() => buildSheet(list), [list]);
   const states = useMemo(() => boutStates(list, startedId), [list, startedId]);
+
+  // A ordem do ecrã, que não é a do contrato: o que já tem resultado vai para o fim. Só a lista
+  // muda — a matriz e os estados acima continuam a ler a lista por `sequence`.
+  const listed = useMemo(() => listOrder(list), [list]);
 
   if (phase === 'disconnected') return <Redirect href="/connect" />;
   if (phase === 'complete') return <Redirect href="/complete" />;
@@ -192,7 +197,7 @@ export default function PouleScreen() {
           </Text>
 
           <FlatList
-            data={list}
+            data={listed}
             keyExtractor={(bout) => bout.id}
             contentContainerStyle={styles.list}
             showsVerticalScrollIndicator={false}

@@ -326,7 +326,12 @@ múltipla.
 **2. Lista de assaltos** (`/poule`)
 - Cabeçalho: nome da poule, torneio, progresso `4/15`, indicador de sessão (tempo restante), estado
   de rede.
-- Lista ordenada por `sequence`, cada linha: `#seq`, `Nº nome (clube)` vs `Nº nome (clube)`, estado.
+- Lista ordenada por `sequence`, **com os `done` no fim**: a meio de uma poule os assaltos já
+  arbitrados são os primeiros do contrato e empurravam o que falta para fora do ecrã. Continuam
+  todos lá, e dentro de cada bloco a `sequence` manda — o que muda é só o que se vê primeiro. A
+  ordem do contrato é que continua a valer para *quem é o próximo*: o cartão do topo e os estados
+  derivam da lista como o servidor a deu.
+- Cada linha: `#seq`, `Nº nome (clube)` vs `Nº nome (clube)`, estado.
   - `pending` — neutro, tocável.
   - `in_progress` — destacado. **Pode não ser o desta app** (contrato `2.2.0`): uma poule atrasada é
     levada a uma segunda pista por um segundo árbitro, com o mesmo código, e o assalto que ele está a

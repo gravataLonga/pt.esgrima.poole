@@ -56,6 +56,27 @@ function firstPending(bouts: Bout[]): Bout | undefined {
 }
 
 /**
+ * A ordem em que a **lista** se mostra: primeiro o que falta arbitrar, no fim o que já tem
+ * resultado. Dentro de cada bloco a ordem do servidor mantém-se — é a `sequence`, e é ela que diz
+ * qual se chama a seguir.
+ *
+ * A meio de uma poule os assaltos feitos são os primeiros da lista, e empurravam o que falta para
+ * fora do ecrã: o árbitro abria o telemóvel e tinha de percorrer o que já não lhe interessa até
+ * chegar ao que tem para fazer. Os `done` continuam alcançáveis — só deixam de ser o que se vê
+ * primeiro.
+ *
+ * **Não serve para calcular estados**: `currentBout`, `onDeckBout` e `boutStates` continuam a
+ * receber a lista como o servidor a deu, porque "o primeiro por disputar" é por `sequence` e não
+ * por posição no ecrã.
+ */
+export function listOrder(bouts: Bout[]): Bout[] {
+  return [
+    ...bouts.filter((bout) => bout.status !== 'done'),
+    ...bouts.filter((bout) => bout.status === 'done'),
+  ];
+}
+
+/**
  * Estado de cada assalto por `id`. Calculado de uma vez para a lista inteira porque `on_deck`
  * depende dos outros assaltos — decidi-lo linha a linha daria vários "a preparar".
  *
