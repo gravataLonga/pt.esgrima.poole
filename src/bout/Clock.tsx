@@ -41,6 +41,11 @@ export interface ClockProps {
   /** O passo seguinte do assalto, ou `null` se não houver. */
   action: ClockAction | null;
   onAction: () => void;
+  /**
+   * Abrir a folha da prioridade — sortear, ou marcar a que o aparelho da pista tirou. É o mesmo
+   * caminho antes e depois de ela existir: primeiro atribui, depois corrige.
+   */
+  onPriority: () => void;
   onNudge: (deltaMs: number) => void;
   onEditTime: () => void;
   /** Entrar em descanso a meio de um período. `null` onde não há intervalo que valha. */
@@ -67,6 +72,7 @@ export function Clock({
   passivityMs,
   action,
   onAction,
+  onPriority,
   onNudge,
   onEditTime,
   onStartRest = null,
@@ -94,6 +100,9 @@ export function Clock({
         : colors.green;
   const barColor = expired ? colors.danger : critical ? colors.warning : colors.green;
   const restButton = onStartRest !== null && action?.kind !== 'rest';
+  // Na morte súbita a prioridade já está atribuída e o passo seguinte é nenhum — o que sobra por
+  // fazer é trocá-la de lado, quando a app sorteou e o aparelho da pista tinha decidido antes.
+  const changePriority = phase === 'priority';
 
   return (
     <View style={styles.block}>
@@ -179,7 +188,7 @@ export function Clock({
 
       {/* O descanso pedido pelo árbitro desaparece no instante em que o passo seguinte já é ele —
           dois botões com a mesma palavra, lado a lado, era escolher entre o mesmo e o mesmo. */}
-      {restButton || action ? (
+      {restButton || action || changePriority ? (
         <View style={styles.actionRow}>
           {restButton ? (
             <View style={styles.action}>
@@ -191,9 +200,25 @@ export function Clock({
               />
             </View>
           ) : null}
+          {changePriority ? (
+            <View style={styles.action}>
+              <Button
+                label={t('bout.priority.change')}
+                variant="secondary"
+                size="compact"
+                onPress={onPriority}
+              />
+            </View>
+          ) : null}
           {action ? (
             <View style={styles.action}>
-              <Button label={actionLabel(action, t)} size="compact" onPress={onAction} />
+              {/* O sorteio não é um passo que se dê às cegas: o botão abre a folha, onde ele
+                  divide o lugar com a prioridade que veio do aparelho da pista. */}
+              <Button
+                label={actionLabel(action, t)}
+                size="compact"
+                onPress={action.kind === 'drawPriority' ? onPriority : onAction}
+              />
             </View>
           ) : null}
         </View>

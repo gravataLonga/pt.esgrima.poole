@@ -8,6 +8,7 @@ import {
   BoutInfo,
   Clock,
   EventSheet,
+  PrioritySheet,
   ScoreBoard,
   TimeSheet,
   boutTiming,
@@ -58,6 +59,7 @@ export default function TimerScreen() {
 
   const [timeSheetOpen, setTimeSheetOpen] = useState(false);
   const [eventsOpen, setEventsOpen] = useState(false);
+  const [priorityOpen, setPriorityOpen] = useState(false);
   // O tempo com que a folha de acerto abre, fotografado no toque. Ler `timer.remainingMs` a cada
   // render remontava os campos dez vezes por segundo com o cronómetro a correr.
   const [timeSnapshotMs, setTimeSnapshotMs] = useState(0);
@@ -120,6 +122,7 @@ export default function TimerScreen() {
       passivityMs={engine.passivityMs}
       action={engine.action}
       onAction={engine.onAction}
+      onPriority={() => setPriorityOpen(true)}
       onNudge={timer.adjust}
       onEditTime={() => {
         setTimeSnapshotMs(timer.remainingMs);
@@ -218,6 +221,22 @@ export default function TimerScreen() {
           </View>
         </>
       )}
+
+      <PrioritySheet
+        visible={priorityOpen}
+        current={rules.priority}
+        // Sem atletas, os lados são as cores — e uma cor não tem clube nem apelido.
+        fencerOf={(side) => ({ name: sides[side].label, club: null })}
+        onDraw={() => {
+          setPriorityOpen(false);
+          engine.priorityDraw.start();
+        }}
+        onSet={(side) => {
+          setPriorityOpen(false);
+          engine.setPriority(side);
+        }}
+        onClose={() => setPriorityOpen(false)}
+      />
 
       <EventSheet
         visible={eventsOpen}

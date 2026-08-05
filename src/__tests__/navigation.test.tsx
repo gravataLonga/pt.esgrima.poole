@@ -57,6 +57,26 @@ describe('ligar', () => {
     expect(useSessionStore.getState().phase).toBe('disconnected');
   });
 
+  it('cola um código com espaços e enche as seis casas', async () => {
+    const router = renderRouter('./app', { initialUrl: '/connect' });
+    await router;
+    await screen.findByText('Connect to your piste');
+
+    // Quem copia o código de uma mensagem traz o que lá estiver à volta. O corte tem de contar
+    // dígitos e não caracteres: um `maxLength` de 6 é o sistema a cortar a colagem aos seis
+    // **caracteres** antes de alguém lhe tirar o que não é dígito — e o que sobra são quatro
+    // dígitos e um botão que não deixa ligar. Esse corte é nativo e não acontece aqui, por isso
+    // o `maxLength` verifica-se à parte: o `changeText` entrega sempre o texto inteiro.
+    const field = screen.getByLabelText('PIN');
+    expect(field.props.maxLength).toBeUndefined();
+
+    await fireEvent.changeText(field, 'PIN 111 111');
+    await fireEvent.press(screen.getByText('Connect'));
+
+    await screen.findByText('Poule 3 — Sabre Masculino');
+    expect(router.getPathname()).toBe('/poule');
+  });
+
   it('não deixa ligar com o PIN incompleto', async () => {
     await renderRouter('./app', { initialUrl: '/connect' });
     await screen.findByText('Connect to your piste');

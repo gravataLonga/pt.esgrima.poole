@@ -121,9 +121,15 @@
     },
     "priority": {
       "draw": "Sortear prioridade",
+      "change": "Trocar prioridade",
+      "title": "Prioridade",
+      "subtitle": "Um minuto de morte súbita: ganha quem tem a prioridade se ninguém tocar.",
+      "held": "A prioridade é de {{name}}. Passa-a ao outro se o aparelho da pista decidiu de outra maneira.",
+      "random": "Sortear ao acaso",
+      "fromApparatus": "Ou, se o aparelho da pista já a tirou, marca quem ficou com ela:",
+      "assign": "Prioridade para {{name}}",
       "badge": "Prioridade",
-      "badgeLabel": "{{name}} tem prioridade",
-      "decidingTouch": "Prioridade a {{name}} — regista o toque decisivo."
+      "badgeLabel": "{{name}} tem prioridade"
     },
     "passivity": {
       "tag": "P",

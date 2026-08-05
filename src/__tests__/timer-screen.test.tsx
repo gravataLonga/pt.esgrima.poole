@@ -127,6 +127,30 @@ describe('as regras deste assalto', () => {
   });
 });
 
+/**
+ * A folha da prioridade é a mesma dos dois ecrãs, e está coberta em `bout-screen.test.tsx`. O que
+ * aqui se verifica é a ligação: sem ela, o botão do sorteio ficava inerte neste ecrã.
+ */
+describe('a prioridade sem atletas', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  it('marca à mão a prioridade que o aparelho da pista tirou, e os lados são as cores', async () => {
+    await open();
+
+    await fireEvent.press(screen.getByLabelText('Timer'));
+    await act(async () => {
+      jest.advanceTimersByTime(181_000);
+    });
+
+    await fireEvent.press(screen.getByText('Draw priority'));
+    await fireEvent.press(screen.getByLabelText('Priority to Red'));
+
+    expect(screen.getByLabelText('Red has priority')).toBeTruthy();
+    expect(screen.getByLabelText('01:00')).toBeTruthy();
+  });
+});
+
 describe('sem para onde submeter', () => {
   it('não há botão de submeter — há um assalto novo', async () => {
     await open();

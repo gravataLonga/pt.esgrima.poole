@@ -78,7 +78,16 @@ export interface BoutEngine {
   log: BoutLogEntry[];
   /** O passo seguinte do assalto, ou `null` se não houver. */
   action: ClockAction | null;
+  /**
+   * O passo seguinte, feito. **A prioridade fica de fora**: essa tem duas respostas — sortear ou
+   * marcar à mão — e quem escolhe entre elas é a folha da prioridade.
+   */
   onAction: () => void;
+  /**
+   * Dar a prioridade a um atleta sem sorteio, ou passá-la ao outro depois de atribuída. É como
+   * entra na app a prioridade que o aparelho da pista tirou.
+   */
+  setPriority: (side: Side) => void;
   /** Entrar em descanso por decisão do árbitro. `null` quando esta fase não o admite. */
   startRest: (() => void) | null;
   /** Mudar de período à mão, para trás ou para a frente. `null` num assalto de um período só. */
@@ -257,6 +266,37 @@ export function useBoutEngine({
   const priorityDraw = usePriorityDraw(onPrioritySettled);
 
   /**
+   * A prioridade dita por quem arbitra, sem passar pelo sorteio da app.
+   *
+   * Muitos aparelhos de pista tiram a prioridade eles próprios: quando isso acontece, o resultado já
+   * existe antes de a app ser tocada, e sortear outra vez seria inventar uma segunda prioridade para
+   * o mesmo assalto. Serve também de correção — a mesma pergunta, feita depois: passa a marca ao
+   * outro atleta sem recomeçar a morte súbita, que já vai a meio.
+   *
+   * A linha temporal distingue os dois casos sozinha: o primeiro leva o `sudden_death_start` à
+   * frente, o segundo é só mais um `priority` — e quem a leia vê a prioridade a mudar de lado, com
+   * o tempo em que mudou.
+   */
+  const setPriority = (side: Side) => {
+    if (rules.priority === null) {
+      onPrioritySettled(side);
+      return;
+    }
+
+    if (rules.priority === side) return;
+
+    dispatch({ type: 'drawPriority', side });
+    emit({
+      type: 'priority',
+      side,
+      period: eventPeriod,
+      at_ms: elapsedMs(),
+      score_a: rules.a,
+      score_b: rules.b,
+    });
+  };
+
+  /**
    * O cronómetro com os marcos por cima dele — é este `toggle` que o ecrã carrega, e o do
    * `useTimer` fica por baixo, intocado.
    *
@@ -347,12 +387,11 @@ export function useBoutEngine({
 
       setResting(false);
       setPeriod(action.period);
-      return;
     }
 
-    // A piscadela mostra o sorteio a acontecer, como nos aparelhos da FIE. A marca fixa-se no
-    // atleta sorteado quando ela pára — daí não haver aqui nenhum aviso escrito.
-    priorityDraw.start();
+    // A prioridade **não** se resolve aqui. O botão dela abre uma folha, porque há duas respostas à
+    // mesma pergunta — sortear (`priorityDraw.start`) ou marcar quem já a tirou no aparelho da pista
+    // (`setPriority`) — e escolher entre as duas é do ecrã, não do motor.
   };
 
   /**
@@ -476,6 +515,7 @@ export function useBoutEngine({
     log,
     action,
     onAction,
+    setPriority,
     startRest,
     goToPeriod,
     setScore,

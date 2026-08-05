@@ -121,9 +121,15 @@
     },
     "priority": {
       "draw": "Draw priority",
+      "change": "Change priority",
+      "title": "Priority",
+      "subtitle": "One minute of sudden death: whoever holds priority wins if nobody scores.",
+      "held": "{{name}} has priority. Hand it over if the piste apparatus decided otherwise.",
+      "random": "Draw at random",
+      "fromApparatus": "Or, if the piste apparatus already drew it, mark who got it:",
+      "assign": "Priority to {{name}}",
       "badge": "Priority",
-      "badgeLabel": "{{name}} has priority",
-      "decidingTouch": "Priority to {{name}} — record the deciding touch."
+      "badgeLabel": "{{name}} has priority"
     },
     "passivity": {
       "tag": "P",

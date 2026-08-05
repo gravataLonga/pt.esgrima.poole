@@ -457,9 +457,15 @@ describe('prioridade e morte súbita', () => {
     expect(screen.queryByText('Draw priority')).toBeNull();
   });
 
+  /** Abre a folha da prioridade e manda sortear. */
+  const startDraw = async () => {
+    await fireEvent.press(screen.getByText('Draw priority'));
+    await fireEvent.press(screen.getByText('Draw at random'));
+  };
+
   /** Deixa a piscadela do sorteio correr até ao fim. */
   const finishDraw = async () => {
-    await fireEvent.press(screen.getByText('Draw priority'));
+    await startDraw();
     await act(async () => {
       jest.advanceTimersByTime(4000);
     });
@@ -468,7 +474,7 @@ describe('prioridade e morte súbita', () => {
   it('pisca entre os dois atletas antes de fixar a marca', async () => {
     await runOutOfLastPeriod();
 
-    await fireEvent.press(screen.getByText('Draw priority'));
+    await startDraw();
     await act(async () => {
       jest.advanceTimersByTime(200);
     });
@@ -483,16 +489,54 @@ describe('prioridade e morte súbita', () => {
     await finishDraw();
 
     expect(screen.getByLabelText('01:00')).toBeTruthy();
-    // A marca fica num atleta só — é o que substitui o aviso escrito.
-    expect(screen.getAllByText('Priority')).toHaveLength(1);
+    // A marca fica num atleta só — é ela que diz de quem é a prioridade, sem aviso escrito nenhum.
+    expect(screen.getAllByLabelText(/has priority/)).toHaveLength(1);
   });
 
-  it('diz em uma linha o que falta para poder submeter', async () => {
+  it('o empate da morte súbita não se submete: falta o toque que a decide', async () => {
     await runOutOfLastPeriod();
     await finishDraw();
 
-    expect(screen.getByText(/record the deciding touch/)).toBeTruthy();
-    expect(screen.queryByText(/No draws in poules/)).toBeNull();
+    // A prioridade decide quem ganha, mas a plataforma recusa `a === b` (contrato §7): o resultado
+    // 0–0 que está nos dois números grandes é o que mantém o botão apagado.
+    expect(screen.getByText('Submit result')).toBeDisabled();
+  });
+
+  /*
+   * A prioridade tirada no aparelho da pista. Aqui ela já existe antes de a app ser tocada, e o que
+   * falta é escrevê-la — sortear outra vez era inventar uma segunda prioridade para o mesmo assalto.
+   */
+  it('marca à mão quem ficou com a prioridade, sem sorteio', async () => {
+    await runOutOfLastPeriod();
+
+    await fireEvent.press(screen.getByText('Draw priority'));
+
+    // Os atletas escrevem-se como nas tabelas — `Apelido, Nome` —, com o clube por baixo: numa
+    // poule com dois apelidos iguais é ele que diz a qual dos dois se está a dar a prioridade.
+    expect(screen.getByText('Rocha, Tiago')).toBeTruthy();
+    // Duas vezes: o da coluna, por trás, e o da folha.
+    expect(screen.getAllByText('CE Espinho')).toHaveLength(2);
+
+    await fireEvent.press(screen.getByLabelText('Priority to Tiago Rocha'));
+
+    // Sem piscadela nenhuma pelo meio: a morte súbita abre no toque.
+    expect(screen.getByLabelText('Tiago Rocha has priority')).toBeTruthy();
+    expect(screen.getByLabelText('01:00')).toBeTruthy();
+  });
+
+  it('passa a prioridade ao outro atleta depois de atribuída', async () => {
+    await runOutOfLastPeriod();
+
+    await fireEvent.press(screen.getByText('Draw priority'));
+    await fireEvent.press(screen.getByLabelText('Priority to Marta Lopes'));
+
+    await fireEvent.press(screen.getByText('Change priority'));
+    await fireEvent.press(screen.getByLabelText('Priority to Tiago Rocha'));
+
+    expect(screen.getByLabelText('Tiago Rocha has priority')).toBeTruthy();
+    expect(screen.queryByLabelText('Marta Lopes has priority')).toBeNull();
+    // A troca não recomeça a morte súbita — o minuto continua onde ia.
+    expect(screen.queryByText('Draw priority')).toBeNull();
   });
 });
 
@@ -573,6 +617,7 @@ describe('a pista ao vivo', () => {
     });
 
     await fireEvent.press(screen.getByText('Draw priority'));
+    await fireEvent.press(screen.getByText('Draw at random'));
     await act(async () => {
       jest.advanceTimersByTime(4000);
     });
@@ -601,6 +646,36 @@ describe('a pista ao vivo', () => {
 
     // O `at` é hora de parede do dispositivo, e é o que responde a "a que horas começou".
     expect(eventsOfBout()[0]?.at).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/);
+
+    jest.useRealTimers();
+  });
+
+  it('a prioridade marcada à mão sobe como a sorteada, e a troca é só mais uma linha', async () => {
+    jest.useFakeTimers();
+    withPoule({ duration_seconds: 1, periods: 1 });
+    await open();
+
+    await fireEvent.press(screen.getByLabelText('Timer'));
+    await act(async () => {
+      jest.advanceTimersByTime(1500);
+    });
+
+    await fireEvent.press(screen.getByText('Draw priority'));
+    await fireEvent.press(screen.getByLabelText('Priority to Marta Lopes'));
+
+    await fireEvent.press(screen.getByText('Change priority'));
+    await fireEvent.press(screen.getByLabelText('Priority to Tiago Rocha'));
+
+    /*
+     * Quem lê a linha temporal não tem de saber de onde veio a prioridade — o vocabulário é o mesmo
+     * do sorteio. O que a leitura tem de distinguir é a primeira da segunda: a morte súbita abre uma
+     * vez, e a troca é uma prioridade nova sobre a que já lá estava.
+     */
+    expect(eventsOfBout().slice(-3)).toMatchObject([
+      { type: 'sudden_death_start', period: 2, phase: 'sudden_death', remaining_ms: 60_000 },
+      { type: 'priority', side: 'a', period: 2, at_ms: 0, phase: 'sudden_death' },
+      { type: 'priority', side: 'b', period: 2, phase: 'sudden_death' },
+    ]);
 
     jest.useRealTimers();
   });

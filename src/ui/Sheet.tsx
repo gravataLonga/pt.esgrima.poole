@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from './Text';
@@ -39,7 +39,15 @@ export function Sheet({ visible, title, subtitle, onClose, children, actions }: 
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <View style={styles.overlay}>
+      {/* A folha está colada ao fundo da janela — é exatamente onde o teclado abre. Numa folha com
+          campos (acertar o tempo) o teclado subia por cima dos campos e dos botões, e escrevia-se
+          às cegas. Aqui o `keyboardVerticalOffset` é zero por construção: a folha vive num `Modal`
+          com `statusBarTranslucent`, por isso o topo desta vista já é o topo da janela e não há
+          nada acima dela que falte à conta. */}
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         {/* Tocar fora fecha. Sem rótulo próprio: o VoiceOver navega pelo conteúdo da folha, e um
             alvo que ocupa o ecrã inteiro só estorvaria essa navegação. */}
         <Pressable
@@ -65,7 +73,7 @@ export function Sheet({ visible, title, subtitle, onClose, children, actions }: 
 
           <View style={styles.actions}>{actions}</View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

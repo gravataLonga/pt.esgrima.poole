@@ -23,19 +23,13 @@ import {
 import { BoutInfo } from './BoutInfo';
 import { Clock } from './Clock';
 import { EventSheet } from './EventSheet';
+import { PrioritySheet } from './PrioritySheet';
 import { ScoreBoard } from './ScoreBoard';
 import type { ScoreColumnProps } from './ScoreColumn';
 import { TimeSheet } from './TimeSheet';
 import { useAllowLandscape, useIsLandscape } from './orientation';
 import type { BoutTiming } from './phase';
-import {
-  canSubmit,
-  cardCount,
-  needsDecidingTouch,
-  winner,
-  type CardKind,
-  type Side,
-} from './rules';
+import { canSubmit, cardCount, winner, type CardKind, type Side } from './rules';
 import { useBoutEngine } from './useBoutEngine';
 import { useLiveEvents, type LiveEventSender } from './useLiveEvents';
 
@@ -117,7 +111,7 @@ export interface BoutScreenProps {
   onFinished?: (result: RecordedScore) => void;
 }
 
-type SheetKind = 'none' | 'time' | 'submit' | 'conflict' | 'events';
+type SheetKind = 'none' | 'time' | 'submit' | 'conflict' | 'events' | 'priority';
 
 /**
  * Carregar, falhar, ou arbitrar. A arbitragem em si vive num componente à parte e **só monta com
@@ -326,7 +320,6 @@ function Refereeing({
   const target = assignment.target;
   const timing = assignment.timing;
   const submittable = canSubmit(rules) && !assignment.locked;
-  const deciding = needsDecidingTouch(rules);
   const decided = winner(rules);
 
   const clock = (
@@ -339,6 +332,7 @@ function Refereeing({
       passivityMs={engine.passivityMs}
       action={engine.action}
       onAction={engine.onAction}
+      onPriority={() => setSheet('priority')}
       onNudge={timer.adjust}
       onEditTime={() => {
         setTimeSnapshotMs(timer.remainingMs);
@@ -382,8 +376,8 @@ function Refereeing({
       variant="panel"
       size="compact"
       onPress={() => setSheet('submit')}
-      // Desativado chega: o resultado empatado está nos dois números grandes, logo ali por cima.
-      // Quando a prioridade entra em jogo, o banner explica o que falta.
+      // Desativado chega: o resultado empatado está nos dois números grandes, logo ali por cima —
+      // também na morte súbita, onde o que falta é o toque que a decide.
       disabled={!submittable}
     />
   );
@@ -452,16 +446,6 @@ function Refereeing({
         </View>
       ) : null}
 
-      {deciding && decided ? (
-        <View style={styles.banner}>
-          <Banner
-            tone="warning"
-            compact={landscape}
-            message={t('bout.priority.decidingTouch', { name: nameOf(decided) })}
-          />
-        </View>
-      ) : null}
-
       {landscape ? (
         <View style={styles.landscape}>
           <View style={styles.landscapeColumn}>
@@ -494,6 +478,24 @@ function Refereeing({
         log={engine.log}
         timing={timing}
         nameOf={nameOf}
+        onClose={() => setSheet('none')}
+      />
+
+      <PrioritySheet
+        visible={sheet === 'priority'}
+        current={rules.priority}
+        fencerOf={(side) => {
+          const fencer = side === 'a' ? assignment.fencerA : assignment.fencerB;
+          return { name: fencer?.name ?? t('bout.unknownFencer'), club: fencer?.club ?? null };
+        }}
+        onDraw={() => {
+          setSheet('none');
+          engine.priorityDraw.start();
+        }}
+        onSet={(side) => {
+          setSheet('none');
+          engine.setPriority(side);
+        }}
         onClose={() => setSheet('none')}
       />
 

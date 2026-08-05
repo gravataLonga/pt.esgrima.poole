@@ -3,6 +3,7 @@ export type { BoutAssignment, RecordedScore } from './BoutScreen';
 export { Clock, NUDGE_MS } from './Clock';
 export { BoutInfo } from './BoutInfo';
 export { EventSheet } from './EventSheet';
+export { PrioritySheet } from './PrioritySheet';
 export { ScoreBoard } from './ScoreBoard';
 export { ScoreHalf, ScoreTray } from './ScoreColumn';
 export type { ScoreColumnProps } from './ScoreColumn';
