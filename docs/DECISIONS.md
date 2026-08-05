@@ -186,6 +186,29 @@ cortado.
 **Regra derivada:** um controlo de entrada desenhado de raiz tem de mostrar o estado de foco por si.
 Vale para o PIN e para qualquer campo que venha a substituir um nativo.
 
+**Atualização (2026-08-05) — o campo invisível cobra outros dois preços.** O `autoFocus` já tinha
+caído entretanto (a câmara passou a ser o caminho principal e o teclado subia sozinho a tapá-la), e
+com o campo tocado à mão apareceram duas avarias que a decisão original não previu.
+
+*Colar o PIN não aparecia.* O campo estava invisível por `opacity: 0`, e alfa zero não é invisível
+para o UIKit — é não estar cá: a vista deixa de ser alvo de toque e deixa de servir de âncora ao
+menu de edição. A manutenção longa nunca lhe chegava, caía no `Pressable` de baixo, que só sabe dar
+foco, e o "Colar" não existia. Quem recebe o código por mensagem e não tem QR à frente ficava sem
+caminho nenhum. Passou a ser invisível pela **cor da letra** (`color: 'transparent'`), com
+`selectionColor` transparente a tapar o cursor nativo — e não `caretHidden`, que zera o retângulo do
+cursor e é a esse retângulo que o menu se agarra para abrir.
+
+*O botão "Ligar" ficava com uma fatia por baixo do numpad.* Não era a conta: medida no Simulator, a
+geometria dava certa (alvo 55 pt, 145 pt de folga para rolar) e o `scrollTo` simplesmente não
+acontecia. Disparado no meio da avalanche de layout do teclado, o comando chega a um `UIScrollView`
+que ainda está a assentar e perde-se — e nada voltava a tentar. Quem manda rolar passou a ser o
+`keyboardDidShow`, que chega com a animação acabada; as medidas continuam a vir dos `onLayout`, que
+é onde a disposição já é final. Do evento do teclado aproveita-se só o instante.
+
+**Regra derivada:** posicionar por medida é uma coisa, mandar rolar é outra, e o momento certo de
+cada uma não é o mesmo. Uma medida certa entregue cedo demais ao nativo não deixa rasto nenhum de
+erro — parece uma conta errada, e não é.
+
 ---
 
 ## ADR-005 — `app/index.tsx` redireciona para `/connect`

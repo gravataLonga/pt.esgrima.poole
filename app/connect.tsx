@@ -1,8 +1,9 @@
 import { router } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -13,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useConnect } from '@/session/useConnect';
 import { useSessionStore } from '@/session/store';
@@ -35,6 +37,8 @@ export default function ConnectScreen() {
   // isto é o `defaultBaseUrl`, que é produção.
   const baseUrl = useSessionStore((s) => s.baseUrl);
 
+  const insets = useSafeAreaInsets();
+
   const [pin, setPin] = useState('');
   const [focused, setFocused] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -42,10 +46,68 @@ export default function ConnectScreen() {
   /**
    * O campo real é invisível e está por cima das casas. Contar com o toque a cair-lhe em cima
    * sozinho é frágil — basta uma camada pelo meio para o alvo desaparecer e o ecrã ficar com ar de
-   * avariado, sem teclado e sem explicação. O `Pressable` à volta torna o alvo explícito e pede o
+   * avariado, sem teclado e sem explicação. O `Pressable` por baixo apanha o que escape e pede o
    * foco à mão.
    */
   const input = useRef<TextInput>(null);
+
+  /**
+   * O teclado numérico tapa o terço de baixo do ecrã. O `KeyboardAvoidingView` encolhe a área
+   * visível, mas encolher não é mostrar: o campo e o botão ficam abaixo do fundo do `ScrollView` e
+   * o árbitro escreve às cegas, ou julga que a app não reage. Quando o teclado sobe, o grupo vem
+   * ter com ele.
+   *
+   * As posições saem dos `onLayout` e não de medir vistas nativas. Medir ao `keyboardDidShow`
+   * apanhava a animação do `KeyboardAvoidingView` a meio — a janela ainda não tinha encolhido
+   * toda, a conta dava a menos e o botão ficava meio tapado. O `onLayout` chega com a disposição
+   * final, e o alvo é absoluto (distância desde o topo do conteúdo), por isso repetir a conta a
+   * cada evento converge em vez de somar saltos.
+   */
+  const scroll = useRef<ScrollView>(null);
+  const formTop = useRef(0);
+  const groupEnd = useRef(0);
+  const viewportHeight = useRef(0);
+
+  /**
+   * Quem manda rolar é o `keyboardDidShow`, e não o `onLayout` que trouxe as medidas.
+   *
+   * Medido no Simulator: com o teclado a subir, a conta dá certa (alvo 55 pt, 145 pt de folga para
+   * rolar) e o `scrollTo` **não acontece** — chamado no meio da avalanche de layout, o comando
+   * chega a um `UIScrollView` que ainda está a assentar e perde-se. Não havia erro nenhum na
+   * geometria; era só cedo demais, e depois disso nada voltava a tentar. O `keyboardDidShow` chega
+   * com a animação acabada, e aí o mesmo `scrollTo` pega à primeira.
+   *
+   * Note-se a divisão de trabalho: as medidas continuam a vir do `onLayout`, pelo motivo do bloco
+   * acima. Do evento do teclado só se aproveita o instante.
+   */
+  const keyboardUp = useRef(false);
+
+  const revealPinGroup = useCallback(() => {
+    // Só com o teclado à frente: sem isto, o ecrã abria já rolado num telemóvel pequeno. É um
+    // `ref` e não estado porque quem lhe chama são os `onLayout`, que correm antes de o React
+    // acabar de processar o `onFocus` — em estado, o guarda chegava a `false` e engolia a revelação.
+    if (!keyboardUp.current) return;
+
+    const target = formTop.current + groupEnd.current + spacing.md - viewportHeight.current;
+    if (target > 0) scroll.current?.scrollTo({ y: target, animated: true });
+  }, []);
+
+  useEffect(() => {
+    const shown = Keyboard.addListener('keyboardDidShow', () => {
+      keyboardUp.current = true;
+      revealPinGroup();
+    });
+    // O que muda de tamanho com o teclado aberto — o banner de erro a aparecer depois de um PIN
+    // recusado — volta a passar pelos `onLayout`, e aí o alvo já é o novo.
+    const hidden = Keyboard.addListener('keyboardDidHide', () => {
+      keyboardUp.current = false;
+    });
+
+    return () => {
+      shown.remove();
+      hidden.remove();
+    };
+  }, [revealPinGroup]);
 
   const complete = pin.length === PIN_LENGTH;
   const canSubmit = complete && !connecting && !blocked;
@@ -66,21 +128,34 @@ export default function ConnectScreen() {
   return (
     <Screen tone="dark">
       {/* O teclado numérico tapa o terço de baixo do ecrã — sem isto, as casas do PIN ficam
-          escondidas por baixo dele exatamente enquanto se escreve. */}
+          escondidas por baixo dele exatamente enquanto se escreve.
+
+          O `keyboardVerticalOffset` não é afinação: sem ele a conta está errada por construção. O
+          `KeyboardAvoidingView` sabe onde acaba pelo seu próprio `onLayout`, que dá posição
+          **relativa ao pai** — e compara-a com o `screenY` do teclado, que é da janela. Tudo o que
+          esteja acima dele desaparece da conta, aqui o inset de topo do `SafeAreaView`, e o
+          padding sai curto exatamente nessa medida: era a fatia do botão que ficava por baixo do
+          teclado. */}
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={insets.top}
       >
         {/* Com o teclado aberto sobra menos de metade do ecrã: num telemóvel pequeno o conteúdo
             passa a não caber, e sem scroll o que sobra é cortado em vez de se poder alcançar.
             `handled` fecha o teclado ao tocar fora — o teclado numérico não tem tecla de fecho —
             mas deixa o toque nos botões passar à primeira. */}
         <ScrollView
+          ref={scroll}
           contentContainerStyle={styles.container}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
           showsVerticalScrollIndicator={false}
           bounces={false}
+          onLayout={(event) => {
+            viewportHeight.current = event.nativeEvent.layout.height;
+            revealPinGroup();
+          }}
         >
           <View style={styles.header}>
             {/* A marca em imagem e não desenhada à mão: as barras diagonais do logo atravessam as
@@ -119,7 +194,13 @@ export default function ConnectScreen() {
             </Text>
           </View>
 
-          <View style={styles.formArea}>
+          <View
+            style={styles.formArea}
+            onLayout={(event) => {
+              formTop.current = event.nativeEvent.layout.y;
+              revealPinGroup();
+            }}
+          >
             <Pressable
               accessibilityRole="button"
               onPress={() => router.push('/scan')}
@@ -147,65 +228,94 @@ export default function ConnectScreen() {
             {error ? <Banner tone="danger" message={error} /> : null}
             {!error && reason ? <Banner tone="warning" message={reason} /> : null}
 
-            <View>
-              <Text variant="label" color={colors.light} style={styles.fieldLabel}>
-                {t('connect.pinLabel')}
-              </Text>
+            {/* O campo e o botão sobem juntos por cima do teclado: escrever seis dígitos sem
+                poder carregar em "Ligar" a seguir deixava o caminho a meio. O `gap` é o mesmo que
+                o `formArea` lhes dava enquanto eram irmãos soltos. */}
+            <View
+              style={styles.pinGroup}
+              onLayout={(event) => {
+                const { y, height } = event.nativeEvent.layout;
+                // O fundo do grupo dentro do `formArea` — o `formArea` centra o que tem, por isso
+                // isto mexe-se quando o teclado encolhe a área e é preciso voltar a contar.
+                groupEnd.current = y + height;
+                revealPinGroup();
+              }}
+            >
+              <View>
+                <Text variant="label" color={colors.light} style={styles.fieldLabel}>
+                  {t('connect.pinLabel')}
+                </Text>
 
-              {/* O input real está por cima das casas, transparente: quem se vê são as seis
-                casas, e é o `Pressable` que garante que o toque em qualquer uma delas dá foco ao
-                campo — mesmo nas que ficam entre caixas. */}
-              {/* `accessible={false}`: o controlo a sério é o campo lá dentro, e é ele que o
-                VoiceOver deve anunciar. Isto é só o alvo do dedo. */}
-              <Pressable
-                accessible={false}
-                onPress={() => input.current?.focus()}
-                style={styles.pinField}
-              >
-                <View style={styles.pinRow} pointerEvents="none">
-                  {Array.from({ length: PIN_LENGTH }, (_, index) => (
-                    <PinBox
-                      key={index}
-                      digit={pin[index]}
-                      active={index === pin.length}
-                      focused={focused}
-                    />
-                  ))}
-                </View>
+                {/* O input real está por cima das casas, transparente: quem se vê são as seis
+                casas, e é ele que apanha o toque em qualquer uma delas — inclusive nos vãos entre
+                caixas, porque ocupa o campo todo. */}
+                <View style={styles.pinField}>
+                  {/* Alvo de reserva, por baixo do campo: só recebe o que não caia em cima dele.
+                  O input **tem** de estar por cima e fora daqui — dentro de um `Pressable`, é o
+                  pai que fica com o gesto e a manutenção longa nunca chega ao campo, ou seja,
+                  nunca aparece o "Colar". */}
+                  {/* `accessible={false}`: o controlo a sério é o campo, e é ele que o VoiceOver
+                  deve anunciar. Isto é só o alvo do dedo. */}
+                  <Pressable
+                    accessible={false}
+                    onPress={() => input.current?.focus()}
+                    style={StyleSheet.absoluteFill}
+                  />
 
-                {/* Sem `autoFocus` desde que a câmara existe: o teclado numérico subia sozinho ao
+                  <View style={styles.pinRow} pointerEvents="none">
+                    {Array.from({ length: PIN_LENGTH }, (_, index) => (
+                      <PinBox
+                        key={index}
+                        digit={pin[index]}
+                        active={index === pin.length}
+                        focused={focused}
+                      />
+                    ))}
+                  </View>
+
+                  {/* Sem `autoFocus` desde que a câmara existe: o teclado numérico subia sozinho ao
                   entrar e tapava o botão de ler QR, que é o caminho principal. O PIN é agora a
                   alternativa, e quem a quer toca nas casas. */}
-                <TextInput
-                  ref={input}
-                  value={pin}
-                  onChangeText={(value) => {
-                    clearError();
-                    setPin(value.replace(/\D/g, '').slice(0, PIN_LENGTH));
-                  }}
-                  editable={!connecting}
-                  keyboardType="number-pad"
-                  onFocus={() => setFocused(true)}
-                  onBlur={() => setFocused(false)}
-                  maxLength={PIN_LENGTH}
-                  style={styles.hiddenInput}
-                  accessibilityLabel={t('connect.pinLabel')}
-                />
-              </Pressable>
-            </View>
+                  {/* Sem `maxLength`: cortava o texto colado **antes** de se lhe tirar o que não é
+                  dígito, e um código copiado com um espaço ou um prefixo pelo meio chegava aqui
+                  já sem os últimos dígitos. O corte a sério é o `slice` abaixo, que conta
+                  dígitos e não caracteres. */}
+                  {/* `selectionColor` transparente e não `caretHidden`: o cursor nativo tapava-se
+                  na mesma, mas o `caretHidden` do iOS zera o retângulo do cursor — e é a esse
+                  retângulo que o menu de edição se agarra para aparecer. Voltávamos ao mesmo sítio,
+                  sem "Colar". Aqui o cursor continua a existir e a ser medido; só é pintado a
+                  transparente, e quem se vê é o caret desenhado nas casas. */}
+                  <TextInput
+                    ref={input}
+                    value={pin}
+                    onChangeText={(value) => {
+                      clearError();
+                      setPin(value.replace(/\D/g, '').slice(0, PIN_LENGTH));
+                    }}
+                    editable={!connecting}
+                    keyboardType="number-pad"
+                    selectionColor="transparent"
+                    onFocus={() => setFocused(true)}
+                    onBlur={() => setFocused(false)}
+                    style={styles.hiddenInput}
+                    accessibilityLabel={t('connect.pinLabel')}
+                  />
+                </View>
+              </View>
 
-            <Button
-              label={connecting ? t('connect.connecting') : t('connect.submit')}
-              onPress={onSubmit}
-              disabled={!canSubmit}
-              hint={
-                blocked
-                  ? t('connect.blockedUntil', { time: formatTime(blockedUntil) })
-                  : complete
-                    ? undefined
-                    : t('connect.pinIncomplete')
-              }
-            />
+              <Button
+                label={connecting ? t('connect.connecting') : t('connect.submit')}
+                onPress={onSubmit}
+                disabled={!canSubmit}
+                hint={
+                  blocked
+                    ? t('connect.blockedUntil', { time: formatTime(blockedUntil) })
+                    : complete
+                      ? undefined
+                      : t('connect.pinIncomplete')
+                }
+              />
+            </View>
           </View>
 
           {/* Em paralelo com o QR e o PIN, não em vez deles: nem todo o assalto que se arbitra tem
@@ -226,8 +336,6 @@ export default function ConnectScreen() {
               </Text>
             </View>
           </Pressable>
-
-
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -399,8 +507,16 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   /** Centra o formulário no espaço que sobra — encostado ao fundo ficaria debaixo do teclado. */
+  /**
+   * `flexGrow` e não `flex`, pela mesma razão do `container`: `flex: 1` é `flexBasis: 0`, e num
+   * `ScrollView` isso faz o bloco medir-se pelo espaço que sobra em vez de pelo que tem dentro.
+   * Com o teclado aberto o conteúdo passava a caber sempre — o `ScrollView` ficava sem nada para
+   * rolar e o campo e o botão transbordavam para fora da caixa, por baixo do teclado, sem forma
+   * de lá chegar. Com `flexGrow`, a base é o conteúdo: cresce para centrar quando há folga, e
+   * empurra o conteúdo para lá do ecrã quando não há.
+   */
   formArea: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
     gap: spacing.md,
   },
@@ -537,6 +653,9 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
+  pinGroup: {
+    gap: spacing.md,
+  },
   pinField: {
     position: 'relative',
   },
@@ -576,14 +695,23 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: colors.green,
   },
+  /**
+   * Invisível por a **letra** ser transparente, e não por `opacity: 0`. A opacidade zero apaga a
+   * vista para o UIKit: uma vista com alfa a zero não é alvo de toque nem serve de âncora ao menu
+   * de edição, por isso a manutenção longa em cima das casas não chegava ao campo — caía no
+   * `Pressable` de baixo, que só sabe dar foco — e o "Colar" nunca aparecia. Colar o PIN é o
+   * caminho de quem o recebeu por mensagem e não tem QR à frente.
+   *
+   * A vista continua cá toda, com o tamanho e o alinhamento do texto que lá estava: é ela que
+   * apanha o gesto e é sobre ela que o menu se abre.
+   */
   hiddenInput: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    opacity: 0,
-    color: colors.light,
+    color: 'transparent',
     fontSize: type.xxxl,
     textAlign: 'center',
   },
