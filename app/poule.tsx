@@ -14,6 +14,7 @@ import {
   currentBout,
   listOrder,
   onDeckBout,
+  useRefereedHere,
   useStartedBoutId,
 } from '@/poule';
 import type { BoutState } from '@/poule';
@@ -68,12 +69,19 @@ export default function PouleScreen() {
   // Qual dos assaltos a decorrer é o deste telemóvel (contrato `2.2.0`). A poule pode estar a ser
   // arbitrada em duas pistas com o mesmo código, e sem isto o cartão do topo apontava ao assalto
   // do árbitro do lado.
+  // E se já arbitrou aqui de todo: desde o contrato `2.3.0` largar um assalto deixa este
+  // dispositivo sem nenhum em mãos numa pista onde arbitrou, e as duas respostas deixaram de ser a
+  // mesma. Sem isto, o cartão do topo voltava a propor "Retomar" sobre o assalto do árbitro do lado.
   const startedId = useStartedBoutId(poule?.uuid ?? null);
+  const refereedHere = useRefereedHere(poule?.uuid ?? null);
 
   // A matriz percorre todos os assaltos. Recalculá-la a cada render seria desperdício — e um
   // `304` devolve a mesma instância da lista, por isso isto não corre de 10 em 10 segundos.
   const sheet = useMemo(() => buildSheet(list), [list]);
-  const states = useMemo(() => boutStates(list, startedId), [list, startedId]);
+  const states = useMemo(
+    () => boutStates(list, startedId, refereedHere),
+    [list, startedId, refereedHere],
+  );
 
   // A ordem do ecrã, que não é a do contrato: o que já tem resultado vai para o fim. Só a lista
   // muda — a matriz e os estados acima continuam a ler a lista por `sequence`.
@@ -88,8 +96,8 @@ export default function PouleScreen() {
 
   // Só há "próximo assalto" quando a ordem tem valor regulamentar. Numa poule isolada o plantel
   // muda a meio, a ordem é regerada e qualquer `pending` serve (contrato §7, `ordered`).
-  const current = poule.ordered ? currentBout(list, startedId) : undefined;
-  const onDeck = poule.ordered ? onDeckBout(list, startedId) : undefined;
+  const current = poule.ordered ? currentBout(list, startedId, refereedHere) : undefined;
+  const onDeck = poule.ordered ? onDeckBout(list, startedId, refereedHere) : undefined;
 
   return (
     <Screen>

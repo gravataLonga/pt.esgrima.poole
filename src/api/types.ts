@@ -1,7 +1,7 @@
 /**
  * Tipos do contrato de API — fonte de verdade única.
  *
- * Tipados a partir de `docs/API-CONTRACT.md` v2.2.1 (§7 Endpoints, §8 Catálogo de erros,
+ * Tipados a partir de `docs/API-CONTRACT.md` v2.3.1 (§7 Endpoints, §8 Catálogo de erros,
  * §9 Emparelhamento QR/PIN). Este ficheiro não contém mais nada: sem lógica, sem helpers.
  *
  * Regra de tolerância (contrato §1): a app ignora campos que não conhece e nunca falha por os
@@ -19,13 +19,20 @@
  * nunca chegou a estar escrito — que "o assalto a decorrer" e "o meu assalto" eram a mesma coisa —,
  * e é a `src/poule/refereeing.ts` que passa a responder a isso (ADR-036).
  *
+ * A `2.3.0` é aditiva e tem **um endpoint novo**, o `DELETE .../start`: o `start` deixa de ser uma
+ * porta de sentido único e o árbitro que abre a linha errada da folha pode largá-la. É a única
+ * versão até hoje em que o defeito **não** se fecha do lado do servidor — só a app sabe que o
+ * árbitro saiu do assalto, porque ela sai por navegação (ADR-037). A `2.3.1` é redação: registou no
+ * contrato que a app já o chama.
+ *
  * **Não é um mínimo exigido ao servidor.** Os `type` e os campos da `2.1.0` são todos opcionais, e
  * um servidor na `2.0.0` que recuse os `type` novos não trava a app: o `useLiveEvents` desliga os
  * marcos e continua a espelhar o resto (ADR-035, corrigido). Contra um servidor anterior à `2.2.0`
  * a app também não muda de comportamento: nunca há dois assaltos a decorrer, e a memória do
- * `refereeing.ts` aponta sempre para o único.
+ * `refereeing.ts` aponta sempre para o único. Anterior à `2.3.0`, o `DELETE` responde `404`/`405` e
+ * o *fire-and-forget* ignora-o.
  */
-export const API_CONTRACT_VERSION = '2.2.1';
+export const API_CONTRACT_VERSION = '2.3.1';
 
 /**
  * Prefixo de versão da API. Um MAJOR do contrato implica normalmente um prefixo novo — a `2.0.0`

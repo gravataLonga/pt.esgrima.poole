@@ -16,6 +16,11 @@ import { create } from 'zustand';
  * Persiste em `AsyncStorage` pela mesma razão da fila: a app é morta em *background* a meio de uma
  * poule com regularidade operacional, e voltar sem memória é voltar a apontar o cartão do topo ao
  * assalto do árbitro do lado.
+ *
+ * O contrato `2.3.0` acrescentou-lhe o **largar**: o assalto deixa de ser deste dispositivo sem ter
+ * sido pontuado, e a memória tem de o dizer no mesmo instante em que se pede ao servidor para o
+ * libertar. Passaram a ser duas perguntas — qual é o meu assalto, e se já arbitrei nesta pista — e
+ * é por isso que a entrada sobrevive ao `clearStarted`.
  */
 
 const STORAGE_KEY = 'poole.referee.refereeing.v1';
@@ -24,8 +29,18 @@ const STORAGE_KEY = 'poole.referee.refereeing.v1';
 export const MAX_ENTRY_AGE_MS = 24 * 60 * 60 * 1000;
 
 interface StartedBout {
-  /** Id opaco do assalto em que este dispositivo chamou o `start`. */
-  bout_id: string;
+  /**
+   * Id opaco do assalto em que este dispositivo chamou o `start`. **Um assalto pontuado continua
+   * aqui** — foi este dispositivo que o arbitrou, e a `status.ts` conta com isso.
+   *
+   * Volta a `null` quando o árbitro o **larga** (contrato `2.3.0`), e só nesse caso: aí ele deixou
+   * de ser deste dispositivo do lado do servidor também, e qualquer outro árbitro o pode começar.
+   *
+   * A entrada em si **fica**, com `bout_id` a `null`. São duas coisas diferentes e o cartão do topo
+   * da lista precisa das duas: qual é o meu assalto, e se já arbitrei nesta pista — que é o que
+   * impede a app de voltar a propor "Retomar" sobre o assalto do árbitro do lado.
+   */
+  bout_id: string | null;
   /** ISO-8601 UTC. Só serve para a limpeza na hidratação — nada o lê para decidir. */
   at: string;
 }
@@ -37,6 +52,14 @@ interface RefereeingState {
   hydrate: () => Promise<void>;
   /** "Este assalto é meu", dito no mesmo instante em que se diz ao servidor. */
   markStarted: (competitionKey: string, boutId: string) => void;
+  /**
+   * "Já não tenho assalto nenhum em mãos nesta pista" — dito no mesmo instante em que se pede ao
+   * servidor para o libertar (`DELETE .../start`, contrato `2.3.0`), e ao terminar a sessão.
+   *
+   * **Não apaga a entrada.** Ver o `bout_id`: o que se esquece é qual era o assalto, não que se
+   * arbitrou aqui.
+   */
+  clearStarted: (competitionKey: string) => void;
 }
 
 function persist(started: Record<string, StartedBout>): void {
@@ -82,17 +105,48 @@ export const useRefereeingStore = create<RefereeingState>((set) => ({
       persist(started);
       return { started };
     }),
+
+  clearStarted: (competitionKey) =>
+    set((state) => {
+      const entry = state.started[competitionKey];
+      // Nunca arbitrou aqui: não há nada para largar, e inventar uma entrada era passar a dizer
+      // "já arbitrei nesta pista" a quem só passou pelo ecrã.
+      if (!entry || entry.bout_id === null) return state;
+
+      const started = { ...state.started, [competitionKey]: { bout_id: null, at: entry.at } };
+
+      persist(started);
+      return { started };
+    }),
 }));
 
 /**
- * O assalto que este dispositivo começou nesta pista, ou `null` se nunca começou nenhum.
+ * O assalto que este dispositivo começou nesta pista e ainda não largou, ou `null` se não houver
+ * nenhum.
  *
  * **Mantém-se depois de o assalto ficar `done`**, e é isso que distingue os dois casos que a
  * `status.ts` precisa de separar: "nunca arbitrei aqui" — em que um `in_progress` sozinho se
  * assume meu, como sempre se assumiu — e "arbitrei e acabei", em que o que sobra é de outro.
+ *
+ * Volta a `null` quando o árbitro **larga** o assalto (contrato `2.3.0`): aí ele deixou de ser
+ * deste dispositivo de verdade, e continuar a apontar-lhe era arriscar propor "Retomar" sobre um
+ * assalto que outro árbitro entretanto começou.
  */
 export function useStartedBoutId(competitionKey: string | null): string | null {
   return useRefereeingStore((state) =>
     competitionKey ? (state.started[competitionKey]?.bout_id ?? null) : null,
+  );
+}
+
+/**
+ * Se este dispositivo já arbitrou alguma coisa nesta pista — mesmo que não tenha nada em mãos
+ * agora, por ter registado o resultado ou por ter largado o assalto.
+ *
+ * Enquanto o `start` foi uma porta de sentido único, isto lia-se do `useStartedBoutId`: um id
+ * qualquer queria dizer "arbitrei". Largar um assalto separou as duas perguntas.
+ */
+export function useRefereedHere(competitionKey: string | null): boolean {
+  return useRefereeingStore((state) =>
+    competitionKey ? state.started[competitionKey] !== undefined : false,
   );
 }

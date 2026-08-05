@@ -44,6 +44,12 @@ export interface FakeState {
   submissions: Map<string, string>;
   /** Eventos ao vivo recebidos, por assalto/combate. A chave `(assalto, seq)` é única. */
   events: Map<string, LiveBoutEvent[]>;
+  /**
+   * Os `DELETE .../start` que chegaram, por ordem (contrato `2.3.0`). O `204` é o mesmo com ou sem
+   * nada para libertar, por isso só o registo diz se a app **pediu** — que é o que distingue sair
+   * de um assalto de o acabar.
+   */
+  released: string[];
   /** Erro a devolver no próximo `POST .../events`. */
   failNextEvents: 'network' | 'locked' | null;
   /** Versão da lista. Muda a cada escrita, e é o `ETag` (contrato §5). */
@@ -67,6 +73,7 @@ const emptyState = (): FakeState => ({
   standings: [],
   submissions: new Map(),
   events: new Map(),
+  released: [],
   failNextEvents: null,
   version: 1,
   failNextScore: null,
@@ -326,6 +333,41 @@ export async function startBout(boutId: string): Promise<StartResponse> {
 }
 
 /**
+ * O árbitro saiu do assalto sem resultado (contrato `2.3.0`): volta a `pending` e os eventos em
+ * direto desta tentativa são apagados. **`204` sempre**, mesmo quando não havia nada para libertar
+ * — nem um assalto de outro árbitro, nem um já pontuado, dão erro nenhum de volta.
+ *
+ * O servidor a sério só liberta o assalto de quem chamou o `start`, e guarda quem foi
+ * (`started_by_token_id`). Aqui há um dispositivo só, por isso o que este falso pode imitar é a
+ * outra metade da regra: um assalto `done` fica como está.
+ */
+export async function releaseBout(boutId: string): Promise<void> {
+  // Antes do `guard()`: o que este registo responde é se a **app pediu**, e ela pede na mesma
+  // contra uma sessão morta — é aí que dizer a coisa errada custa um pedido e uma linha no registo.
+  state.released.push(`bout:${boutId}`);
+  guard();
+
+  state.bouts = state.bouts.map((bout) =>
+    bout.id === boutId && bout.status === 'in_progress' ? { ...bout, status: 'pending' } : bout,
+  );
+  state.events.delete(`bout:${boutId}`);
+  state.version += 1;
+}
+
+/** O gémeo das eliminatórias — mesmas regras, mesma limpeza (contrato `2.3.0`). */
+export async function releaseMatch(matchId: string): Promise<void> {
+  state.released.push(`match:${matchId}`);
+  guard();
+
+  if (state.match?.id === matchId && state.match.status === 'in_progress') {
+    state.match = { ...state.match, status: 'pending' };
+  }
+
+  state.events.delete(`match:${matchId}`);
+  state.version += 1;
+}
+
+/**
  * A pista ao vivo (contrato §7, `1.5.0`). O servidor a sério guarda `(assalto, seq)` como chave
  * única e ignora em silêncio um `seq` repetido — é isso que faz de um reenvio um não-evento, e é o
  * que este imita.
@@ -363,6 +405,11 @@ function keepNewEvents(key: string, events: LiveBoutEvent[]): number {
 /** Os eventos recebidos de um assalto, por ordem de chegada. */
 export function eventsOf(kind: 'bout' | 'match', id: string): LiveBoutEvent[] {
   return state.events.get(`${kind}:${id}`) ?? [];
+}
+
+/** Se a app pediu a libertação deste assalto — o `DELETE .../start` do contrato `2.3.0`. */
+export function wasReleased(kind: 'bout' | 'match', id: string): boolean {
+  return state.released.includes(`${kind}:${id}`);
 }
 
 function failEventsIfAsked(): void {

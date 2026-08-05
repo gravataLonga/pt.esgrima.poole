@@ -4,6 +4,8 @@ import { clientConfig, configureClient, onSessionSignal, sessionEpoch } from '@/
 import * as api from '@/api/endpoints';
 import type { MatchDetail, PouleSummary, SessionScope } from '@/api/types';
 import { clientHeader, defaultBaseUrl, deviceName } from '@/config/env';
+// Direto, e não pelo `@/poule`: o índice de lá arrasta a folha e a classificação, que são ecrãs.
+import { useRefereeingStore } from '@/poule/refereeing';
 
 import { clearSession, readSession, saveSession } from './secureStorage';
 
@@ -101,6 +103,32 @@ export function competitionKey(state: {
   return state.poule?.uuid ?? state.match?.id ?? null;
 }
 
+/**
+ * O combate que este dispositivo abriu e **não** pontuou volta a `pending` à saída da sessão
+ * (contrato `2.3.0`). Sem isto ficava a decorrer para sempre, na página da poule e no painel do
+ * organizador — e num combate não há outra forma de o dizer: o ecrã é a sessão inteira, não tem
+ * lista por baixo e o "Sair" é a única saída sem resultado.
+ *
+ * **Só o combate.** Numa poule a app já o diz assalto a assalto, ao sair do ecrã de cada um; o que
+ * sobrar de uma app morta em *background* é o `DELETE /session` que o liberta, que é a rede de
+ * segurança do contrato e não o caminho normal.
+ *
+ * Três condições, e todas dizem a mesma coisa por lados diferentes: a sessão é de combate, foi
+ * **este** dispositivo a pôr o combate em pista, e ele não acabou. Um combate `done` nunca chega
+ * aqui, e é o que separa "abandonei" de "acabei".
+ *
+ * O `done` é a única leitura de estado em que se confia, e de propósito: o `status` que está aqui
+ * vem do `connect` e do `applySummary`, e o `in_progress` que o `start` provoca do outro lado pode
+ * nunca ter passado por nenhum dos dois. Registar o resultado, esse, escreve-o sempre — é o que a
+ * rota faz antes de levar o árbitro ao resumo.
+ */
+function releaseHeldMatch(state: SessionState, key: string | null): void {
+  if (!key || state.scope !== 'match' || !state.match || state.match.status === 'done') return;
+  if (useRefereeingStore.getState().started[key]?.bout_id !== state.match.id) return;
+
+  void api.releaseMatch(state.match.id).catch(() => undefined);
+}
+
 export const useSessionStore = create<SessionState>((set, get) => ({
   ...disconnected,
   restoring: true,
@@ -163,19 +191,30 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     // completa. Aí não há nada para revogar, e chamar o `DELETE` sem token só serve para apanhar
     // outro `401` e reescrever a razão do fim com "a sessão expirou", que não foi o que aconteceu.
     const hadToken = clientConfig().token !== null;
+    const key = competitionKey(get());
 
-    // Primeiro localmente: quem carrega em "terminar sessão" não espera pela rede.
+    /*
+     * **Os dois `DELETE` partem antes de o token ser esquecido**, e é por isso que estão aqui e não
+     * a seguir: os cabeçalhos de um pedido montam-se no instante em que ele parte, e um `DELETE`
+     * lançado depois do `configureClient({ token: null })` sai sem `Authorization` — a revogação
+     * apanhava `401` e não revogava nada. Nenhum deles é esperado: quem carrega em "terminar
+     * sessão" não espera pela rede.
+     */
+    if (hadToken) {
+      releaseHeldMatch(get(), key);
+
+      // O token expira sozinho em 60 min. Falhar a revogação não deixa nada por fechar aqui.
+      void api.deleteSession().catch(() => undefined);
+    }
+
+    // A pista ficou para trás: este dispositivo não tem nada em mãos nela (contrato `2.3.0`). O
+    // **já arbitrei aqui** fica — quem sai e volta ao mesmo código volta à mesma poule, e é aí que
+    // essa memória mais faz falta.
+    if (key) useRefereeingStore.getState().clearStarted(key);
+
     set({ ...disconnected, endReason: 'signed_out' });
     configureClient({ token: null });
     await clearSession();
-
-    if (!hadToken) return;
-
-    try {
-      await api.deleteSession();
-    } catch {
-      // O token expira sozinho em 60 min. Falhar a revogação não deixa nada por fechar aqui.
-    }
   },
 
   finish: () => set({ phase: 'complete' }),

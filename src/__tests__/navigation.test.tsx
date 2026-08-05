@@ -4,7 +4,7 @@ import { useQueueStore } from '@/queue/store';
 import { useSessionStore } from '@/session/store';
 
 import { connectMatch, connectPoule, poll, resetApp } from './support/app';
-import { eventsOf, readyMatch, seedMatch, state as fakeState } from './support/fakeApi';
+import { eventsOf, readyMatch, seedMatch, state as fakeState, wasReleased } from './support/fakeApi';
 
 /**
  * Percorre a app de ponta a ponta sobre a árvore de rotas real, contra o servidor falso:
@@ -489,6 +489,52 @@ describe('combate de eliminatória', () => {
     // o resumo mostraria um combate por pontuar sobre um resultado que ele deu (spec §8).
     expect(screen.getByText('1–0')).toBeTruthy();
     expect(useQueueStore.getState().items).toMatchObject([{ kind: 'match', target_id: 'm_1' }]);
+  });
+
+  /**
+   * Contrato `2.3.0`. Aqui não há "voltar à lista" — o combate **é** a sessão —, e por isso a única
+   * saída sem resultado é o "Sair". Sem o dizer, o combate ficava a decorrer para sempre na página
+   * da poule, com o árbitro já noutra pista.
+   */
+  it('sair da sessão liberta o combate que ficou a decorrer', async () => {
+    connectMatch();
+
+    const router = renderRouter('./app', { initialUrl: '/match/m_1' });
+    await router;
+    await screen.findByText('Round 2 · 1');
+
+    await fireEvent.press(screen.getByLabelText('Timer'));
+    expect(fakeState.match?.status).toBe('in_progress');
+
+    await fireEvent.press(screen.getByLabelText('Leave'));
+    await screen.findByText('Leave this piste?');
+    await fireEvent.press(screen.getByText('Leave'));
+
+    await waitFor(() => expect(wasReleased('match', 'm_1')).toBe(true));
+    expect(fakeState.match?.status).toBe('pending');
+  });
+
+  it('sair depois de registar o resultado não liberta nada', async () => {
+    connectMatch();
+
+    const router = renderRouter('./app', { initialUrl: '/match/m_1' });
+    await router;
+    await screen.findByText('Round 2 · 1');
+
+    await fireEvent.press(screen.getByLabelText('Timer'));
+    const addA = await screen.findByLabelText('One more touch for Ana Silva');
+    for (let i = 0; i < 15; i++) await fireEvent.press(addA);
+
+    await fireEvent.press(screen.getByText('Submit result'));
+    await fireEvent.press(await screen.findByText('Record'));
+    await waitFor(() => expect(router.getPathname()).toBe('/complete'));
+
+    // O resumo termina a sessão à saída, e o combate acabou: pedir a libertação de um combate que
+    // se acabou de registar é dizer a coisa errada ao registo do organizador.
+    await fireEvent.press(screen.getByText('Connect to another piste'));
+
+    expect(wasReleased('match', 'm_1')).toBe(false);
+    expect(fakeState.match?.status).toBe('done');
   });
 
   it('um resultado preso noutra pista diz que precisa do código dessa pista', async () => {

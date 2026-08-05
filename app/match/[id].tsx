@@ -8,6 +8,7 @@ import { postMatchEvents, startMatch } from '@/api/endpoints';
 import { invalidateMatch, useMatchDetail } from '@/api/queries';
 import type { LiveBoutEvent, MatchDetail } from '@/api/types';
 import { BoutScreen, boutTiming, type BoutAssignment, type RecordedScore } from '@/bout';
+import { useRefereeingStore } from '@/poule';
 import { LeaveButton, QueueBanner, SessionBar } from '@/session';
 import { useSessionStore } from '@/session/store';
 import { Screen, Text, colors, fonts, radius, spacing, type } from '@/ui';
@@ -30,6 +31,8 @@ export default function MatchRoute() {
   const phase = useSessionStore((s) => s.phase);
   const applySummary = useSessionStore((s) => s.applySummary);
   const finish = useSessionStore((s) => s.finish);
+
+  const markStarted = useRefereeingStore((s) => s.markStarted);
 
   const detail = useMatchDetail(id ?? null);
   const match = detail.data;
@@ -58,8 +61,12 @@ export default function MatchRoute() {
 
   const onStart = useCallback(() => {
     if (!id) return;
+    // "Este combate é meu" (contrato `2.3.0`). Aqui não serve para escolher o cartão de lista
+    // nenhuma — não há lista —, serve para o `disconnect()` saber o que há para libertar: quem sai
+    // da sessão sai do combate, e é a única saída sem resultado que este ecrã tem.
+    markStarted(id, id);
     void startMatch(id).catch(() => undefined);
-  }, [id]);
+  }, [id, markStarted]);
 
   const onEvents = useCallback(
     (events: LiveBoutEvent[]) => postMatchEvents(id as string, events),

@@ -152,6 +152,24 @@ describe('dois árbitros na mesma poule', () => {
     // O do outro continua a dizer o que é: é a informação que interessa a quem está na outra pista.
     expect(screen.getByText('In progress')).toBeTruthy();
   });
+
+  it('largado o meu, o cartão também não agarra o assalto que continua noutra pista', async () => {
+    resetApp();
+    connectPoule();
+
+    // Contrato `2.3.0`: este dispositivo abriu o 1 por engano e largou-o — a memória fica sem
+    // assalto, mas a pista continua a saber que se arbitrou aqui. Apagar a entrada inteira punha
+    // este ecrã a propor "Retomar" sobre o 4, que é do árbitro do lado.
+    useRefereeingStore.setState({
+      started: { [fixturePoule.uuid]: { bout_id: null, at: new Date().toISOString() } },
+    });
+
+    await renderRouter('./app', { initialUrl: '/poule' });
+    await screen.findByText('Poule 3 — Sabre Masculino');
+
+    expect(await screen.findAllByText('Start')).toHaveLength(2);
+    expect(screen.queryByText('Resume')).toBeNull();
+  });
 });
 
 describe('poule isolada', () => {

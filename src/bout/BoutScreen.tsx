@@ -97,6 +97,16 @@ export interface BoutScreenProps {
   /** `POST .../start`, *fire-and-forget*: falhar não bloqueia a arbitragem (contrato §7). */
   onStart: () => void;
   /**
+   * `DELETE .../start` (contrato `2.3.0`): o árbitro **saiu deste assalto sem resultado**, e a
+   * pista fica livre. É a outra metade do `onStart`, e só se chama quando foi este dispositivo a
+   * pôr o assalto em pista — de outro modo pedia-se a libertação do assalto do árbitro do lado.
+   *
+   * Só a app sabe isto, e sabe-o por navegação: do lado do servidor sair do ecrã não se distingue
+   * de um telemóvel no bolso a meio de um assalto a sério. **Nunca depois de um resultado** — o
+   * assalto acabou, não foi abandonado.
+   */
+  onRelease?: () => void;
+  /**
    * `POST .../events`: a pista ao vivo (contrato §7, `1.5.0`). Opcional por construção — sem ela o
    * ecrã comporta-se exatamente como antes, e a plataforma volta a saber do assalto só no fim.
    */
@@ -163,6 +173,7 @@ function Refereeing({
   eyebrow,
   chrome,
   onStart,
+  onRelease,
   onEvents,
   onRecorded,
   onFinished,
@@ -211,18 +222,37 @@ function Refereeing({
    */
   const started = useRef(false);
 
+  /**
+   * ...e se ele ainda está de pé. Separado do `started` porque respondem a perguntas diferentes: um
+   * impede um segundo `POST`, o outro diz se há alguma coisa para libertar à saída (contrato
+   * `2.3.0`). Cai com o resultado — um assalto registado não se abandona.
+   */
+  const holding = useRef(false);
+
   useEffect(() => {
     if (started.current || timer.state !== 'running' || assignment.locked) return;
     started.current = true;
+    holding.current = true;
     onStart();
   }, [timer.state, assignment.locked, onStart]);
 
   const touched = rules.a !== (assignment.scoreA ?? 0) || rules.b !== (assignment.scoreB ?? 0);
 
+  /**
+   * A pista fica livre. Só quando foi este dispositivo a ocupá-la: sem cronómetro arrancado não
+   * subiu `start` nenhum, e pedir a libertação de um assalto que não é nosso é dizer a coisa errada.
+   */
+  const release = () => {
+    if (!holding.current) return;
+    holding.current = false;
+    onRelease?.();
+  };
+
   const onLeave = () => {
     if (!back) return;
 
     if (!touched) {
+      release();
       back();
       return;
     }
@@ -231,13 +261,25 @@ function Refereeing({
     // propósito — é destrutivo e vem da navegação, e o corte de contexto do sistema é a mensagem.
     Alert.alert(t('bout.leaveTitle'), t('bout.leaveMessage'), [
       { text: t('bout.leaveStay'), style: 'cancel' },
-      { text: t('bout.leaveDiscard'), style: 'destructive', onPress: back },
+      {
+        text: t('bout.leaveDiscard'),
+        style: 'destructive',
+        onPress: () => {
+          release();
+          back();
+        },
+      },
     ]);
   };
 
   /** Registado, ou guardado à espera de rede: nos dois casos o assalto acabou para o árbitro. */
   const finish = (queued: boolean) => {
     setSheet('none');
+    // O assalto não fica por libertar: fica **pontuado**. Um resultado em fila também conta — é o
+    // `score` que há de chegar que fecha o assalto, e libertá-lo agora era apagar-lhe os eventos e
+    // pôr uma linha `abandoned` no registo do organizador por cima de um resultado que existe.
+    holding.current = false;
+
     if (onFinished) onFinished({ a: rules.a, b: rules.b, queued });
     else back?.();
   };

@@ -1589,3 +1589,101 @@ limite que o `scored_by_me` já tem por derivar do token
 razão se aceita: a alternativa
 era pedir ao contrato um conceito de "árbitro" que a plataforma não tem, para um caso que se
 resolve começando o assalto.
+
+---
+
+## ADR-037 — Contrato 2.3.0: largar um assalto é uma coisa que só a app sabe
+
+**Data:** 2026-08-05 · **Estado:** aceite · **A plataforma serve a `2.3.0` desde 2026-08-05; a app é a F11, do mesmo dia**
+
+> **Por sincronizar:** o `docs/API-CONTRACT.md` vive em duplicado, byte a byte, nos dois
+> repositórios. A `2.3.1` — a §11 G, o cabeçalho e a linha do changelog — está só do lado da app e
+> **tem de ser copiada tal e qual para o lado da plataforma**, senão as duas cópias divergem.
+
+Um árbitro abre um assalto, põe o cronómetro a andar, vê que se enganou na linha da folha e volta à
+lista para abrir o certo. É o erro mais comum que há a arbitrar, e até aqui não tinha volta: o
+assalto errado ficava `in_progress` **para sempre**, com os toques do arranque falso agarrados a
+ele — na página pública com um placar a sério, e na app de todos os outros árbitros da mesma folha,
+que viam dois assaltos em curso do mesmo árbitro.
+
+A `2.3.0` dá-lhe a outra metade: `DELETE /bouts/{bout}/start` e o gémeo das eliminatórias. **E é a
+primeira versão do contrato que não se fecha do lado do servidor.** A `2.2.0` mudava o
+comportamento da plataforma e à app bastava deixar de assumir uma garantia
+([ADR-036](#adr-036--contrato-220-qual-dos-assaltos-em-curso-é-o-meu)); aqui é ao contrário — **só a
+app sabe que o árbitro saiu do assalto**, porque ela sai por navegação, e do lado de lá isso não se
+distingue de um telemóvel no bolso a meio de um assalto a sério. Enquanto ninguém chamasse o
+endpoint, ele existia e o defeito ficava por corrigir.
+
+### Quem liberta é quem arrancou o cronómetro
+
+O `start` sobe uma vez, no primeiro `running` (spec §7), e é ele que faz do assalto uma coisa deste
+telemóvel. É a mesma condição à saída: **sem cronómetro arrancado não se pede nada**. Um árbitro que
+abre um assalto só para ver quem joga, e volta, não tem nada para libertar — e o assalto que estiver
+em pista pode ser do árbitro do lado, que este não tem que tirar a ninguém. O servidor também o
+impede, porque guarda quem chamou o `start`; a app não usa isso como desculpa para lho pedir.
+
+O ecrã de assalto passou a ter duas bandeiras onde tinha uma: o `started`, que impede um segundo
+`POST`, e o `holding`, que diz se ainda há alguma coisa de pé. Respondem a perguntas diferentes, e
+juntá-las era deixar o G4 sem sítio onde viver.
+
+### Depois de um resultado não se larga nada — nem de um que ficou em fila
+
+O assalto acabou, não foi abandonado. O servidor recusaria na mesma, mas pedir a libertação de um
+assalto que se acabou de registar é dizer a coisa errada e gastar um pedido no fim de **cada**
+assalto. O caso que obrigou a pensar é o do resultado **em fila**: sem rede, o assalto continua
+`in_progress` do lado de lá, e a tentação é libertá-lo. Seria apagar-lhe os eventos e escrever
+`abandoned` no registo do organizador por cima de um resultado que existe e que há de chegar — é o
+`score` da fila que fecha aquele assalto, e não outra coisa.
+
+### A memória partiu-se em duas, e não se apagou
+
+O trabalho listado no contrato dizia "esquecer o assalto ao largá-lo", com um `clearStarted`. Apagar
+a entrada inteira **regredia a `2.2.0`**: o terceiro ramo do `currentBout` é "nunca arbitrei aqui →
+o primeiro a decorrer", e um árbitro que largasse o seu assalto passava a cair lá — com o assalto do
+árbitro do lado a decorrer, o cartão do topo voltava a propor-lhe "Retomar" sobre ele. Era
+exatamente o defeito que a F10 tinha corrigido.
+
+São **duas perguntas**, e o `startedId` respondia às duas por acaso:
+
+```
+qual é o meu assalto?      → started[key].bout_id   (null depois de o largar)
+já arbitrei nesta pista?   → started[key] existe    (fica, até à limpeza por idade)
+```
+
+O `refereeing.ts` guarda as duas, e o `status.ts` recebe as duas — com o `refereedHere` a deduzir-se
+do `startedId` por omissão, que é o que mantém todas as outras chamadas a querer dizer o que já
+queriam. É, afinal, o `{ boutId, refereedHere }` que o plano da `2.2.0` desenhou e que na altura se
+colapsou num parâmetro só, com a razão certa para então: enquanto o `start` foi uma porta de sentido
+único, um assalto pontuado respondia "sim" às duas.
+
+**Um assalto pontuado continua na memória**, e é deliberado — é o que distingue "nunca arbitrei
+aqui" de "arbitrei e acabei" (ADR-036), e nada disso mudou.
+
+### Numa sessão de combate, o gatilho é sair da sessão
+
+Um combate não tem lista por baixo: o ecrã **é** a sessão, e não há "voltar". As saídas são registar
+o resultado e o "Sair" — e a segunda é a única sem resultado. Ficou no `disconnect()` do
+`session/store.ts`, e não no botão: é por lá que passam as duas saídas (o "Sair" do cabeçalho e o
+ecrã de resumo), e é lá que ainda há token para o pedido levar.
+
+Só liberta o que **não** está `done`, e o `done` é a única leitura de estado em que se confia: o
+`status` do combate no *store* vem do `connect` e do `applySummary`, e o `in_progress` que o `start`
+provoca do outro lado pode nunca ter passado por nenhum dos dois. Registar o resultado, esse,
+escreve-o sempre.
+
+### O `DELETE /session` passou a partir com token
+
+A rede de segurança do contrato — o `DELETE /session` liberta o que este dispositivo deixou aberto —
+não funcionava desta app: o pedido ia **depois** de o `disconnect()` esquecer o token, e saía sem
+`Authorization`. Apanhava `401`, não revogava nada, e a partir da `2.3.0` também não libertaria nada.
+Os cabeçalhos montam-se no instante em que o pedido parte, por isso bastou lançá-lo antes de limpar
+a configuração — e continua sem se esperar por ele, que é o que faz de "terminar sessão" uma coisa
+instantânea.
+
+### Consequência aceite
+
+**Numa lista de poule, sair da sessão não liberta assalto nenhum.** A app diz-lo assalto a assalto,
+ao sair de cada um, e o que sobra é o caso da app morta em *background* com um assalto em pista: aí
+a memória local não sabe se aquele assalto foi entretanto pontuado, e pedir a libertação de um
+assalto pontuado é o que o G4 proíbe. Quem fecha esse é o `DELETE /session`, do lado do servidor,
+que **sabe** o que este token deixou aberto e por pontuar. É para isso que o contrato o pôs lá.

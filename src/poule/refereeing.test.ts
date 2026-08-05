@@ -71,6 +71,41 @@ it('esquece as pistas de ontem', async () => {
   );
 });
 
+/**
+ * Contrato `2.3.0`: o árbitro sai do assalto sem resultado, e a pista fica livre dos dois lados —
+ * no servidor, com o `DELETE .../start`; aqui, com o que a app deixa de poder dizer que é seu.
+ */
+describe('largar o assalto', () => {
+  it('deixa de haver um assalto meu, e não de haver memória da pista', () => {
+    const { markStarted, clearStarted } = useRefereeingStore.getState();
+
+    markStarted('poule-uuid', 'b_4');
+    clearStarted('poule-uuid');
+
+    // As duas metades: o assalto já não é deste dispositivo, mas ele arbitrou aqui — e é isso que
+    // impede o cartão do topo de voltar a propor o assalto do árbitro do lado.
+    expect(useRefereeingStore.getState().started['poule-uuid']?.bout_id).toBeNull();
+    expect(useRefereeingStore.getState().started).toHaveProperty('poule-uuid');
+  });
+
+  it('não inventa memória de uma pista onde nunca se arbitrou', () => {
+    useRefereeingStore.getState().clearStarted('poule-nunca-tocada');
+
+    expect(useRefereeingStore.getState().started).toEqual({});
+  });
+
+  it('vai a disco, como o começar', async () => {
+    useRefereeingStore.getState().markStarted('poule-uuid', 'b_4');
+    useRefereeingStore.getState().clearStarted('poule-uuid');
+
+    useRefereeingStore.setState({ started: {} });
+    await useRefereeingStore.getState().hydrate();
+
+    // Sem isto, uma app morta a seguir a largar o assalto voltava a achar que ele era dela.
+    expect(useRefereeingStore.getState().started['poule-uuid']?.bout_id).toBeNull();
+  });
+});
+
 it('um disco ilegível não trava a app', async () => {
   await AsyncStorage.setItem(STORAGE_KEY, 'isto não é JSON');
 

@@ -1,5 +1,5 @@
-import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
-import { Dimensions, Vibration } from 'react-native';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { Alert, Dimensions, Vibration } from 'react-native';
 
 import type { PouleSummary } from '@/api/types';
 import { poule as fixturePoule } from '@/fixtures/poule';
@@ -8,7 +8,7 @@ import { useQueueStore } from '@/queue/store';
 import { useSessionStore } from '@/session/store';
 
 import { connectPoule, resetApp } from './support/app';
-import { eventsOf, state as fakeState } from './support/fakeApi';
+import { eventsOf, state as fakeState, wasReleased } from './support/fakeApi';
 
 /**
  * Ecrã 3, na parte que só se vê renderizando: fases, cartões, acerto de tempo, morte súbita e
@@ -768,6 +768,82 @@ describe('assalto a decorrer noutra pista', () => {
     await open();
 
     expect(screen.queryByText(WARNING)).toBeNull();
+  });
+});
+
+/**
+ * Contrato `2.3.0`: o árbitro abre a linha errada da folha, arranca o tempo e volta à lista. Só a
+ * app sabe que ele saiu — do lado do servidor isso não se distingue de um telemóvel no bolso a meio
+ * de um assalto a sério —, e sem o dizer o assalto ficava `in_progress` para sempre.
+ */
+describe('sair do assalto sem resultado', () => {
+  const BOUT_ID = 'b_01J8X004';
+  const statusOf = (id: string) => fakeState.bouts.find((bout) => bout.id === id)?.status;
+
+  it('liberta a pista ao voltar à lista', async () => {
+    await open();
+
+    // Arrancar o tempo é o que põe o assalto em pista (`POST .../start`).
+    await fireEvent.press(screen.getByLabelText('Timer'));
+    expect(statusOf(BOUT_ID)).toBe('in_progress');
+
+    await fireEvent.press(screen.getByLabelText('Back to list'));
+
+    await waitFor(() => expect(wasReleased('bout', BOUT_ID)).toBe(true));
+    expect(statusOf(BOUT_ID)).toBe('pending');
+    // Os toques do arranque falso vão com ele: são o registo de um assalto que não aconteceu, e o
+    // placar ao vivo da tentativa seguinte abria a mostrar o resultado desta.
+    expect(eventsOf('bout', BOUT_ID)).toHaveLength(0);
+    // E deixa de ser "o meu assalto" — senão o cartão do topo da lista continuava a apontar-lhe.
+    expect(useRefereeingStore.getState().started[fixturePoule.uuid]?.bout_id).toBeNull();
+  });
+
+  it('liberta-a também quando há toques por submeter, depois de confirmado', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons) => {
+      // O ramo destrutivo do `Alert` da spec §6 — o "sair mesmo assim".
+      buttons?.find((button) => button.style === 'destructive')?.onPress?.();
+    });
+
+    await open();
+    await fireEvent.press(screen.getByLabelText('Timer'));
+    await fireEvent.press(screen.getByLabelText('One more touch for Marta Lopes'));
+
+    await fireEvent.press(screen.getByLabelText('Back to list'));
+
+    expect(alert).toHaveBeenCalled();
+    await waitFor(() => expect(wasReleased('bout', BOUT_ID)).toBe(true));
+    expect(statusOf(BOUT_ID)).toBe('pending');
+  });
+
+  it('não pede nada quando o cronómetro nunca arrancou', async () => {
+    // Sem `start` não há nada para libertar — e o assalto que está em pista pode ser do árbitro do
+    // lado, que este dispositivo não tem que tirar a ninguém.
+    fakeState.bouts = fakeState.bouts.map((bout) =>
+      bout.id === BOUT_ID ? { ...bout, status: 'in_progress' } : bout,
+    );
+
+    await open();
+    await fireEvent.press(screen.getByLabelText('Back to list'));
+
+    expect(wasReleased('bout', BOUT_ID)).toBe(false);
+    expect(statusOf(BOUT_ID)).toBe('in_progress');
+  });
+
+  it('não pede nada depois de o resultado ficar registado', async () => {
+    // O assalto acabou, não foi abandonado. Pedir a libertação de um assalto que se acabou de
+    // registar é dizer a coisa errada — e o registo do organizador ficava com uma linha a dizê-la.
+    await open();
+    await fireEvent.press(screen.getByLabelText('Timer'));
+
+    for (let touch = 0; touch < 5; touch += 1) {
+      await fireEvent.press(screen.getByLabelText('One more touch for Marta Lopes'));
+    }
+
+    await fireEvent.press(screen.getByText('Submit result'));
+    await fireEvent.press(await screen.findByText('Record'));
+
+    await waitFor(() => expect(statusOf(BOUT_ID)).toBe('done'));
+    expect(wasReleased('bout', BOUT_ID)).toBe(false);
   });
 });
 

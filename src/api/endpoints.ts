@@ -82,6 +82,23 @@ export async function startBout(boutId: string): Promise<StartResponse> {
 }
 
 /**
+ * O árbitro saiu do assalto **sem resultado** (contrato `2.3.0`): volta a `pending`, os eventos em
+ * direto desta tentativa são apagados e fica no registo do organizador uma linha `abandoned`.
+ *
+ * É a outra metade do `start`, e sem ela o `start` é uma porta de sentido único: abrir a linha
+ * errada da folha deixava um assalto a decorrer para sempre, na página pública e na app de todos os
+ * outros árbitros da mesma folha.
+ *
+ * **Só liberta o dispositivo que chamou o `start`** — quem sabe disso é o servidor, e é o que
+ * impede um árbitro de tirar o assalto ao da pista ao lado. *Fire-and-forget* como o `start`: uma
+ * tentativa, sem fila, e falhar não trava quem quer é sair. Contra um servidor anterior à `2.3.0` o
+ * `DELETE` responde `404`/`405` e é ignorado.
+ */
+export async function releaseBout(boutId: string): Promise<void> {
+  await request<never>(`/bouts/${boutId}/start`, { method: 'DELETE' });
+}
+
+/**
  * O que está a acontecer na pista, enquanto acontece (contrato §7, `1.5.0`).
  *
  * *Fire-and-forget* e **sem retry**: quem repete é o lote seguinte, com os mesmos `seq` — o
@@ -128,6 +145,14 @@ export async function getMatch(matchId: string): Promise<MatchDetail> {
 
 export async function startMatch(matchId: string): Promise<StartResponse> {
   return body(await request<StartResponse>(`/elimination/${matchId}/start`, { method: 'POST' }));
+}
+
+/**
+ * Igual ao `releaseBout` — mesmas regras, mesma limpeza, mesmo `204` (contrato `2.3.0`). Mais raro
+ * aqui, porque um código alcança um combate e não há lista onde enganar a linha.
+ */
+export async function releaseMatch(matchId: string): Promise<void> {
+  await request<never>(`/elimination/${matchId}/start`, { method: 'DELETE' });
 }
 
 /** Igual ao dos assaltos — mesmo corpo, mesmo `seq`, mesma resposta (contrato §7). */

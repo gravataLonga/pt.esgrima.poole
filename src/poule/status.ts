@@ -30,24 +30,39 @@ export type BoutState =
  * ser o do árbitro do lado — e propor "Retomar" sobre esse era mandar este para dentro do assalto
  * de outro.
  *
+ * O `refereedHere` é a segunda metade da mesma memória, e por omissão deduz-se do `startedId`. Só
+ * se separam desde o contrato `2.3.0`, em que largar um assalto deixa este dispositivo **sem
+ * assalto nenhum numa pista onde já arbitrou** — e aí o `startedId` é `null` sem que o terceiro
+ * ramo se aplique.
+ *
  * Três ramos, e é toda a regra:
  * - o meu, se estiver a decorrer;
  * - senão, se já arbitrei aqui, o primeiro por disputar — o que decorre é de outra pista;
  * - senão (nunca arbitrei aqui) o primeiro a decorrer, que é o comportamento de sempre e o que
  *   acerta com um árbitro só, que continua a ser o normal.
  */
-export function currentBout(bouts: Bout[], startedId: string | null = null): Bout | undefined {
+export function currentBout(
+  bouts: Bout[],
+  startedId: string | null = null,
+  refereedHere: boolean = startedId !== null,
+): Bout | undefined {
   if (startedId) {
     const mine = bouts.find((bout) => bout.id === startedId);
     return mine?.status === 'in_progress' ? mine : firstPending(bouts);
   }
 
+  if (refereedHere) return firstPending(bouts);
+
   return bouts.find((bout) => bout.status === 'in_progress') ?? firstPending(bouts);
 }
 
 /** O par que deve estar a preparar-se. `undefined` quando o atual é o último por disputar. */
-export function onDeckBout(bouts: Bout[], startedId: string | null = null): Bout | undefined {
-  const current = currentBout(bouts, startedId);
+export function onDeckBout(
+  bouts: Bout[],
+  startedId: string | null = null,
+  refereedHere: boolean = startedId !== null,
+): Bout | undefined {
+  const current = currentBout(bouts, startedId, refereedHere);
   return bouts.find((bout) => bout.status === 'pending' && bout.id !== current?.id);
 }
 
@@ -88,9 +103,10 @@ export function listOrder(bouts: Bout[]): Bout[] {
 export function boutStates(
   bouts: Bout[],
   startedId: string | null = null,
+  refereedHere: boolean = startedId !== null,
 ): Record<string, BoutState> {
-  const onDeckId = onDeckBout(bouts, startedId)?.id;
-  const currentId = currentBout(bouts, startedId)?.id;
+  const onDeckId = onDeckBout(bouts, startedId, refereedHere)?.id;
+  const currentId = currentBout(bouts, startedId, refereedHere)?.id;
 
   return Object.fromEntries(
     bouts.map((bout) => {

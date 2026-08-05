@@ -152,3 +152,39 @@ describe('dois árbitros na mesma poule', () => {
     expect(currentBout(bouts, 'b_removido')?.id).toBe('b_2');
   });
 });
+
+/**
+ * Contrato `2.3.0`: largar um assalto deixa este dispositivo **sem assalto nenhum numa pista onde
+ * já arbitrou**. É o estado que não existia antes — o `startedId` a `null` querendo dizer duas
+ * coisas diferentes conforme se tenha ou não passado por aqui.
+ */
+describe('depois de largar o assalto', () => {
+  it('o cartão do topo não se agarra ao assalto do árbitro do lado', () => {
+    // Este dispositivo começou o 2 e largou-o; o 1 está a decorrer, noutra pista. Sem a segunda
+    // metade da memória, isto voltava ao "Retomar" sobre o assalto de outro que a `2.2.0` corrigiu.
+    const bouts = [bout(1, 'in_progress'), bout(2, 'pending'), bout(3, 'pending')];
+    const states = boutStates(bouts, null, true);
+
+    expect(currentBout(bouts, null, true)?.id).toBe('b_2');
+    expect(states.b_1).toBe('in_progress');
+    expect(states.b_2).toBe('up_next');
+    expect(states.b_3).toBe('on_deck');
+  });
+
+  it('o assalto largado volta a ser o que se propõe começar', () => {
+    // Voltou a `pending` do lado do servidor, e é o primeiro por disputar: a app propõe-no outra
+    // vez, com "Começar" e não com "Retomar".
+    const bouts = [bout(1, 'done'), bout(2, 'pending'), bout(3, 'pending')];
+
+    expect(currentBout(bouts, null, true)?.id).toBe('b_2');
+  });
+
+  it('sem ter arbitrado aqui, continua a valer o comportamento de sempre', () => {
+    // O `refereedHere` deduz-se do `startedId` quando não se diz nada, e é o que mantém todas as
+    // outras chamadas — e os testes acima — a querer dizer exatamente o que queriam dizer.
+    const bouts = [bout(1, 'in_progress'), bout(2, 'pending')];
+
+    expect(currentBout(bouts, null)?.id).toBe('b_1');
+    expect(currentBout(bouts, null, false)?.id).toBe('b_1');
+  });
+});

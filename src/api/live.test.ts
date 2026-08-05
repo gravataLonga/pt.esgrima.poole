@@ -348,6 +348,42 @@ live(`contrato ${API_CONTRACT_VERSION} contra ${baseUrl ?? '(saltado)'}`, () => 
   );
 
   writes(
+    '`DELETE .../start` devolve o assalto a `pending` e leva os eventos da tentativa',
+    async () => {
+      const uuid = (await api.getSession()).poule!.uuid;
+      const list = (await api.getBouts(uuid)).data!;
+      const pending = list.bouts.find((bout) => bout.status === 'pending');
+
+      if (!pending) throw new Error('A poule de teste não tem assaltos por pontuar.');
+
+      await api.startBout(pending.id);
+      await api.postBoutEvents(pending.id, [
+        { seq: 1, type: 'touch', side: 'a', period: 1, at_ms: 8_200, score_a: 1, score_b: 0 },
+      ]);
+
+      // O árbitro enganou-se na linha da folha (contrato `2.3.0`). Sem corpo e sem resposta:
+      // `204` mesmo quando não havia nada para libertar.
+      await expect(api.releaseBout(pending.id)).resolves.toBeUndefined();
+
+      const after = (await api.getBouts(uuid)).data!.bouts.find((bout) => bout.id === pending.id);
+      expect(after?.status).toBe('pending');
+
+      // E os `seq` da tentativa abandonada saíram com ela — se não tivessem saído, o `seq: 1` a
+      // seguir era engolido em silêncio pelo `insertOrIgnore` e a linha temporal da tentativa
+      // seguinte desaparecia inteira.
+      await api.startBout(pending.id);
+      expect(
+        await api.postBoutEvents(pending.id, [
+          { seq: 1, type: 'touch', side: 'b', period: 1, at_ms: 5_000, score_a: 0, score_b: 1 },
+        ]),
+      ).toEqual({ accepted: 1 });
+
+      await api.releaseBout(pending.id);
+    },
+    30_000,
+  );
+
+  writes(
     '`POST .../events` conta os novos e ignora em silêncio um `seq` repetido',
     async () => {
       const uuid = (await api.getSession()).poule!.uuid;

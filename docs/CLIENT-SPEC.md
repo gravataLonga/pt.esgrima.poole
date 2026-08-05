@@ -186,7 +186,7 @@ primeiras estão formalizadas no [contrato de API](app-arbitragem-api-contract.m
 | Payload do QR | **Só os 6 dígitos.** O JSON `{v, base_url, pin}` fica especificado como formato reservado | Ler o QR e escrever o PIN passam a ser o mesmo caminho. O `base_url` no QR entra quando houver *self-hosting* a justificá-lo; o cliente já o aceita, para a migração não ser coordenada. |
 | Atualizações | **Polling com ETag**, não WebSockets | A plataforma não tem *broadcasting*; polling resolve com custo quase zero. |
 | Re-submissão | **`submission_id`** (UUID v4 do cliente) no `score`; mesma submissão → **200**, não 409 | Sem chave de idempotência, um *retry* por *timeout* dá 409 falso ("outra pessoa") ao próprio autor. A chave é da submissão, não da sessão: sobrevive a uma reconexão com a fila cheia. |
-| Início do assalto | `POST /bouts/{id}/start` | O widget "quem joga agora" da web precisa de `in_progress`; sem endpoint nunca sai de `pending`. |
+| Início do assalto | `POST /bouts/{id}/start`, e desde o contrato `2.3.0` `DELETE /bouts/{id}/start` | O widget "quem joga agora" da web precisa de `in_progress`; sem endpoint nunca sai de `pending`. E sem o `DELETE` nunca mais lá volta: abrir a linha errada da folha é o erro mais comum que há a arbitrar, e deixava o assalto a decorrer para sempre — na página pública e na app dos outros árbitros da mesma folha. |
 | Id de assalto | String **opaca** | Isola a app da migração do modelo de assaltos, ainda por fechar do lado do servidor. |
 | Fila offline | Persistente, FIFO, só para submissões de resultado | Rede de pavilhão cai. Perder um resultado é inaceitável; perder um `start` não é. |
 | Eliminatórias | **Um combate por sessão**, com código próprio; `scope` a distinguir `poule` de `match` | Um quadro de 16 corre em oito pistas ao mesmo tempo. Um código para o quadro inteiro dava a cada árbitro todos os combates e — porque um código segura um dispositivo de cada vez — o segundo a lê-lo tirava a sessão ao primeiro (contrato `2.0.0`). |
@@ -256,7 +256,7 @@ Regras de trabalho:
 |---|---|
 | Base | `{base_url}/api/v1`, HTTPS, JSON, sem cookies |
 | Auth | `Authorization: Bearer <token>` — token de **âmbito de uma pista** (`scope: poule` \| `match`), 60 min deslizantes, sem *refresh* |
-| Endpoints | `POST /connect` · `GET /poules/{uuid}/bouts` · `.../standings` · `GET /bouts/{id}` e `/elimination/{id}` · `POST .../start`, `.../events` e `.../score` · `GET/DELETE /session` |
+| Endpoints | `POST /connect` · `GET /poules/{uuid}/bouts` · `.../standings` · `GET /bouts/{id}` e `/elimination/{id}` · `POST .../start`, `.../events` e `.../score` · `DELETE .../start` · `GET/DELETE /session` |
 | Erros | `{ code, message, errors? }` — a app só faz lógica sobre `code`, nunca sobre `message` |
 | Sincronização | Polling de 10 s com `If-None-Match`/`ETag`; sem *push* |
 
@@ -352,6 +352,11 @@ múltipla.
     dizer a este árbitro qual chamar;
   - senão (nunca arbitrei aqui) o primeiro a decorrer, que é o comportamento de sempre e o que
     acerta com um árbitro só.
+
+  **Largar um assalto não apaga a memória da pista** (contrato `2.3.0`): o que se esquece é qual era
+  o assalto, não que se arbitrou aqui. São o segundo e o terceiro ramos, e a diferença entre eles é
+  toda — quem largou o seu assalto cai no do meio e vê "Começar" no primeiro por disputar; se caísse
+  no de baixo, o cartão agarrava-se outra vez ao assalto do árbitro do lado.
 - *Pull to refresh*. Polling de 10 s.
 - Banner permanente quando `READ_ONLY` ou offline com fila pendente.
 - **O banner de `READ_ONLY` diz para onde a competição foi**, e é ele que substitui o ecrã de quadro
@@ -372,6 +377,12 @@ múltipla.
 - Confirmação antes de submeter: *"Registar 5–3 para Ana Silva?"* — um resultado errado só se corrige
   na web.
 - Sair com resultado por submeter → pede confirmação.
+- **Sair sem resultado liberta a pista** (contrato `2.3.0`): o assalto volta a `pending`, os eventos
+  em direto da tentativa são apagados e o organizador fica com uma linha `abandoned`. Vale nos dois
+  ramos — o "voltar" direto e o "sair mesmo assim" da confirmação —, e **só** quando foi este
+  telemóvel a arrancar o cronómetro. Nunca depois de um resultado, nem sequer de um que ficou em
+  fila: aí o assalto acabou, e o que falta é caminho. É *fire-and-forget* como o `start` — falhar
+  não pode travar quem quer é sair, e a tentativa seguinte corrige o estado por si.
 - **Banner quando o assalto está a decorrer noutro dispositivo** (contrato `2.2.0`): *"Este assalto
   está a decorrer noutro dispositivo. Quem submeter primeiro fica com o resultado."* **Aviso, nunca
   proibição** — o contrato §6 fecha a porta a reservar ou atribuir assaltos, e o empate que sobra
@@ -391,7 +402,9 @@ múltipla.
 - Cabeçalho: `competition_name` por cima (a única coisa que diz ao árbitro onde está — chegou com
   seis dígitos e mais nada), `Ronda X · posição Y` por baixo. A app **não nomeia rondas**.
 - Carrega o que a lista carrega numa poule: **barra de sessão**, **banner de fila** e **"Sair"**.
-  Sem lista por baixo, não há galho de "voltar" — e por isso não há.
+  Sem lista por baixo, não há galho de "voltar" — e por isso não há. É também isso que faz do
+  **"Sair" a única saída sem resultado**: sair da sessão liberta o combate que este dispositivo
+  tenha deixado a decorrer (`DELETE /elimination/{id}/start`, contrato `2.3.0`).
 - **`ready: false` tem ecrã próprio.** O código pode ser entregue antes de se saber quem sobe: os
   dois lugares aparecem, um ou os dois por preencher, sem cronómetro e sem contadores. Destranca-se
   **sozinho** com o *poll* de 30 s, quando a ronda anterior for decidida. Não é o mesmo que
@@ -432,6 +445,9 @@ O cronómetro é **local e autoritário**. O servidor não cronometra e não é 
 - Estados: `idle` → `running` → `paused` → `expired`. Reiniciável enquanto o assalto não for submetido.
 - Toque no cronómetro alterna *iniciar/parar* — o alvo tocável tem de ser generoso (≥ 96 pt).
 - O **primeiro** `running` de um assalto dispara `POST /bouts/{id}/start` (*fire-and-forget*).
+- E é ele que decide se há alguma coisa a libertar à saída: **sair do assalto sem resultado dispara
+  `DELETE /bouts/{id}/start`** (contrato `2.3.0`), e sem cronómetro arrancado não dispara nada — o
+  assalto que está em pista pode ser do árbitro do lado.
 - Ao chegar a `00:00`: som + vibração + estado `expired`. **Não** submete nada automaticamente.
 - Atingir `target` toques **não** para o cronómetro automaticamente — só o destaca. Quem decide é o
   árbitro.
@@ -871,6 +887,7 @@ contrato**.
 | **F8 — O código é da pista** ✅ | Contrato `2.0.0`: `scope: poule \| match`, o ecrã de quadro apagado, o combate como raiz de sessão, poule fechada em leitura, `API_CONTRACT_VERSION` a `'2.0.0'` | F7 + servidor §11.A15 do contrato |
 | **F9 — Os marcos do combate** ✅ | Contrato `2.1.0` ([§7.2](#72-os-marcos-do-combate--contrato-210)): emitir os oito marcos e os quatro campos novos, `API_CONTRACT_VERSION` a `'2.1.1'` (a `2.1.1` é a redação que registou os dois lados feitos) | F8 + servidor §11.E do contrato |
 | **F10 — Dois árbitros na mesma poule** ✅ | Contrato `2.2.0`: **nenhum campo novo**. A app deixa de assumir que só há um assalto a decorrer por poule — memória local de qual é o **deste** dispositivo, o cartão do topo a segui-la, aviso ao abrir um assalto que decorre noutra pista, e a *copy* do `token_revoked` corrigida. `API_CONTRACT_VERSION` a `'2.2.1'` (a `2.2.1` é a redação que registou o lado da app) | F9 + servidor §11.A17 do contrato |
+| **F11 — Largar o assalto** ✅ | Contrato `2.3.0`: **um endpoint novo e nenhum campo**. Sair de um assalto sem resultado passa a dizê-lo — `DELETE .../start` nos dois ramos do "voltar", o mesmo ao sair de uma sessão de combate, a memória do assalto a largá-lo no mesmo instante, e nada disto depois de um resultado. É a primeira versão que **não** se fecha do lado do servidor: só a app sabe que o árbitro saiu, porque ela sai por navegação. `API_CONTRACT_VERSION` a `'2.3.1'` | F10 + servidor §11.G do contrato |
 
 F0–F4 correm **inteiramente contra os mocks** e não dependem do trabalho do servidor.
 

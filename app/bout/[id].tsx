@@ -3,7 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { postBoutEvents, startBout } from '@/api/endpoints';
+import { postBoutEvents, releaseBout, startBout } from '@/api/endpoints';
 import { invalidatePoule, useBoutDetail } from '@/api/queries';
 import { BoutScreen, boutTiming, type BoutAssignment } from '@/bout';
 import type { LiveBoutEvent } from '@/api/types';
@@ -26,6 +26,7 @@ export default function BoutRoute() {
 
   const startedId = useStartedBoutId(pouleUuid);
   const markStarted = useRefereeingStore((s) => s.markStarted);
+  const clearStarted = useRefereeingStore((s) => s.clearStarted);
 
   const assignment = useMemo<BoutAssignment | undefined>(() => {
     if (!detail.data || !pouleUuid) return undefined;
@@ -64,6 +65,26 @@ export default function BoutRoute() {
     void startBout(id).catch(() => undefined);
   }, [id, pouleUuid, markStarted]);
 
+  /**
+   * O árbitro abriu a linha errada da folha e voltou à lista (contrato `2.3.0`). O assalto volta a
+   * `pending` do lado de lá e deixa de ser deste dispositivo do lado de cá — as duas coisas, porque
+   * a memória local é que responde a "qual é o meu assalto" e ele deixou de o ser.
+   *
+   * A lista é revalidada **quando o servidor confirmar**, e não antes: pedi-la já trazia de volta o
+   * `in_progress` que este pedido está a desfazer. Falhar não tem tratamento — o assalto fica como
+   * estava, e a tentativa seguinte corrige-o.
+   */
+  const onRelease = useCallback(() => {
+    if (!id) return;
+    if (pouleUuid) clearStarted(pouleUuid);
+
+    void releaseBout(id)
+      .then(() => {
+        if (pouleUuid) invalidatePoule(client, pouleUuid);
+      })
+      .catch(() => undefined);
+  }, [id, pouleUuid, clearStarted, client]);
+
   const onEvents = useCallback(
     (events: LiveBoutEvent[]) => postBoutEvents(id as string, events),
     [id],
@@ -81,6 +102,7 @@ export default function BoutRoute() {
       onRetry={() => void detail.refetch()}
       back={() => router.replace('/poule')}
       onStart={onStart}
+      onRelease={onRelease}
       onEvents={id ? onEvents : undefined}
       onRecorded={onRecorded}
     />

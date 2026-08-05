@@ -8,6 +8,7 @@
 
 import { QueryClient } from '@tanstack/react-query';
 
+import { configureClient } from '@/api/client';
 import type { MatchDetail, PouleSummary } from '@/api/types';
 import { defaultBaseUrl } from '@/config/env';
 import { useRefereeingStore } from '@/poule';
@@ -46,6 +47,11 @@ export function resetApp(overrides: Partial<FakeState> = {}): void {
 
   for (const client of mounted) client.clear();
 
+  // O token não passa pelo servidor falso — os testes trocam `@/api/endpoints` inteiro —, mas há
+  // código de sessão que lhe pergunta se **existe**: o `disconnect()` não revoga nem liberta nada
+  // sem ele, e sem isto os dois ramos nunca se distinguiam num teste.
+  configureClient({ token: null });
+
   useSessionStore.setState({
     phase: 'disconnected',
     // `false` e não `true`: sem isto o ecrã de entrada ficava para sempre à espera de um `restore`
@@ -72,6 +78,7 @@ export function resetApp(overrides: Partial<FakeState> = {}): void {
  */
 export function connectPoule(overrides: Partial<PouleSummary> = {}): PouleSummary {
   const poule = seedPoule(overrides);
+  configureClient({ token: 'fake-token' });
 
   useSessionStore.setState({
     phase: phaseFor('poule', poule),
@@ -89,6 +96,7 @@ export function connectPoule(overrides: Partial<PouleSummary> = {}): PouleSummar
 /** O mesmo, para uma sessão de âmbito `match` — que arbitra **um** combate e mais nada. */
 export function connectMatch(overrides: Partial<MatchDetail> = {}): MatchDetail {
   const match = seedMatch(overrides);
+  configureClient({ token: 'fake-token' });
 
   useSessionStore.setState({
     phase: phaseFor('match', null, match),
