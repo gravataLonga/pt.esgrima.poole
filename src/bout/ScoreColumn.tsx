@@ -22,13 +22,20 @@ export interface ScoreColumnProps {
    * `splitName`).
    */
   label: string;
-  /** Número na folha de poule. `null` quando não há atletas: é isso que colapsa o bloco de nome. */
+  /**
+   * Número na folha de poule. **`null` é o normal fora dela**: um combate de quadro não tem números
+   * de poule, e o modo cronómetro não tem atletas. Quando falta, o bloco de nome perde a pastilha e
+   * mais nada — quem decide se há nome para escrever é o `tone`.
+   */
   number: number | null;
   /** `null` no modo cronómetro e nos atletas sem clube. */
   club: string | null;
   /**
    * Cor do lado, como nas lâmpadas do aparelho. `null` com a poule ligada — aí quem distingue as
    * colunas é o nome, e mais cor só competiria com ele.
+   *
+   * **É também o que diz se há atletas**: uma cor é como o árbitro chama os dois lados quando não
+   * há quem nomear, e é só nesse caso que ela aparece.
    */
   tone: 'green' | 'red' | null;
   score: number;
@@ -89,9 +96,15 @@ export function ScoreHalf({
 
   return (
     <View style={[styles.half, compact ? styles.halfCompact : null]}>
-      {number === null ? (
+      {tone !== null ? (
         /* Sem atletas não há nada para escrever aqui — sobra a cor do lado, que é como o árbitro
-           já os chama em voz alta. Ocupa a faixa do nome em vez de a deixar vazia. */
+           já os chama em voz alta. Ocupa a faixa do nome em vez de a deixar vazia.
+
+           **Vai pelo `tone` e não pelo número da folha.** Ia: e como um combate de quadro não tem
+           números de poule, o marcador do quadro caía aqui — dois nomes inteiros em maiúsculas,
+           os dois na mesma cor (sem `tone`, verde), a quebrar em duas e três linhas conforme o
+           comprimento, com os algarismos a assentar em alturas diferentes. Um atleta de poule sem
+           número, que o contrato permite, caía no mesmo sítio. */
         <View style={[styles.toneBar, tone === 'red' ? styles.toneBarRed : styles.toneBarGreen]}>
           <Text style={[styles.toneLabel, tone === 'red' ? styles.toneLabelRed : null]}>
             {label}
@@ -152,7 +165,7 @@ export function ScoreHalf({
 
 interface NameBlockProps {
   label: string;
-  number: number;
+  number: number | null;
   club: string | null;
   hasPriority: boolean;
   settledPriority: boolean;
@@ -191,11 +204,16 @@ function NameBlock({
           empurrava o apelido para a direita e o nome próprio ficava à esquerda dele, com as duas
           linhas do mesmo nome a começar em sítios diferentes. */}
       <View style={[styles.nameRow, toEnd ? styles.nameRowEnd : null]}>
-        <View style={styles.numberChip}>
-          <Text variant="caption" color={colors.light} style={styles.numberLabel}>
-            {number}
-          </Text>
-        </View>
+        {/* Num combate de quadro não há pastilha: o número é o da folha de poule, e ali não há
+            folha. O nome fica encostado à aresta de fora na mesma, que é o que alinha as duas
+            colunas uma com a outra. */}
+        {number === null ? null : (
+          <View style={styles.numberChip}>
+            <Text variant="caption" color={colors.light} style={styles.numberLabel}>
+              {number}
+            </Text>
+          </View>
+        )}
 
         <View style={[styles.nameStack, side]}>
           <Text numberOfLines={1} style={styles.family}>

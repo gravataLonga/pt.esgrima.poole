@@ -98,7 +98,7 @@ export function BoutInfo({ timing, target }: BoutInfoProps) {
         accessibilityRole="button"
         accessibilityLabel={t('bout.info.title')}
         onPress={() => setOpen(true)}
-        // O alvo desenhado tem 32 pt; o `hitSlop` leva-o aos 44 pt das HIG sem o engordar.
+        // O alvo desenhado tem 36 pt; o `hitSlop` leva-o aos 48 pt das HIG sem o engordar.
         hitSlop={6}
         style={({ pressed }) => [styles.mark, pressed ? styles.markPressed : null]}
       >
@@ -145,8 +145,10 @@ export function BoutInfo({ timing, target }: BoutInfoProps) {
 
 const styles = StyleSheet.create({
   mark: {
-    width: 32,
-    height: 32,
+    // O mesmo diâmetro do "Sair" (`SessionExit.tsx`): numa sessão de combate os dois ficam lado a
+    // lado no cabeçalho, e dois círculos iguais com quatro pontos de diferença leem-se como um erro.
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radius.full,

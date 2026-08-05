@@ -385,6 +385,27 @@ describe('combate de eliminatória', () => {
     expect(router.getPathname()).toBe('/match/m_1');
   });
 
+  it('o marcador escreve os nomes como numa poule, e não como o modo cronómetro', async () => {
+    connectMatch();
+
+    await renderRouter('./app', { initialUrl: '/match/m_1' });
+    await screen.findByText('Round 2 · 1');
+
+    // Apelido em cima, nome próprio por baixo, clube na terceira linha (ADR-034). Um combate de
+    // quadro não tem números de poule, e era isso que o marcador lia como "não há atletas": os dois
+    // nomes inteiros numa faixa verde, a quebrar em duas e três linhas conforme o comprimento, com
+    // os algarismos a assentar em alturas diferentes.
+    expect(screen.getByText('Silva')).toBeTruthy();
+    expect(screen.getByText('Ana')).toBeTruthy();
+    expect(screen.getByText('CE Lisboa')).toBeTruthy();
+    expect(screen.getByText('Costa')).toBeTruthy();
+    expect(screen.getByText('Rui')).toBeTruthy();
+
+    // O nome inteiro continua a viajar, mas nos rótulos de acessibilidade — não no painel.
+    expect(screen.queryByText('Ana Silva')).toBeNull();
+    expect(screen.getByLabelText('One more touch for Ana Silva')).toBeTruthy();
+  });
+
   it('carrega o que a lista carregava numa poule: sessão, fila e "Sair"', async () => {
     connectMatch();
 
@@ -400,6 +421,18 @@ describe('combate de eliminatória', () => {
 
     await waitFor(() => expect(router.getPathname()).toBe('/connect'));
     expect(useSessionStore.getState().phase).toBe('disconnected');
+  });
+
+  it('um combate que não abre continua a ter por onde sair', async () => {
+    connectMatch();
+
+    // Um id que esta sessão não alcança responde `404` (contrato §7). Não há lista por baixo nem
+    // cabeçalho para arbitrar, e sem "Sair" o árbitro ficava preso a olhar para o erro até o token
+    // expirar sozinho, 60 minutos depois.
+    await renderRouter('./app', { initialUrl: '/match/m_999' });
+
+    expect(await screen.findByText('Bout not found.')).toBeTruthy();
+    expect(screen.getByLabelText('Leave')).toBeTruthy();
   });
 
   it('um combate por preencher espera, e não deixa arbitrar', async () => {

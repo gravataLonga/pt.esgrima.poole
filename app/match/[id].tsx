@@ -120,17 +120,11 @@ export default function MatchRoute() {
       error={detail.error}
       onRetry={() => void detail.refetch()}
       eyebrow={match?.competition_name}
-      chrome={
-        <>
-          {chrome}
-          {/* Encostado à direita e compacto: o cronómetro é o que se lê a dois metros, e um botão
-              de largura inteira por cima dele rouba-lhe altura a cada assalto para servir uma
-              ação que se usa uma vez. */}
-          <View style={styles.leaveRow}>
-            <LeaveButton />
-          </View>
-        </>
-      }
+      chrome={chrome}
+      // No cabeçalho, ao lado do "?": os dois são círculos com um ícone e a mesma raridade de uso,
+      // e numa faixa própria ficavam empilhados um sobre o outro a gastar uma linha do ecrã que o
+      // cronómetro quer para si.
+      action={<LeaveButton />}
       onStart={onStart}
       onEvents={id ? onEvents : undefined}
       onRecorded={onRecorded}
@@ -218,9 +212,6 @@ function Slot({ fencer }: { fencer: MatchDetail['fencer_a'] }) {
 }
 
 const styles = StyleSheet.create({
-  leaveRow: {
-    alignItems: 'flex-end',
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',

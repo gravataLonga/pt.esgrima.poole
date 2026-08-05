@@ -369,7 +369,10 @@ múltipla.
 
 **3. Assalto** (`/bout/[id]`)
 - Nomes e números dos dois atletas, em grande, lado a lado (A à esquerda, B à direita) — mesma ordem
-  que a API devolve, sempre.
+  que a API devolve, sempre. **O número é o da folha de poule e falta muitas vezes**: um combate de
+  quadro não tem folha, e o contrato permite um atleta de poule sem número. Sem ele o nome escreve-se
+  na mesma, sem a pastilha — quem não tem nome é o modo cronómetro, e aí o que identifica cada lado
+  é a cor.
 - **Cronómetro** central, grande, legível a 2 m. Ver [§7](#7-cronómetro).
 - Contadores de toques: `+`/`−` por atleta, alvo `target` visível. `−` nunca abaixo de 0; `+` nunca
   acima de `target`.
@@ -409,7 +412,9 @@ múltipla.
   dois lugares aparecem, um ou os dois por preencher, sem cronómetro e sem contadores. Destranca-se
   **sozinho** com o *poll* de 30 s, quando a ronda anterior for decidida. Não é o mesmo que
   `locked`, que quer dizer "já foi arbitrado", e a *copy* distingue os dois.
-- Arbitrar é igual à poule, com os presets do quadro (15 toques, 3 períodos, descanso entre eles),
+- Arbitrar é igual à poule — **incluindo o marcador**: apelido em cima, nome próprio por baixo,
+  clube na terceira linha, e as duas colunas com a mesma altura de nome para os algarismos
+  assentarem à mesma altura. Com os presets do quadro (15 toques, 3 períodos, descanso entre eles),
   todos vindos da API.
 - Registar o resultado **encerra a pista**: o token é invalidado do lado do servidor e a app segue
   para o resumo. O vencedor sobe de ronda no servidor, para um combate com código próprio.

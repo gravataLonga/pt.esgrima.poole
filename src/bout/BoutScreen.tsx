@@ -90,10 +90,19 @@ export interface BoutScreenProps {
   /** Linha por cima do título — a prova a que o combate pertence. */
   eyebrow?: string;
   /**
-   * Barra de sessão, fila e "Sair": o que a lista carrega numa poule e ninguém carrega num combate.
+   * Barra de sessão e fila: o que a lista carrega numa poule e ninguém carrega num combate.
    * Só em *portrait* — deitado, o ecrã é do cronómetro e das duas colunas.
    */
   chrome?: ReactNode;
+  /**
+   * O que fica **ao lado do "?"**, no canto do cabeçalho — o "Sair" de uma sessão de combate.
+   *
+   * Existe porque os dois são o mesmo tipo de coisa: um círculo com um ícone, que se toca uma vez
+   * por assalto ou uma vez por dia. Numa faixa própria por baixo do cabeçalho ficavam empilhados um
+   * sobre o outro, dois círculos iguais em coluna, e a faixa gastava uma linha inteira do ecrã para
+   * carregar um botão. Só em *portrait*, pela mesma razão do `chrome`.
+   */
+  action?: ReactNode;
   /** `POST .../start`, *fire-and-forget*: falhar não bloqueia a arbitragem (contrato §7). */
   onStart: () => void;
   /**
@@ -134,7 +143,7 @@ type SheetKind = 'none' | 'time' | 'submit' | 'conflict' | 'events' | 'priority'
  */
 export function BoutScreen(props: BoutScreenProps) {
   const { t } = useTranslation();
-  const { assignment, loading, error, onRetry, back, chrome } = props;
+  const { assignment, loading, error, onRetry, back, chrome, action } = props;
 
   if (!assignment) {
     return (
@@ -150,9 +159,17 @@ export function BoutScreen(props: BoutScreenProps) {
               <Text variant="title">{t('bout.notFound')}</Text>
               {error ? <Text color={colors.textMuted}>{describe(error)}</Text> : null}
               <Button label={t('common.retry')} onPress={onRetry} />
-              {/* Sem lista por baixo não há "voltar": o que resta é o "Sair" do chrome, que
-                  termina a sessão de vez em vez de fingir que há para onde ir. */}
-              {back ? <Button label={t('bout.back')} variant="secondary" onPress={back} /> : chrome}
+              {/* Sem lista por baixo não há "voltar": o que resta é o "Sair", que termina a
+                  sessão de vez em vez de fingir que há para onde ir. Aqui não há cabeçalho onde o
+                  pôr, por isso vem com o resto do `chrome` — é a única saída deste ecrã. */}
+              {back ? (
+                <Button label={t('bout.back')} variant="secondary" onPress={back} />
+              ) : (
+                <>
+                  {chrome}
+                  {action ? <View style={styles.errorAction}>{action}</View> : null}
+                </>
+              )}
             </>
           )}
         </View>
@@ -172,6 +189,7 @@ function Refereeing({
   back,
   eyebrow,
   chrome,
+  action,
   onStart,
   onRelease,
   onEvents,
@@ -462,6 +480,9 @@ function Refereeing({
         </View>
 
         <BoutInfo timing={timing} target={target} />
+        {/* Depois do "?", e por isso mais para fora: sair é a ação mais rara e a mais definitiva
+            das duas, e é onde a lista de poule já a tem — no canto. */}
+        {action && !landscape ? action : null}
       </View>
 
       {/* Deitado o ecrã é do cronómetro e das duas colunas: um banner de sessão ali rouba a
@@ -680,6 +701,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     gap: spacing.md,
+  },
+  /** Sem cabeçalho, o "Sair" fica onde os outros botões deste ecrã estão: ao centro. */
+  errorAction: {
+    alignItems: 'center',
   },
   header: {
     flexDirection: 'row',
