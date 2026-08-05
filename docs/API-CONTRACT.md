@@ -1,12 +1,34 @@
 # API de Arbitragem — Contrato
 
-**Versão do contrato: `2.2.1`** · Estado: **feita dos dois lados** · 2026-07-30
+**Versão do contrato: `2.3.0`** · Estado: **servidor feito, app por fazer** · 2026-08-05
 
 Fronteira partilhada entre a **plataforma** (`poole.esgrima.pt`, Laravel 12) e a **app de arbitragem**
 (React Native, repositório separado). Este ficheiro é a **única fonte de verdade** do que os dois
 lados trocam entre si.
 
-> 🆕 **`2.2.0` — um código segura tantos dispositivos quantos os que o lerem.** MINOR. **Nenhum campo
+> 🆕 **`2.3.0` — o `start` deixa de ser uma porta de sentido único.** MINOR **aditivo**: um endpoint
+> novo, nenhum campo alterado, nenhum `type` novo. ⚠️ **Mas o defeito só desaparece quando a app
+> chamar o endpoint** — é a app que sabe que o árbitro saiu do assalto, e o servidor não tem como o
+> adivinhar. Ver [§11 G](#g-a-230-do-lado-da-app--por-fazer).
+>
+> **O que estava mal.** Um árbitro abre um assalto, põe o cronómetro a andar, vê que se enganou na
+> linha da folha e volta à lista para abrir o certo. Ninguém dizia nada à plataforma: o assalto
+> errado ficava `in_progress` **para sempre**, com os toques do arranque falso agarrados a ele. Do
+> lado de fora a poule aparecia em duas pistas ao mesmo tempo, com dois placares a sério na página
+> pública; na app de todos os outros árbitros da mesma folha apareciam dois assaltos a decorrer. E
+> era do mesmo árbitro. Antes da [`2.2.0`](#versionamento) isto não se via, porque o `start`
+> despromovia os outros assaltos e tapava o problema com outro pior.
+>
+> **O que muda:** `DELETE /bouts/{bout}/start` e `DELETE /elimination/{match}/start`. O assalto volta
+> a `pending`, os eventos em direto dessa tentativa **são apagados** e fica no registo do organizador
+> uma linha `abandoned` a dizer quantos toques se descartaram. O `DELETE /session` faz o mesmo, por
+> si, ao que este dispositivo tenha deixado aberto.
+>
+> **Só liberta quem abriu.** A plataforma passa a guardar que dispositivo chamou o `start`, e um
+> árbitro nunca tira o assalto ao da pista ao lado — que é exatamente o que a `2.2.0` deixou de
+> poder assumir.
+
+> ✅ **`2.2.0` — um código segura tantos dispositivos quantos os que o lerem.** MINOR. **Nenhum campo
 > muda de forma e a app não muda uma linha**; o que muda é o comportamento por trás de dois pedidos
 > que ela já faz.
 >
@@ -349,8 +371,8 @@ Base: `{base_url}/api/v1`. Todos exigem `Authorization: Bearer`, exceto `POST /c
 |---|---|
 | `POST /connect` | público |
 | `GET /poules/{poule}/bouts` · `/standings` | `poule` |
-| `GET /bouts/{bout}` · `POST .../start` · `.../events` · `.../score` | `poule` |
-| `GET /elimination/{match}` · `POST .../start` · `.../events` · `.../score` | `match`, e só o combate do próprio código |
+| `GET /bouts/{bout}` · `POST .../start` · `DELETE .../start` · `POST .../events` · `.../score` | `poule` |
+| `GET /elimination/{match}` · `POST .../start` · `DELETE .../start` · `POST .../events` · `.../score` | `match`, e só o combate do próprio código |
 | `GET` · `DELETE /session` | qualquer |
 
 ### Objetos partilhados
@@ -850,6 +872,43 @@ O cliente chama-o quando o árbitro **inicia o cronómetro pela primeira vez** n
 
 ---
 
+### `DELETE /bouts/{bout}/start`
+
+**Novo na `2.3.0`.** O árbitro saiu deste assalto **sem resultado**. O assalto volta a `pending` e a
+pista fica livre.
+
+**Porque existe.** Abrir a linha errada da folha é o erro mais comum que há a arbitrar, e até aqui
+não tinha volta: o assalto ficava a decorrer para sempre, na página pública, no painel do
+organizador e na app de todos os outros árbitros da mesma folha. É a outra metade do `start`, e sem
+ela o `start` é uma porta de sentido único.
+
+**O que acontece do lado de lá:**
+
+1. o `status` volta a `pending`;
+2. **os eventos em direto deste assalto são apagados** — os do `POST .../events`, os que levam `seq`;
+3. fica no registo do organizador uma linha **`abandoned`**, com quantos toques se descartaram.
+
+> **Porque é que os toques são apagados e não guardados.** São o registo de um assalto que não
+> aconteceu, e mantê-los custa duas coisas que não são cosméticas. **(1)** O placar ao vivo é o
+> evento mais recente que traz placar, portanto a tentativa seguinte abria a mostrar o resultado da
+> abandonada antes do primeiro toque. **(2)** O `seq` é único por assalto e a app numera **de 1**;
+> as linhas abandonadas ocupariam os números 1..N e o `insertOrIgnore` engolia **em silêncio** a
+> linha temporal inteira da tentativa seguinte. O que sobrevive é a linha `abandoned`, e chega: o
+> painel do organizador nunca mostrou a linha temporal.
+
+**Quem pode.** Só o dispositivo que chamou o `start`. Um assalto aberto por outro árbitro, ou já
+`done`, fica como está — e **nos dois casos a resposta é a mesma**, porque não há nada que a app
+faça de diferente em nenhum deles.
+
+**Request:** sem corpo. **204 No Content** — sempre, mesmo quando não havia nada para libertar.
+
+*Fire-and-forget* como o `start`: falhar não bloqueia nada, e não se enfileira. A tentativa seguinte
+corrige o estado por si.
+
+**Erros:** `401` · `403` · `404`
+
+---
+
 ### `POST /bouts/{bout}/events`
 
 O que está a acontecer na pista **enquanto o assalto decorre**: o toque que caiu, o duplo, o cartão,
@@ -1168,6 +1227,19 @@ Igual ao `start` do assalto: marca `in_progress`, idempotente, *fire-and-forget*
 
 ---
 
+### `DELETE /elimination/{match}/start`
+
+**Novo na `2.3.0`.** Igual ao [`DELETE /bouts/{bout}/start`](#delete-boutsboutstart) — mesmas regras,
+mesma limpeza, mesmo **204**. O combate volta a `pending` e o `started_at` volta a `null`.
+
+Mais raro aqui, porque um código alcança um combate e não há lista onde enganar a linha. Continua a
+existir pela mesma razão: o árbitro que abre o combate, põe o cronómetro a andar e passa a pista a
+outro deixa o mesmo fantasma na página da poule.
+
+**Erros:** `401` · `403` · `404`
+
+---
+
 ### `POST /elimination/{match}/events`
 
 Igual ao [`POST /bouts/{bout}/events`](#post-boutsboutevents) — mesmo corpo, mesmo `seq`, mesma
@@ -1252,6 +1324,16 @@ descobre que a poule entretanto fechou, ou que o combate que tinha na mão já f
 
 Revoga o token atual — botão "terminar sessão". **204 No Content**. Falhar não impede o cliente de
 apagar o token localmente.
+
+> **`2.3.0`: leva consigo o que este dispositivo deixou aberto.** Qualquer assalto que **este token**
+> tenha posto `in_progress` e não tenha pontuado é libertado à saída, com a mesma limpeza do
+> [`DELETE /bouts/{bout}/start`](#delete-boutsboutstart). É a rede de segurança e não o caminho
+> normal — o normal é a app dizê-lo assalto a assalto —, e existe para o árbitro que termina a
+> sessão com um assalto ainda no ecrã.
+>
+> **Só os deste token.** Uma poule em duas pistas com o mesmo código continua a ter dois árbitros, e
+> um sair não pode tirar o assalto ao outro. É a mesma regra do endpoint por assalto, e é a razão de
+> a plataforma guardar quem chamou o `start`.
 
 ---
 
@@ -1360,6 +1442,7 @@ passar a emitir o formato 2 em vez do 1.
 | Versão | Data | Alterações |
 |---|---|---|
 | `2.2.0` | 2026-07-30 | **MINOR — um código segura tantos dispositivos quantos os que o lerem, e uma poule pode estar em duas pistas.** Nenhum campo muda de forma e **a app não muda uma linha**; o que muda é o comportamento por trás de dois pedidos que ela já fazia. Uma poule atrasada é levada a uma segunda pista por um segundo árbitro, com a folha e o código que já lá estavam — e a plataforma respondia a isso das duas piores maneiras. **(1) O `POST /connect` deixa de invalidar o token anterior**: as sessões acumulam-se no mesmo PIN em vez de se substituírem, e a linha "outro dispositivo ligou-se" desaparece da tabela do [§11 B](#b-como-o-401-sabe-qual-dos-três-é) — o `401 token_revoked` passa a querer dizer só uma coisa, que o código foi rodado. **(2) O `POST /bouts/{bout}/start` deixa de despromover os outros assaltos em curso**, portanto uma poule pode ter N assaltos `in_progress`; isto conserta de caminho um defeito que já existia sem segundo árbitro nenhum, em que o assalto do primeiro caía para `pending` e reaparecia na app dele como "por disputar" a meio de ser arbitrado. **(3) Não há repartição, atribuição nem reserva de assaltos**, e não é esquecimento: os esgrimistas estão fisicamente num sítio só, e a submissão em duplicado já estava tratada desde a `1.0.0` — primeiro a submeter leva o assalto, o segundo apanha `409` com o `current`, e o `Refused` fica no registo. **(4) Não há entidade "pista"**: um assalto identifica-se pelo número de sequência da folha, que é o que está impresso na que está pendurada na parede. **(5) O que fica pior:** rodar o código passa a expulsar todos os árbitros de uma vez, que é o comportamento certo para quem o roda. Do lado da web, o `now_fencing` e o `up_next` passaram a coleções e o `up_next` traz três, cada um a dizer se os seus esgrimistas estão livres. |
+| `2.3.0` | 2026-08-05 | **MINOR, aditivo — o `start` deixa de ser uma porta de sentido único.** Um árbitro abre um assalto, põe o cronómetro a andar, vê que se enganou na linha da folha e volta à lista: nada disto chegava à plataforma, e o assalto errado ficava `in_progress` **para sempre**, com os toques do arranque falso agarrados. Do lado de fora a poule aparecia em duas pistas com dois placares a sério; na app dos outros árbitros da mesma folha, dois assaltos a decorrer — do mesmo árbitro. Antes da `2.2.0` não se via, porque o `start` despromovia os outros e tapava o problema com outro pior. **(1) `DELETE /bouts/{bout}/start` e `DELETE /elimination/{match}/start`**: o assalto volta a `pending`, os eventos em direto dessa tentativa **são apagados**, e fica no registo do organizador uma linha `abandoned` com quantos toques se descartaram. **(2) Os toques são apagados e não marcados**, por duas razões que não são cosméticas: o placar ao vivo é o evento mais recente com placar, portanto a tentativa seguinte abria a mostrar o resultado da abandonada; e o `seq` é único por assalto e a app numera de 1, portanto as linhas abandonadas ocupavam os números 1..N e o `insertOrIgnore` engolia em silêncio a linha temporal inteira da tentativa seguinte. **(3) A plataforma passa a guardar que dispositivo chamou o `start`** (`started_by_token_id`, gémeo do `scored_by_token_id`), e só esse liberta: um árbitro nunca tira o assalto ao da pista ao lado, que é o que a `2.2.0` deixou de poder assumir. **(4) O `DELETE /session` liberta, por si, o que este dispositivo deixou aberto** — rede de segurança para quem termina a sessão com um assalto no ecrã, e não o caminho normal. **(5) ⚠️ Isto não se fecha só do lado do servidor:** é a app que sabe que o árbitro saiu do assalto, e ela sai por navegação — ver [§11 G](#g-a-230-do-lado-da-app--por-fazer). Enquanto a G1 não for feita, o endpoint existe e ninguém o chama. |
 | `2.2.1` | 2026-07-30 | **PATCH, redação — "a app não muda uma linha" era verdade sobre os campos, e não sobre o ecrã.** Nada mudou no que os dois lados trocam, e a app continua a pedir o mesmo e a receber o mesmo. O que a `2.2.0` retirou foi uma garantia que a app usava sem nunca a ter escrito: que uma poule tem **no máximo um** assalto `in_progress`. Com dois árbitros no mesmo código, o cartão do topo da lista — que **propõe uma ação** — podia apontar ao assalto da outra pista, com um "Retomar" que levava lá dentro; e o "Começar" desaparecia do ecrã do árbitro que ainda não tinha começado nada. (1) A [§11 F](#f-a-220-do-lado-da-app) regista o lado da app: memória local de qual é o assalto **deste** dispositivo — não há campo no contrato que o diga, e a §6 explica porquê —, o cartão do topo a segui-la, e um banner ao abrir um assalto que decorre noutra pista, informação e nunca proibição. (2) A coluna "o que a app mostra" do `401 token_revoked` no [§8](#8-catálogo-de-erros) deixa de dizer "outro dispositivo assumiu esta pista", que a `2.2.0` tornou impossível — era a meia-verdade que a linha anterior deixava para a `2.3.0`, e corrigi-la é uma linha de i18n do lado da app, não uma alteração de contrato. |
 | `2.1.1` | 2026-07-29 | **PATCH, redação — a app emite a `2.1.0`, e este documento passa a dizê-lo.** Nada mudou no que os dois lados trocam. (1) A [§11 E](#e-a-210--feita-dos-dois-lados) deixou de ser "servida pela plataforma; a app é que falta" e passou a ser o registo dos **dois** lados, com a lista do que a app fez — **E6** a **E12**: os tipos e o teto a 300, o carimbo dos quatro campos em **todos** os eventos, o cronómetro embrulhado de onde saem o `bout_start` e os `clock_start`/`clock_stop`, as transições de descanso e de morte súbita, o `bout_end` antes de o resultado ir para a fila, os marcos **sem** placar e o travão nos 300. (2) O aviso de topo e o cabeçalho da §11 deixam de dizer que a app está por chegar — a §11 dizia mesmo que a `2.1.0` "ainda não existe em nenhum dos dois lados", que já contradizia a §11 E ao lado. (3) A ligação da §10 para a §11 E estava partida desde a `2.1.0`: o título da secção mudou e a âncora ficou a apontar para o antigo. |
 | `2.1.0` | 2026-07-26 | **MINOR, aditivo — um assalto passa a reconstituir-se, e não só a resumir-se.** A linha temporal da `1.5.0` dizia em que altura do período caiu um toque; não dizia a que horas o combate começou, a que horas se entrou no terceiro período, a que horas o tempo voltou a correr depois de um halt, nem a que horas se foi a morte súbita. **(1) Oito tipos de evento novos**, os marcos do combate: `bout_start`, `period_start`, `rest_start`, `rest_end`, `sudden_death_start`, `clock_start`, `clock_stop` e `bout_end` — a juntar ao `period_end`, que já existia. **(2) Quatro campos novos** em todos os eventos, todos opcionais: `at` (hora de parede ISO-8601 UTC, do relógio do dispositivo), `elapsed_ms` (desde o `bout_start`, contando paragens e descansos), `remaining_ms` (o que faltava da fase) e `phase` (`period` \| `rest` \| `sudden_death`). **(3) `score_a`/`score_b` passam a poder vir também no lote do `score`**, que até aqui só os aceitava em direto — as duas formas do evento passam a ser a mesma, menos o `seq`. **(4) O teto por assalto sobe de 200 para 300 eventos**, porque 200 era a conta dos toques e os marcos acrescentam ~85 a um combate de quadro. **(5) A definição do evento passou a viver num sítio só** — [Eventos do assalto](#eventos-do-assalto--o-vocabulário-partilhado) —, em vez de duplicada entre o `events` do `score` e o `POST .../events`, que era como as duas cópias podiam divergir. **Nada é obrigatório e nada entra no resultado:** uma app na `2.0.0` continua correta contra um servidor na `2.1.0`, e um servidor na `2.0.0` ignora estes campos como ignora qualquer outro que não conheça. **Especificado antes de implementado**, dos dois lados — ver [§11 E](#e-a-210--feita-dos-dois-lados). |
@@ -1573,6 +1656,26 @@ deixaram de ser.
 > mudou depois da plataforma porque calhou, não porque tivesse de ser. Contra um servidor anterior à
 > `2.2.0` a app comporta-se exatamente como antes — nunca há dois assaltos a decorrer, a memória
 > aponta sempre para o único, e os três ramos devolvem o que a linha que substituíram devolvia.
+
+### G. A `2.3.0` do lado da app — **por fazer**
+
+**A `2.2.0` não precisava da app e esta precisa.** É a diferença entre as duas: ali o servidor
+mudava de comportamento sozinho e a app só tinha de deixar de assumir uma garantia; aqui **só a app
+sabe que o árbitro saiu do assalto**. Ela sai por navegação (`back`, "Voltar à lista"), e o servidor
+não tem como distinguir isso de um telemóvel no bolso a meio de um assalto a sério. Enquanto a G1
+não for feita, o `DELETE` existe e ninguém o chama.
+
+| # | O quê | Onde |
+|---|---|---|
+| G1 | **`DELETE /bouts/{bout}/start` ao sair do assalto sem resultado.** É o `onLeave`, nos dois ramos: o `back()` direto (sem toques marcados) e o `back` do `Alert` de confirmação. *Fire-and-forget*, sem fila — falhar não pode travar quem quer é sair | `src/bout/BoutScreen.tsx` |
+| G2 | **O mesmo numa sessão de combate**, com `DELETE /elimination/{match}/start`. Não há `back` aqui — não existe ecrã por baixo —, portanto o gatilho é sair da sessão | `src/bout/BoutScreen.tsx`, `src/session/SessionExit.tsx` |
+| G3 | **Esquecer o assalto ao largá-lo.** O `refereeing.ts` guarda "o meu assalto" por pista e nunca o limpa; depois de sair de um assalto ele continua a apontar-lhe, e o ramo de cima do `currentBout` fica a olhar para um assalto que já não é de ninguém. Um `clearStarted(competitionKey)`, chamado no mesmo sítio do G1 e no `disconnect()` | `src/poule/refereeing.ts`, `src/session/store.ts` |
+| G4 | **Não chamar o `DELETE` depois de um `score`.** O assalto acabou, não foi abandonado, e o servidor recusa na mesma — mas pedir a libertação de um assalto que se acabou de registar é dizer a coisa errada e desperdiçar um pedido no fim de cada assalto | `src/bout/BoutScreen.tsx` |
+
+> **Não há ordem de entrega imposta pelo servidor**, e a app degrada-se sozinha: contra um servidor
+> anterior à `2.3.0` o `DELETE` responde `405`/`404`, o *fire-and-forget* ignora-o, e tudo se
+> comporta como antes. O que **não** se degrada é o contrário — servidor na `2.3.0` e app anterior é
+> exatamente o estado de hoje, com o defeito por corrigir.
 
 ---
 
